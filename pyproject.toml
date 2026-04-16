@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonfire-ai"
-version = "0.1.0"
+version = "0.0.0a1"
 description = "AI Build Pipelines for Real Code. Define agents. Wire stages. Ship quality."
 readme = "README.md"
 license = "Apache-2.0"

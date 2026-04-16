@@ -1,5 +1,16 @@
 # Bonfire
 
+> ### ⚠ PRE-RELEASE — DO NOT USE
+>
+> `bonfire-ai 0.0.0a1` is a **name reservation**. The features described
+> below are aspirational and not yet implemented. The `bonfire` command
+> prints a placeholder message and does nothing else.
+>
+> Functional releases begin at `v0.1.0`. Track progress at
+> [github.com/BonfireAI/bonfire](https://github.com/BonfireAI/bonfire).
+
+---
+
 **AI Build Pipelines for Real Code**
 
 Define agents. Wire stages. Ship quality.

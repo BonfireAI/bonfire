@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bonfire-ai"
+version = "0.1.0"
+description = "AI Build Pipelines for Real Code. Define agents. Wire stages. Ship quality."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+authors = [{ name = "BonfireAI", email = "antawari@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = [
+    "claude-agent-sdk>=0.1",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "typer>=0.15",
+    "rich>=14.0",
+    "jinja2>=3.0",
+    "pyyaml>=6.0",
+    "websockets>=13.0",
+]
+
+[project.optional-dependencies]
+knowledge = ["lancedb>=0.15", "ollama>=0.4"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "coverage>=7.0",
+]
+
+[project.scripts]
+bonfire = "bonfire.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/BonfireAI/bonfire"
+Repository = "https://github.com/BonfireAI/bonfire"
+Issues = "https://github.com/BonfireAI/bonfire/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bonfire"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["live: requires real API key"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bonfire"]

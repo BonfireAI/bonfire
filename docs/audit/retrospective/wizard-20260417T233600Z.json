@@ -1,0 +1,78 @@
+{
+  "pr": 8,
+  "reviewer": "wizard",
+  "reviewed_head_sha": "506ad6c",
+  "base_ref": "v0.1",
+  "head_ref": "antawari/bon-331-models-transfer",
+  "verdict": "APPROVE",
+  "tests_green": true,
+  "tests_total": 258,
+  "tests_for_bon_331": 242,
+  "ruff_clean": true,
+  "scrub_clean": true,
+  "scrub_notes": "Three grep hits are all false positives: (1) test_config.py:8 docstring explains WHY workflow field was dropped, citing ProjectWorkflowConfig in prose for archaeology — no import, no leak; (2) test_envelope.py:587,591 use 'BON-331' as a test fixture string value for META_TICKET_REF, which is a public-API metadata field designed to carry ticket refs. NIT-level cosmetic only.",
+  "event_class_count": 28,
+  "event_class_count_note": "29 '^class' grep lines = 1 base (BonfireEvent) + 28 concrete subclasses. Registry dict has 28 entries. Discriminated union has 28 members. Private V1 also has 29 '^class' lines — the 28/27 discrepancy in private docstring is stale documentation; public corrects it.",
+  "envelope_frozen": true,
+  "immutability_coverage": "Envelope, ErrorDetail, Artifact, GateContext, GateResult, StageSpec, WorkflowPlan, BonfireEvent — all frozen. Runtime mutation raises ValidationError (verified via python -c repro).",
+  "cross_check_private_v1": {
+    "envelope.py": "BYTE-IDENTICAL with private V1.",
+    "plan.py": "One-line diff: public adds '(except for WorkflowType.SINGLE)' clarification to validator docstring. Code already permits it (line 91-93). Improvement, not drift.",
+    "config.py": "All diffs are the three intended adaptations: ProjectWorkflowConfig import removed, BON-233/bonfire-beta#113 docstring blocks scrubbed, 'workflow' key dropped from _DEFAULTS, workflow field removed from BonfireSettings. Reviewer amendment (no 'workflow' key in _DEFAULTS) correctly applied — describe() would crash without it.",
+    "events.py": "One-line diff: docstring '27 events across 8 categories' -> '28 events across 9 categories'. Matches spec."
+  },
+  "reviewer_amendments_verified": {
+    "populate_by_name_with_AliasChoices": "Verified at plan.py:49 (StageSpec) and plan.py:78 (WorkflowPlan). Both use ConfigDict(frozen=True, populate_by_name=True).",
+    "_DEFAULTS_no_workflow_key": "Verified at config.py:117-121. Dict has only bonfire/memory/git keys. describe() iterates over _DEFAULTS; would KeyError if 'workflow' were present.",
+    "no_ProjectWorkflowConfig_import": "git grep confirms zero matches in src/bonfire/models/."
+  },
+  "findings": [
+    {
+      "id": "W-001",
+      "severity": "NIT",
+      "lens": "Three adaptations correctly applied",
+      "file": "tests/unit/test_envelope.py",
+      "line": 587,
+      "summary": "Test fixture uses 'BON-331' (the current ticket's own ID) as META_TICKET_REF value",
+      "detail": "META_TICKET_REF is a public metadata key designed to carry ticket references, so exercising it with a realistic BON-style value is legitimate. However, for a maximally public-facing test suite it would read slightly cleaner as 'TICKET-123' or 'bonfire-42'. Does not affect behavior, coverage, or any leaked context — internal BON-NNN ticket IDs are already discussed openly in PR bodies and commit messages.",
+      "suggestion": "Optional follow-up: genericize fixture values (e.g., 'TICKET-123') in a later housekeeping pass. Not blocking."
+    },
+    {
+      "id": "W-002",
+      "severity": "NIT",
+      "lens": "Three adaptations correctly applied",
+      "file": "tests/unit/test_config.py",
+      "line": 8,
+      "summary": "Test module docstring references ProjectWorkflowConfig in explanatory prose",
+      "detail": "Line 8 reads: 'v1 engine owns a ProjectWorkflowConfig that is not part of the public surface.' The string is pedagogical — documenting WHY the public version has no workflow field — and helps future contributors understand the divergence. No import, no behavioral coupling. Argument exists for keeping it as valuable code archaeology.",
+      "suggestion": "Keep as-is; the context is useful. If absolute scrub is desired, rewrite to: 'v0.1 BonfireSettings has no workflow field; the private engine owns an equivalent configuration out of scope for public release.' Optional."
+    },
+    {
+      "id": "W-003",
+      "severity": "NIT",
+      "lens": "Hygiene + PR metadata",
+      "file": "tests/unit/test_envelope.py",
+      "line": 15,
+      "summary": "Import shim comment is present in every test file but slightly redundant across the four",
+      "detail": "Each of the 4 test files carries a near-identical import-shim docstring block. Minor DRY opportunity — a shared helper in tests/unit/conftest.py could export a make_import_shim(module_path) factory. However, the current explicit-per-file form is more grep-friendly and the pattern is documented in memory (feedback_per_file_import_shim.md originated on this very ticket).",
+      "suggestion": "Keep as-is. The explicitness is a feature, not a bug. Listed only for completeness."
+    }
+  ],
+  "lens_verdicts": {
+    "1_test_to_impl_fidelity": "PASS — 242 tests genuinely fail without the impl (per-file import shim + autouse fixture pattern). Impl satisfies tests without over-reaching: 928 LOC of minimal Pydantic, no speculative abstractions. No 'passes by accident' patterns observed in spot-checks of test_plan.py and test_envelope.py.",
+    "2_sdk_integration": "PASS — grep confirms zero claude_agent_sdk, anthropic, ClaudeAgent, or claude_sdk imports in src/bonfire/models/ or tests/unit/. Pure Pydantic as expected for foundation layer.",
+    "3_identity_seal_2_immutability": "PASS — Envelope: ConfigDict(frozen=True). All supporting models (ErrorDetail, Artifact, GateContext, GateResult, StageSpec, WorkflowPlan, BonfireEvent) are frozen. Runtime repro: e.task = 'y' raises ValidationError. Mutation helpers (with_status, with_result, with_error, with_metadata, chain) correctly use model_copy(update=...).",
+    "4_three_adaptations_applied": "PASS with NIT — Field drop verified (no 'workflow' attribute on BonfireSettings). Docstring scrub complete in src/. Event count = 28 verified three ways (grep, registry, union). Two NITs W-001/W-002 are cosmetic test-file residue, not actual leaks.",
+    "5_cross_check_private_v1": "PASS — envelope.py byte-identical, events.py one-line docstring diff (count update), plan.py one-line docstring improvement (SINGLE exception documented), config.py diffs are exactly the three intentional adaptations. No behavioral drift in defaults, validators, field order, or class hierarchy.",
+    "6_warrior_conservatism": "PASS — 928 LOC GREEN on first pass, zero iteration. No speculative fields, no premature generalization. The coloured-DFS cycle detector in plan.py is the most sophisticated code and is precisely what the tests demand (cycle path reconstruction is test-asserted). describe() methods are minimal utility code.",
+    "7_hygiene_and_pr_metadata": "PASS — base ref is v0.1 (confirmed via gh pr view). Commit message cites bon-331 in header, documents TDD provenance (Knight 4858e24, Warrior 8c67208), lists three adaptations, lists three amendments. Prospective code-reviewer audit artifacts present at docs/audit/retrospective/prospective-bon-331-knight-code-reviewer-20260417T230543Z.{json,md}."
+  },
+  "severity_counts": {
+    "CRITICAL": 0,
+    "MAJOR": 0,
+    "MINOR": 0,
+    "NIT": 3
+  },
+  "recommendation": "MERGE",
+  "recommendation_reason": "All seven lenses pass. Three NIT findings are cosmetic test-file residue with zero behavioral or security impact. This PR is a textbook transfer: minimal impl, 242 Knight tests green, ruff clean, immutability invariant rock-solid, cross-check against private V1 shows no drift, and the three intentional adaptations are applied correctly at field/docstring/count levels with all three reviewer amendments (populate_by_name, _DEFAULTS sans workflow, no ProjectWorkflowConfig import) verified in-tree."
+}

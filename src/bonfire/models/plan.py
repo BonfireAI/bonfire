@@ -147,12 +147,13 @@ class WorkflowPlan(BaseModel):
             color[node] = gray
             for neighbor in adjacency[node]:
                 if color[neighbor] == gray:
-                    # Reconstruct cycle path
-                    cycle = [neighbor, node]
+                    # Reconstruct cycle path, closed on the origin node.
+                    cycle = [node]
                     current = node
                     while parent[current] is not None and parent[current] != neighbor:
                         current = parent[current]  # type: ignore[assignment]
                         cycle.append(current)
+                    cycle.append(neighbor)
                     cycle.reverse()
                     cycle.append(neighbor)  # close the cycle
                     return cycle

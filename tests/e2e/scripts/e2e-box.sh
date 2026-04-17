@@ -31,6 +31,11 @@ docker build \
   -f "$REPO_ROOT/tests/e2e/Dockerfile" \
   "$REPO_ROOT/tests/e2e"
 
+FIXTURE_DIR="$OUT_DIR/target"
+echo "==> Cloning fixture on host (SSH — credentials never enter the box)"
+git clone git@github.com:BonfireAI/bonfire-e2e-fixture.git "$FIXTURE_DIR"
+(cd "$FIXTURE_DIR" && git checkout "$FIXTURE_REF")
+
 echo "==> Running box — run_id=$RUN_ID wave=$WAVE fixture=$FIXTURE_REF"
 docker run --rm \
   --env-file "$REPO_ROOT/.env" \
@@ -38,6 +43,7 @@ docker run --rm \
   -e WAVE="$WAVE" \
   -e FIXTURE_REF="$FIXTURE_REF" \
   -v "$OUT_DIR:/workspace/out" \
+  -v "$FIXTURE_DIR:/workspace/target" \
   "$IMAGE_TAG"
 
 VERDICT_PATH="$OUT_DIR/verdict.json"

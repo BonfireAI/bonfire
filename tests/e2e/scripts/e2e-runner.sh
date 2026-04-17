@@ -14,15 +14,16 @@ set -euo pipefail
 : "${WAVE:?required}"
 : "${FIXTURE_REF:=main}"
 
-FIXTURE_REPO="https://github.com/BonfireAI/bonfire-e2e-fixture.git"
 OUT_DIR="/workspace/out"
 
 mkdir -p "$OUT_DIR"
 
-echo "==> Cloning fixture ($FIXTURE_REPO @ $FIXTURE_REF)"
-git clone "$FIXTURE_REPO" /workspace/target
+echo "==> Verifying fixture is mounted at /workspace/target (ref=$FIXTURE_REF)"
+test -d /workspace/target/.git || {
+  echo "FAIL: /workspace/target not mounted — host must clone fixture via e2e-box.sh before docker run." >&2
+  exit 4
+}
 cd /workspace/target
-git checkout "$FIXTURE_REF"
 
 echo "==> Driving Bonfire via Claude CLI"
 # TODO(BON-359): finalize the exact invocation.

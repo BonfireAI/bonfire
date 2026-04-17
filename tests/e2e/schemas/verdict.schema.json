@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bonfire.ai/schemas/e2e/verdict.json",
+  "title": "Bonfire E2E Release-Gate Verdict",
+  "description": "The compiled output of a release-gate box run. All assertions must be true for a PASS verdict. The schema IS the contract: to tighten the bar, add an assertion here.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "wave",
+    "bonfire_version",
+    "fixture",
+    "ticket",
+    "pipeline",
+    "assertions",
+    "artifacts",
+    "verdict"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for this box run, e.g. e2e-20260416-143022"
+    },
+    "wave": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wave number the gate is evaluating"
+    },
+    "bonfire_version": {
+      "type": "string",
+      "description": "Installed bonfire-ai version string, e.g. 0.1.0rc1"
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["repo", "ref"],
+      "properties": {
+        "repo": { "type": "string" },
+        "ref": { "type": "string" }
+      }
+    },
+    "ticket": {
+      "type": "object",
+      "required": ["id", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "required": ["stages", "total_cost_usd", "duration_sec"],
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "status"],
+            "properties": {
+              "name": { "type": "string" },
+              "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+              "cost_usd": { "type": "number", "minimum": 0 },
+              "duration_sec": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "total_cost_usd": { "type": "number", "minimum": 0 },
+        "duration_sec": { "type": "number", "minimum": 0 }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "description": "Mechanical pass/fail checks. All must be true for PASS.",
+      "required": [
+        "broken_test_now_passes",
+        "no_regressions",
+        "pr_opened",
+        "test_files_untouched",
+        "src_files_modified",
+        "review_verdict_emitted",
+        "cost_log_present"
+      ],
+      "properties": {
+        "broken_test_now_passes": {
+          "type": "boolean",
+          "description": "The deliberately broken test named in the fixture now passes."
+        },
+        "no_regressions": {
+          "type": "boolean",
+          "description": "All tests that were green before the run remain green."
+        },
+        "pr_opened": {
+          "type": "boolean",
+          "description": "Bonfire's publisher created a named PR branch."
+        },
+        "test_files_untouched": {
+          "type": "boolean",
+          "description": "The diff contains zero changes under tests/."
+        },
+        "src_files_modified": {
+          "type": "boolean",
+          "description": "The diff contains at least one change under src/."
+        },
+        "review_verdict_emitted": {
+          "type": "boolean",
+          "description": "Review Agent produced a verdict artifact."
+        },
+        "cost_log_present": {
+          "type": "boolean",
+          "description": ".bonfire/costs.jsonl exists and parses as valid JSONL."
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "pr_url": { "type": "string" },
+        "diff_path": { "type": "string" },
+        "cost_log_path": { "type": "string" },
+        "review_verdict_path": { "type": "string" }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"]
+    },
+    "failure_reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "When verdict=FAIL, the failed assertion names. Empty or absent when PASS."
+    }
+  }
+}

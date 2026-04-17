@@ -499,6 +499,118 @@ class TestWorkflowPlanCycles:
 
 
 # ---------------------------------------------------------------------------
+# WorkflowPlan — cycle path format (R-001 regression)
+# ---------------------------------------------------------------------------
+#
+# The existing TestWorkflowPlanCycles suite asserts name-membership and
+# arrow-presence, but not the EXACT path-format contract. R-001 discovered
+# that _dfs() produces strings with a duplicate terminal node
+# ("a → b → b" for a two-node cycle) instead of closing on the origin
+# ("a → b → a"). These tests pin the correct "closes-on-origin" contract.
+
+
+def _extract_cycle_path(msg: str) -> list[str]:
+    """Parse the "Cycle detected in workflow DAG: <path>. ..." substring.
+
+    Returns the list of node names in traversal order. Tolerant of both
+    the Unicode arrow (→) and the ASCII fallback (->).
+    """
+    import re
+
+    match = re.search(r"Cycle detected in workflow DAG:\s*([^.]+?)\.\s", msg)
+    assert match is not None, f"cycle-path marker not found in: {msg!r}"
+    path_str = match.group(1).strip()
+    # Split on either arrow flavour; squeeze whitespace around each token.
+    parts = re.split(r"\s*(?:\u2192|->)\s*", path_str)
+    return [p.strip() for p in parts if p.strip()]
+
+
+class TestWorkflowPlanCyclePathFormat:
+    """R-001 regression: cycle path must close on origin (first == last)."""
+
+    def test_two_node_cycle_path_closes_on_origin(self):
+        """For a 2-node cycle, path must form 'X → Y → X' (not 'X → Y → Y')."""
+        with pytest.raises(ValidationError) as exc:
+            WorkflowPlan(
+                name="t",
+                workflow_type=WorkflowType.STANDARD,
+                stages=[
+                    StageSpec(name="a", agent_name="k", depends_on=["b"]),
+                    StageSpec(name="b", agent_name="k", depends_on=["a"]),
+                ],
+            )
+        path = _extract_cycle_path(str(exc.value))
+        # A 2-node cycle reported as a closed path has exactly 3 tokens.
+        assert len(path) == 3, (
+            f"2-node cycle must render as 3 tokens (origin, other, origin); got {path}"
+        )
+        assert path[0] == path[-1], (
+            f"Cycle path must close on origin (first == last); got {path}. "
+            f"Duplicate terminal like '{path[-2]} → {path[-1]}' is the R-001 bug."
+        )
+        assert {path[0], path[1]} == {"a", "b"}
+
+    def test_three_node_cycle_path_closes_on_origin(self):
+        """For a 3-node cycle, path must form 'X → Y → Z → X' (4 tokens)."""
+        with pytest.raises(ValidationError) as exc:
+            WorkflowPlan(
+                name="t",
+                workflow_type=WorkflowType.STANDARD,
+                stages=[
+                    StageSpec(name="a", agent_name="k", depends_on=["c"]),
+                    StageSpec(name="b", agent_name="k", depends_on=["a"]),
+                    StageSpec(name="c", agent_name="k", depends_on=["b"]),
+                ],
+            )
+        path = _extract_cycle_path(str(exc.value))
+        assert len(path) == 4, (
+            f"3-node cycle must render as 4 tokens (origin, two others, origin); got {path}"
+        )
+        assert path[0] == path[-1], (
+            f"Cycle path must close on origin (first == last); got {path}. "
+            f"Duplicate terminal like '{path[-2]} → {path[-1]}' is the R-001 bug."
+        )
+        # All three distinct stage names appear exactly once in the "body".
+        body = path[:-1]
+        assert sorted(body) == ["a", "b", "c"]
+
+    def test_cycle_path_has_no_duplicate_terminal(self):
+        """Explicit contract: the last two tokens are NEVER equal."""
+        with pytest.raises(ValidationError) as exc:
+            WorkflowPlan(
+                name="t",
+                workflow_type=WorkflowType.STANDARD,
+                stages=[
+                    StageSpec(name="a", agent_name="k", depends_on=["b"]),
+                    StageSpec(name="b", agent_name="k", depends_on=["a"]),
+                ],
+            )
+        path = _extract_cycle_path(str(exc.value))
+        assert path[-1] != path[-2], (
+            f"R-001: cycle path emits duplicate terminal node. "
+            f"Last two tokens are '{path[-2]}' and '{path[-1]}'; expected the "
+            f"final token to equal the first ('{path[0]}') to close the cycle."
+        )
+
+    def test_cycle_via_on_gate_failure_path_closes_on_origin(self):
+        """Format contract also holds for on_gate_failure cycles."""
+        with pytest.raises(ValidationError) as exc:
+            WorkflowPlan(
+                name="t",
+                workflow_type=WorkflowType.STANDARD,
+                stages=[
+                    StageSpec(name="a", agent_name="k", on_gate_failure="b"),
+                    StageSpec(name="b", agent_name="k", on_gate_failure="a"),
+                ],
+            )
+        path = _extract_cycle_path(str(exc.value))
+        assert len(path) == 3
+        assert path[0] == path[-1], (
+            f"Cycle path via on_gate_failure must close on origin; got {path}."
+        )
+
+
+# ---------------------------------------------------------------------------
 # WorkflowPlan — describe()
 # ---------------------------------------------------------------------------
 

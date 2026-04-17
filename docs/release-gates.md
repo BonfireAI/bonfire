@@ -46,13 +46,15 @@ Rationale: API key stays on Anta's machine. Cost is observable in real time. No 
 ### Flow
 
 1. Host invokes `tests/e2e/scripts/e2e-box.sh <wave>`.
-2. Container launches with `ANTHROPIC_API_KEY` from host `.env` and output dir mounted.
-3. Container clones the fixture target into `/workspace/target`.
+2. **Host clones the fixture into `.e2e-runs/<run-id>/target/` via SSH.** Credentials stay on the host.
+3. Container launches with `ANTHROPIC_API_KEY` from host `.env`, output dir mounted at `/workspace/out`, and the fixture bind-mounted read-write at `/workspace/target`.
 4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, run the fixture ticket.
 5. Claude drives Bonfire end-to-end.
 6. Post-run: diff filter + pytest + verdict JSON emission via the fixture's `gate/check-verdict.sh`.
 7. Verdict written to host at `.e2e-runs/<run-id>/verdict.json`.
 8. Wizard + code-reviewer read the verdict. Anta signs the merge.
+
+*Security property: the container reaches only `api.anthropic.com`. It never touches our GitHub — no fixture credentials enter the box. Any remote PR push happens on the host after verdict capture.*
 
 ### CLI-as-universal-surface
 

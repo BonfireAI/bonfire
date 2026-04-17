@@ -1,0 +1,98 @@
+{
+  "pr": 8,
+  "reviewer": "superpowers:code-reviewer",
+  "reviewed_head_sha": "506ad6c",
+  "verdict": "APPROVE_WITH_SUGGESTIONS",
+  "prior_review_acknowledged": true,
+  "amendments_verified": {
+    "populate_by_name": true,
+    "defaults_no_workflow_key": true,
+    "no_pwc_import": true
+  },
+  "tests": {
+    "pytest": "258 passed in 0.57s",
+    "ruff": "All checks passed!"
+  },
+  "findings": [
+    {
+      "id": "R-001",
+      "severity": "MAJOR",
+      "lens": "cycle-detection algorithm brittleness",
+      "file": "src/bonfire/models/plan.py",
+      "line": 151,
+      "summary": "Cycle-path reconstruction emits a duplicate terminal node instead of closing on the origin ('a → b → b' rather than 'a → b → a').",
+      "detail": "The DFS path-reconstruction walks parent pointers back from 'node' but stops BEFORE appending the `neighbor` (the gray-colored ancestor that closed the cycle). After reverse(), the list is already in forward order ending at neighbor; the unconditional `cycle.append(neighbor)` then appends it a SECOND time, producing paths like 'a → b → b' (two-node cycle) or 'c → b → a → a' (three-node cycle with entry at 'a'). Empirically reproduced: two-node yields 'a → b → b'; three-node 'a→c→b→a' yields 'c → b → a → a'; entry→a→b→c→a yields 'c → a → b → b'. The duplicate terminal misleads users — a 'b → b' tail reads like a self-bounce, which has its own distinct error class. Tests only assert node-name membership and arrow presence, so they pass, but the user-facing format is wrong. Private V1 likely had the same or a fixed version — cross-check recommended.",
+      "suggestion": "Restructure reconstruction: (1) stop the while-loop when `parent[current] is None` OR `current == neighbor`; (2) drop the trailing `cycle.append(neighbor)` — after reverse, the path already ends at `neighbor` (since `cycle[0]` was initialized to `neighbor` and reversal moves it to the end); (3) to close the cycle visually, prepend `neighbor` to the reversed path instead: `cycle = [neighbor] + list(reversed(cycle))`. Expected output: 'a → b → a' and 'a → c → b → a'. Add one regression test asserting the exact string format."
+    },
+    {
+      "id": "R-002",
+      "severity": "MINOR",
+      "lens": "Pydantic v2 idiom quality",
+      "file": "src/bonfire/models/events.py",
+      "line": 45,
+      "summary": "`model_config = {\"frozen\": True}` uses a plain dict instead of `ConfigDict(frozen=True)`.",
+      "detail": "envelope.py:70 and plan.py:29/38/49/78 all use `ConfigDict(...)`. events.py:45 is the only place using a raw dict. Pydantic accepts both, but `ConfigDict` is the recommended typed idiom and gives tooling (mypy, pyright) completions on config keys. The inconsistency is cosmetic but visible.",
+      "suggestion": "Import `ConfigDict` alongside `BaseModel` and change line 45 to `model_config = ConfigDict(frozen=True)`."
+    },
+    {
+      "id": "R-003",
+      "severity": "MINOR",
+      "lens": "Pydantic v2 idiom quality",
+      "file": "src/bonfire/models/envelope.py",
+      "line": 37,
+      "summary": "`class ErrorDetail(BaseModel, frozen=True)` and `class Artifact(BaseModel, frozen=True)` mix the kwarg-on-class style with the `model_config = ConfigDict(...)` style used elsewhere.",
+      "detail": "envelope.py:70 uses `model_config = ConfigDict(frozen=True)` on Envelope, but ErrorDetail (line 37) and Artifact (line 46) declare `frozen=True` as a class kwarg. Both forms are legal in Pydantic v2, but the inconsistency makes the file harder to skim. Choose one; for forward extensibility (`populate_by_name`, `extra`) the `ConfigDict` form is more future-proof.",
+      "suggestion": "Standardize on `model_config = ConfigDict(frozen=True)` for ErrorDetail and Artifact."
+    },
+    {
+      "id": "R-004",
+      "severity": "MINOR",
+      "lens": "error message quality",
+      "file": "src/bonfire/models/envelope.py",
+      "line": 92,
+      "summary": "`cost_usd` validator and `with_result` raise `\"cost_usd must be >= 0\"` without including the offending value.",
+      "detail": "config.py:_budget_non_negative (line 52) and _turns_positive (line 60) both include the failing value in the message (`f\"budget must be non-negative (got {v})\"`). envelope.py:92 and envelope.py:108 do not. A negative cost produced by an upstream computation is exactly the case where the numeric value matters for debugging.",
+      "suggestion": "Change both sites to `f\"cost_usd must be >= 0 (got {v})\"`. Align with the pattern already established in config.py."
+    },
+    {
+      "id": "R-005",
+      "severity": "MINOR",
+      "lens": "maintainability",
+      "file": "src/bonfire/models/envelope.py",
+      "line": 146,
+      "summary": "`Envelope.chain(parent, **overrides)` allows overrides to silently overwrite `envelope_id` and `parent_id`, breaking the parent-linkage invariant.",
+      "detail": "`defaults.update(overrides)` accepts any key. A caller passing `envelope_id=...` or `parent_id=...` bypasses the chain's purpose (generating a new id, pointing back at parent). This is a latent footgun — not a current bug, but the invariant is undefended. Private V1 behavior likely identical; transfer fidelity is preserved.",
+      "suggestion": "Either (a) reject reserved keys explicitly (`if 'envelope_id' in overrides or 'parent_id' in overrides: raise ValueError(...)`), or (b) apply overrides first and force envelope_id/parent_id last. Option (b) is minimal and preserves the permissive ergonomics."
+    },
+    {
+      "id": "R-006",
+      "severity": "MINOR",
+      "lens": "cycle-detection algorithm brittleness",
+      "file": "src/bonfire/models/plan.py",
+      "line": 137,
+      "summary": "Adjacency list can accumulate duplicate edges when `depends_on` has repeated entries.",
+      "detail": "If a stage declares `depends_on=['b', 'b']`, adjacency[stage.name] gets ['b', 'b']. DFS still terminates correctly (first visit marks gray, second sees gray → cycle detected incorrectly if b is actually reachable OR triggers a spurious 'cycle' if b is currently gray via transitive path). More importantly, there's no upfront validation that depends_on entries are unique. A set-conversion at adjacency-build time would both normalize and document the intent.",
+      "suggestion": "Either (a) add a validator rejecting duplicate entries in `depends_on`, or (b) build adjacency as `adjacency[stage.name] = list(dict.fromkeys(stage.depends_on))` to preserve order and deduplicate. (a) is more honest."
+    },
+    {
+      "id": "R-007",
+      "severity": "MINOR",
+      "lens": "maintainability",
+      "file": "src/bonfire/models/config.py",
+      "line": 114,
+      "summary": "`_CURRENT_SCHEMA_VERSION = 4` is a magic number; there is no migration path for `config_version != 4`.",
+      "detail": "The model accepts any `config_version: int` without comparison against the current schema version. A TOML file with `config_version = 99` loads silently. `_migrate_legacy_keys` is the only migration hook and it doesn't consult `config_version`. If schema versions are going to be tracked, they should either be enforced (reject unknown versions) or drive the migration decisions. As-is, `config_version` is documentation only.",
+      "suggestion": "Either (a) add a `field_validator` on `config_version` that rejects versions > _CURRENT_SCHEMA_VERSION with a clear 'please upgrade Bonfire' message, or (b) document the field as advisory. Ticket the decision; not blocking."
+    },
+    {
+      "id": "R-008",
+      "severity": "NIT",
+      "lens": "API shape + brittleness",
+      "file": "src/bonfire/models/events.py",
+      "line": 56,
+      "summary": "`BonfireEvent.category` does `self.event_type.split(\".\")[0]` on every access; consider `split('.', 1)[0]` for clarity.",
+      "detail": "Harmless micro-detail — current event_types all have exactly one dot, so `split('.')` and `split('.', 1)` return identical first elements. But `split('.', 1)` advertises intent (one split, not a full scan) and costs slightly less. Pure cosmetic.",
+      "suggestion": "Change to `return self.event_type.split('.', 1)[0]`. Zero urgency."
+    }
+  ]
+}

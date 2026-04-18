@@ -1,1 +1,6 @@
-"""bonfire.events — placeholder for v0.1 transfer."""
+"""Event bus machinery and consumers."""
+
+from bonfire.events.bus import EventBus
+from bonfire.models.events import BonfireEvent
+
+__all__ = ["BonfireEvent", "EventBus"]

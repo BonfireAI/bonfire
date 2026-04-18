@@ -1,0 +1,33 @@
+{
+  "pr": 13,
+  "reviewer": "wizard",
+  "reviewed_head_sha": "8dd5f89",
+  "verdict": "APPROVE",
+  "tests_green": true,
+  "tests_count": 1081,
+  "ruff_clean": true,
+  "scrub_clean": true,
+  "compiler_kwarg_rejected": true,
+  "engine_all_count": 14,
+  "gates_all_count": 7,
+  "findings": [
+    {
+      "id": "W-01",
+      "severity": "LOW",
+      "lens": "adaptation-1-scrub",
+      "summary": "Seven test-file module docstrings contain '(BON-334)' as provenance tag. Sage decisions doc (line 17-18) asserts 'no BON-\\d+ anywhere in the canonical suite' but every canonical test file carries the ticket ref in its opening docstring. Merged baseline already contains this pattern (test_envelope.py has BON-331, test_event_bus.py has BON-333), so this is consistent with prior waves rather than a regression — but it is a deviation from the stated Sage rule.",
+      "path": "tests/unit/test_engine_*.py",
+      "line": 1,
+      "recommendation": "Merge as-is (baseline-consistent). Follow-up cleanup ticket optional to strip provenance tags from all test docstrings if strict scrub is desired."
+    },
+    {
+      "id": "W-02",
+      "severity": "INFO",
+      "lens": "warrior-deviation-hardening",
+      "summary": "Public pipeline.py wraps `handler.handle()` call (lines 476-484) and executor.py wraps `_execute_single_inner` (lines 96-108) in try/except that convert exceptions to ErrorDetail envelopes. V1 pipeline.py:425 invokes handler bare — exceptions propagate to run()'s outer try. This is a HARDENING of never-raises invariant: a handler raise now fails only the single stage (as ErrorDetail) instead of collapsing the whole pipeline. Not listed in the prompt's six Warrior deviations but justified by C19 safety net comment in executor.py docstring.",
+      "path": "src/bonfire/engine/pipeline.py",
+      "line": 476,
+      "recommendation": "Document in next session's handoff as deviation #7 (hardening, not regression). No code change needed."
+    }
+  ]
+}

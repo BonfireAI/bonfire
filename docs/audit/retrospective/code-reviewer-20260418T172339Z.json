@@ -1,0 +1,138 @@
+{
+  "reviewer": "code-reviewer",
+  "lens": "engineering-discipline",
+  "pr": "BonfireAI/bonfire#12",
+  "branch": "antawari/bon-336-workflows-transfer",
+  "head_sha": "dbbe5d7",
+  "ticket": "BON-336",
+  "timestamp_utc": "2026-04-18T17:23:39Z",
+  "worktree": "/home/ishtar/Projects/bonfire-public/.claude/worktrees/bon-336-pr12-review",
+  "verdict": "approve",
+  "summary": "Pure-data transfer of bonfire.workflows from V1. Five factory functions (standard_build, debug, dual_scout, triple_scout, spike) plus a WorkflowRegistry. Adaptations are correct: project_strategist deferred, private refs scrubbed, singular stub deleted. 119 RED tests flip to GREEN, full suite 607 passed. Engineering discipline is tight across every criterion checked.",
+  "verification": {
+    "pytest": {
+      "cmd": "PYTHONPATH=src /home/ishtar/Projects/bonfire-public/.venv/bin/pytest tests/ --no-header -q",
+      "result": "607 passed in 0.95s",
+      "note": "Bare pytest invocation without PYTHONPATH shows 488 passed + 119 errors because the .venv editable install points at bonfire-public/src (main worktree), not the review worktree. Expected for worktree review; operator correctly documented PYTHONPATH fallback."
+    },
+    "ruff_check": {
+      "cmd": "ruff check src/ tests/",
+      "result": "All checks passed"
+    },
+    "ruff_format": {
+      "cmd": "ruff format --check src/bonfire/workflows/ tests/unit/test_workflows.py",
+      "result": "5 files already formatted"
+    },
+    "c9_runtime_audit": {
+      "cmd": "inspect vars() of every loaded bonfire.workflows.* module for __module__ origins",
+      "result": "Only bonfire.models.plan (StageSpec/WorkflowPlan/WorkflowType) leaks in. No engine/dispatch/handlers/events/cli origins.",
+      "status": "pass"
+    }
+  },
+  "criteria_checked": {
+    "pydantic_v2_frozen": {
+      "status": "pass",
+      "note": "WorkflowPlan declares model_config = ConfigDict(frozen=True, populate_by_name=True) in bonfire.models.plan. Factories produce frozen instances — mutation raises ValidationError (verified in-process)."
+    },
+    "modern_type_hints": {
+      "status": "pass",
+      "note": "from __future__ import annotations used. No typing.Optional or typing.List. Forward refs via TYPE_CHECKING to avoid runtime import of WorkflowPlan/Callable. list[str], dict[str, Callable[..., WorkflowPlan]], str | None idioms throughout."
+    },
+    "registry_correctness": {
+      "status": "pass",
+      "note": "register raises ValueError with name in message (\"Workflow 'beta' is already registered.\"). get raises KeyError with sorted 'Available: ...' list and from None to suppress implicit chaining. list_names returns list[str] (verified at runtime). __contains__ and __len__ implemented and tested."
+    },
+    "get_default_registry_freshness": {
+      "status": "pass",
+      "note": "Builds WorkflowRegistry() anew each call, registers 5 factories. Runtime verified: r1 is not r2, mutation of r1 does not leak into r2. No module-level singleton."
+    },
+    "factory_signatures": {
+      "status": "pass",
+      "note": "All 5 factories take zero parameters and return WorkflowPlan (inspect.signature confirmed). Matches locked Sage types."
+    },
+    "research_parallel_topology": {
+      "status": "pass",
+      "note": "Single parallel_group f'{name}_scouts' via _multi_scout_workflow. Sage built with depends_on=scout_names — fans in on every scout. Spike has no knight/warrior/prover (only scouts + sage via the same helper)."
+    },
+    "standard_build_warrior_shape": {
+      "status": "pass",
+      "note": "max_iterations=3, on_gate_failure defaults to None (self-bounce prevention — prover and wizard route failures to warrior, but warrior itself does not). gates=['test_pass'], depends_on=['knight']. Matches V1 contract and Sage lock."
+    },
+    "c9_import_discipline": {
+      "status": "pass",
+      "note": "src/bonfire/workflows/ imports only from bonfire.models.plan. Parametrized TestDependencyConstraints covers 5 forbidden prefixes (engine/dispatch/handlers/events/cli). Runtime audit of vars() confirms no forbidden bindings."
+    }
+  },
+  "findings": [
+    {
+      "id": "CR-01",
+      "severity": "suggestion",
+      "category": "docstring-fidelity",
+      "file": "src/bonfire/workflows/standard.py",
+      "line_range": "37-46",
+      "title": "standard_build docstring says Bard writes the PR and Wizard reviews it, but plan has no bounce on Bard",
+      "detail": "The narrative docstring implies a review loop anchored on Bard, but only wizard.on_gate_failure='warrior' exists. That is the V1 shape (and matches the Sage contract and test_wizard_bounces_to_warrior), so the code is correct. The docstring is accurate but worth keeping an eye on: it conflates Bard's role (PR authorship) with Wizard's gate (review_approval). Not a behavioral issue.",
+      "recommendation": "No change. Flag for future doc-pass if the workflow evolves."
+    },
+    {
+      "id": "CR-02",
+      "severity": "suggestion",
+      "category": "error-handling",
+      "file": "src/bonfire/workflows/registry.py",
+      "line_range": "40-50",
+      "title": "get() could raise a more typed error than bare KeyError",
+      "detail": "get() raises KeyError with a human-readable message including sorted available names. This matches Sage lock and V1. A dedicated subclass (e.g., UnknownWorkflowError(KeyError)) would let callers catch specifically without pattern-matching message text, but that is beyond BON-336's transfer scope and V1 does not do it either.",
+      "recommendation": "Defer. File a follow-up ticket only if a consumer actually needs type-level differentiation."
+    },
+    {
+      "id": "CR-03",
+      "severity": "suggestion",
+      "category": "test-robustness",
+      "file": "tests/unit/test_workflows.py",
+      "line_range": "721-725, 945-947",
+      "title": "pytest.raises(Exception) with noqa: B017 catches too broadly",
+      "detail": "TestFactoryInvariants.test_plan_is_frozen and TestStandardBuild.test_plan_is_frozen use pytest.raises(Exception) to accept Pydantic's ValidationError. Runtime check confirms ValidationError is raised. Tightening to pytest.raises(ValidationError) via `from pydantic import ValidationError` would document intent, but the current form is robust against Pydantic version changes that might rename the error class.",
+      "recommendation": "Accept as-is. The breadth is deliberate for forward-compat with Pydantic."
+    },
+    {
+      "id": "CR-04",
+      "severity": "suggestion",
+      "category": "code-hygiene",
+      "file": "src/bonfire/workflows/registry.py",
+      "line_range": "67-78",
+      "title": "get_default_registry() uses local imports — intentional cycle-break, worth a comment",
+      "detail": "The imports inside get_default_registry are local (not module-level) to sidestep the circular nature of the design: registry.py knows about the factories, but the package __init__ imports both registry and the factory modules. Lifting these to module-level would also work (no cycle in practice because factories don't import registry), but V1 keeps them local. Fine either way; a one-line comment would document intent.",
+      "recommendation": "Optional: add `# Local import: keeps this module factory-agnostic at module load time` above the imports."
+    },
+    {
+      "id": "CR-05",
+      "severity": "suggestion",
+      "category": "test-surface",
+      "file": "tests/unit/test_workflows.py",
+      "line_range": "1370-1385",
+      "title": "TestDependencyConstraints inspects vars() — misses conditional / TYPE_CHECKING imports",
+      "detail": "The C9 test scans vars(mod).values() for __module__ origins. This catches real bindings but would NOT detect a TYPE_CHECKING-only import of, say, bonfire.engine (which is fine — typing-only is harmless at runtime). A future tightening could grep the source for `from bonfire.engine` string literals, but that adds fragility. Current design is correct for the C9 contract as written.",
+      "recommendation": "No change. Runtime binding check is the right C9 lens."
+    },
+    {
+      "id": "CR-06",
+      "severity": "suggestion",
+      "category": "factory-composition",
+      "file": "src/bonfire/workflows/research.py",
+      "line_range": "37-49",
+      "title": "spike() and dual_scout() both call _multi_scout_workflow(scout_count=2) — identical shapes except for name/description",
+      "detail": "Spike and dual_scout produce structurally identical plans (2 scouts + sage), differing only in name and description. This is intentional V1 behavior: spike is a semantic alias emphasizing 'no implementation', not a structural variant. TestSpike.test_has_scouts uses `>= 2`, allowing future widening without a breaking change. Good composition.",
+      "recommendation": "No change. Worth noting in session handoff that spike == dual_scout structurally in v0.1."
+    }
+  ],
+  "finding_counts": {
+    "critical": 0,
+    "important": 0,
+    "suggestion": 6
+  },
+  "recommendation": "Approve and merge. All eight engineering-discipline criteria pass with verified evidence. No critical or important findings. The six suggestions are all deferrable or informational — none block the transfer. 607/607 tests pass with PYTHONPATH set to the worktree src, ruff clean, C9 runtime audit confirms only bonfire.models.plan binds into workflows submodules.",
+  "artifact_paths": {
+    "json": "/tmp/bon-pr12/code-reviewer-20260418T172339Z.json",
+    "md": "/tmp/bon-pr12/code-reviewer-20260418T172339Z.md"
+  }
+}

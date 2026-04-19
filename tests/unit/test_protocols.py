@@ -618,7 +618,9 @@ class TestDispatchOptions:
     # --- Field inventory lock ------------------------------------------
 
     def test_has_exactly_eight_fields(self):
-        """The v0.1 field inventory is nine (BON-337 added ``role``)."""
+        """The v0.1 field inventory is ten — BON-337 added ``role``,
+        BON-338 added ``security_hooks``. Any future field additions are
+        a breaking change that must flow through a migration."""
         assert set(DispatchOptions.model_fields.keys()) == {
             "model",
             "max_turns",
@@ -629,8 +631,9 @@ class TestDispatchOptions:
             "cwd",
             "permission_mode",
             "role",
+            "security_hooks",
         }
-        assert len(DispatchOptions.model_fields) == 9
+        assert len(DispatchOptions.model_fields) == 10
 
 
 # ---------------------------------------------------------------------------
@@ -799,11 +802,24 @@ class TestModuleConstraints:
         assert "import bonfire.engine" not in source
 
     def test_no_dispatch_imports(self):
+        """BON-338 carve-out: ``SecurityHooksConfig`` MUST be imported from
+        ``bonfire.dispatch.security_hooks`` at module load (Pydantic needs
+        the runtime type to validate ``DispatchOptions.security_hooks``).
+
+        Any OTHER ``from bonfire.dispatch`` import remains forbidden — this
+        test documents the single allowed exception.
+        """
         import bonfire.protocols
 
         source = inspect.getsource(bonfire.protocols)
-        assert "from bonfire.dispatch" not in source
-        assert "import bonfire.dispatch" not in source
+        allowed = "from bonfire.dispatch.security_hooks import SecurityHooksConfig"
+        # Strip the one allowed line then assert no other dispatch imports
+        # slipped in.
+        stripped = "\n".join(
+            line for line in source.splitlines() if line.strip() != allowed
+        )
+        assert "from bonfire.dispatch" not in stripped
+        assert "import bonfire.dispatch" not in stripped
 
     def test_no_cli_imports(self):
         import bonfire.protocols

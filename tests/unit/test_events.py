@@ -450,10 +450,10 @@ class TestAxiomEvents:
 
 
 class TestEventCount:
-    """28 concrete events across 8 categories (Axiom's AxiomLoaded tips it from 27→28)."""
+    """29 concrete events after BON-338 added SecurityDenied."""
 
     def test_registry_has_28_events(self):
-        assert len(EVENT_REGISTRY) == 28
+        assert len(EVENT_REGISTRY) == 29
 
     def test_registry_keys_match_event_types(self):
         for key, cls in EVENT_REGISTRY.items():
@@ -481,6 +481,7 @@ class TestEventCount:
             "session",
             "xp",
             "axiom",
+            "security",
         }
 
     def test_category_counts(self):
@@ -497,16 +498,17 @@ class TestEventCount:
         assert counts["session"] == 2
         assert counts["xp"] == 3
         assert counts["axiom"] == 1
+        assert counts["security"] == 1
 
 
 class TestEventUnion:
-    """BonfireEventUnion is a discriminated union over all 28 event types."""
+    """BonfireEventUnion is a discriminated union over all 29 event types."""
 
     def test_union_has_28_members(self):
         # BonfireEventUnion is Annotated[Union[...], Field(discriminator=...)]
         # Access the underlying union via __args__[0].__args__
         members = BonfireEventUnion.__args__[0].__args__
-        assert len(members) == 28
+        assert len(members) == 29
 
     def test_union_members_all_unique_event_types(self):
         members = BonfireEventUnion.__args__[0].__args__
@@ -514,7 +516,7 @@ class TestEventUnion:
         for m in members:
             instance = m(**_minimal_kwargs(m))
             types_seen.add(instance.event_type)
-        assert len(types_seen) == 28
+        assert len(types_seen) == 29
 
     def test_event_adapter_validates_python_dict(self):
         data = {
@@ -627,5 +629,16 @@ def _minimal_kwargs(cls: type[BonfireEvent]) -> dict:
         XPPenalty: {"amount": 1, "reason": "r"},
         XPRespawn: {"checkpoint": "c", "reason": "r"},
     }
+    # SecurityDenied — import lazily here so the registry can include it
+    # without every _minimal_kwargs caller needing the import at module load.
+    try:
+        from bonfire.models.events import SecurityDenied as _SD  # type: ignore[import]
+        per_class[_SD] = {
+            "tool_name": "Bash",
+            "reason": "r",
+            "pattern_id": "C1.1-rm-rf-non-temp",
+        }
+    except ImportError:
+        pass
     base.update(per_class.get(cls, {}))
     return base

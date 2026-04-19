@@ -22,6 +22,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Pydantic requires the runtime type for validation — keep this import
+# outside of TYPE_CHECKING.
+from bonfire.dispatch.security_hooks import SecurityHooksConfig
+
 if TYPE_CHECKING:
     from bonfire.models.envelope import Envelope
     from bonfire.models.plan import GateContext, GateResult, StageSpec
@@ -66,6 +70,9 @@ class DispatchOptions(BaseModel):
     cwd: str = ""
     permission_mode: str = "dontAsk"
     role: str = Field(default="", strict=True)
+
+    # Security hook policy (BON-338)
+    security_hooks: SecurityHooksConfig = Field(default_factory=SecurityHooksConfig)
 
 
 class VaultEntry(BaseModel):

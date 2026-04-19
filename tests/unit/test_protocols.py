@@ -618,9 +618,9 @@ class TestDispatchOptions:
     # --- Field inventory lock ------------------------------------------
 
     def test_has_exactly_eight_fields(self):
-        """The V1 field inventory. BON-338 added ``security_hooks`` — any
-        future field additions are a breaking change that must flow through
-        a migration."""
+        """The v0.1 field inventory is ten — BON-337 added ``role``,
+        BON-338 added ``security_hooks``. Any future field additions are
+        a breaking change that must flow through a migration."""
         assert set(DispatchOptions.model_fields.keys()) == {
             "model",
             "max_turns",
@@ -630,8 +630,10 @@ class TestDispatchOptions:
             "tools",
             "cwd",
             "permission_mode",
+            "role",
             "security_hooks",
         }
+        assert len(DispatchOptions.model_fields) == 10
 
 
 # ---------------------------------------------------------------------------

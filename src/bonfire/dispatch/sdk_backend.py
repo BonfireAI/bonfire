@@ -112,6 +112,7 @@ class ClaudeSDKBackend:
             max_budget_usd=options.max_budget_usd,
             cwd=options.cwd or None,
             permission_mode=options.permission_mode,
+            tools=list(options.tools),
             allowed_tools=options.tools,
             hooks=_build_security_hooks_dict(
                 options.security_hooks, bus=self._bus, envelope=envelope,

@@ -69,6 +69,7 @@ class DispatchOptions(BaseModel):
     tools: list[str] = Field(default_factory=list)
     cwd: str = ""
     permission_mode: str = "dontAsk"
+    role: str = Field(default="", strict=True)
 
     # Security hook policy (BON-338)
     security_hooks: SecurityHooksConfig = Field(default_factory=SecurityHooksConfig)

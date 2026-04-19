@@ -102,6 +102,7 @@ class ClaudeSDKBackend:
             max_budget_usd=options.max_budget_usd,
             cwd=options.cwd or None,
             permission_mode=options.permission_mode,
+            tools=list(options.tools),
             allowed_tools=options.tools,
             setting_sources=["project"],
             thinking=thinking_config,

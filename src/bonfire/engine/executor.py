@@ -30,6 +30,7 @@ from bonfire.models.events import StageCompleted, StageFailed, StageStarted
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
+    from bonfire.dispatch.tool_policy import ToolPolicy
     from bonfire.engine.advisor import VaultAdvisor
     from bonfire.events.bus import EventBus
     from bonfire.models.config import PipelineConfig
@@ -59,6 +60,7 @@ class StageExecutor:
         "_context_builder",
         "_handlers",
         "_project_root",
+        "_tool_policy",
         "_vault_advisor",
     )
 
@@ -72,6 +74,7 @@ class StageExecutor:
         context_builder: _ContextBuilderLike | None = None,
         vault_advisor: VaultAdvisor | None = None,
         project_root: Any | None = None,
+        tool_policy: ToolPolicy | None = None,
     ) -> None:
         self._backend = backend
         self._bus = bus
@@ -80,6 +83,7 @@ class StageExecutor:
         self._context_builder: _ContextBuilderLike = context_builder or ContextBuilder()
         self._vault_advisor = vault_advisor
         self._project_root = project_root
+        self._tool_policy = tool_policy
 
     # -- Public API -----------------------------------------------------------
 
@@ -254,11 +258,17 @@ class StageExecutor:
 
     async def _dispatch_backend(self, stage: StageSpec, envelope: Envelope) -> Envelope:
         """Execute via backend through execute_with_retry."""
+        if self._tool_policy is None or not stage.role:
+            role_tools: list[str] = []
+        else:
+            role_tools = self._tool_policy.tools_for(stage.role)
         options = DispatchOptions(
             model=envelope.model or self._config.model,
             max_turns=self._config.max_turns,
             max_budget_usd=self._config.max_budget_usd,
             cwd=str(self._project_root) if self._project_root else "",
+            tools=role_tools,
+            role=stage.role,
         )
         result = await execute_with_retry(
             self._backend,

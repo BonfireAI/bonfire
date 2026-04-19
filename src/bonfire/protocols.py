@@ -65,6 +65,7 @@ class DispatchOptions(BaseModel):
     tools: list[str] = Field(default_factory=list)
     cwd: str = ""
     permission_mode: str = "dontAsk"
+    role: str = Field(default="", strict=True)
 
 
 class VaultEntry(BaseModel):

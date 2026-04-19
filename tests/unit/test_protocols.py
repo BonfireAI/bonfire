@@ -618,8 +618,9 @@ class TestDispatchOptions:
     # --- Field inventory lock ------------------------------------------
 
     def test_has_exactly_eight_fields(self):
-        """The V1 field inventory is frozen at eight. Adding or removing a
-        field is a breaking change that must flow through a migration."""
+        """The V1 field inventory. BON-338 added ``security_hooks`` — any
+        future field additions are a breaking change that must flow through
+        a migration."""
         assert set(DispatchOptions.model_fields.keys()) == {
             "model",
             "max_turns",
@@ -629,6 +630,7 @@ class TestDispatchOptions:
             "tools",
             "cwd",
             "permission_mode",
+            "security_hooks",
         }
 
 
@@ -798,11 +800,24 @@ class TestModuleConstraints:
         assert "import bonfire.engine" not in source
 
     def test_no_dispatch_imports(self):
+        """BON-338 carve-out: ``SecurityHooksConfig`` MUST be imported from
+        ``bonfire.dispatch.security_hooks`` at module load (Pydantic needs
+        the runtime type to validate ``DispatchOptions.security_hooks``).
+
+        Any OTHER ``from bonfire.dispatch`` import remains forbidden — this
+        test documents the single allowed exception.
+        """
         import bonfire.protocols
 
         source = inspect.getsource(bonfire.protocols)
-        assert "from bonfire.dispatch" not in source
-        assert "import bonfire.dispatch" not in source
+        allowed = "from bonfire.dispatch.security_hooks import SecurityHooksConfig"
+        # Strip the one allowed line then assert no other dispatch imports
+        # slipped in.
+        stripped = "\n".join(
+            line for line in source.splitlines() if line.strip() != allowed
+        )
+        assert "from bonfire.dispatch" not in stripped
+        assert "import bonfire.dispatch" not in stripped
 
     def test_no_cli_imports(self):
         import bonfire.protocols

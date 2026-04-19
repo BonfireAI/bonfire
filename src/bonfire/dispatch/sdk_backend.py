@@ -15,11 +15,13 @@ import traceback as tb_module
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
+from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from bonfire.events.bus import EventBus
     from bonfire.protocols import DispatchOptions
 
 # Deferred SDK import so tests work without SDK installed.
@@ -28,6 +30,7 @@ try:
     from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore[import-untyped]
     from claude_agent_sdk.types import (  # type: ignore[import-untyped]
         AssistantMessage,
+        HookMatcher,
         RateLimitEvent,
         ResultMessage,
     )
@@ -37,6 +40,7 @@ except ImportError:
     AssistantMessage = None  # type: ignore[assignment]
     ResultMessage = None  # type: ignore[assignment]
     RateLimitEvent = None  # type: ignore[assignment]
+    HookMatcher = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +63,14 @@ class ClaudeSDKBackend:
     All SDK-specific logic is contained here.
     """
 
-    def __init__(self, *, compiler: Any | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        compiler: Any | None = None,
+        bus: EventBus | None = None,
+    ) -> None:
         self._compiler = compiler
+        self._bus = bus
 
     async def execute(
         self,
@@ -103,6 +113,9 @@ class ClaudeSDKBackend:
             cwd=options.cwd or None,
             permission_mode=options.permission_mode,
             allowed_tools=options.tools,
+            hooks=_build_security_hooks_dict(
+                options.security_hooks, bus=self._bus, envelope=envelope,
+            ),
             setting_sources=["project"],
             thinking=thinking_config,
             effort=effort_level,

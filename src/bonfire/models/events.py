@@ -295,6 +295,25 @@ class AxiomLoaded(BonfireEvent):
 
 
 # ---------------------------------------------------------------------------
+# Security events (1)
+# ---------------------------------------------------------------------------
+
+
+class SecurityDenied(BonfireEvent):
+    """Emitted when the pre-exec security hook denies (or warns on) a tool call.
+
+    Covers both DENY and WARN paths. WARN emissions prefix ``reason`` with
+    ``"WARN: "``; consumers filtering DENY-only check ``not reason.startswith("WARN:")``.
+    """
+
+    event_type: Literal["security.denial"] = "security.denial"
+    tool_name: str
+    reason: str
+    pattern_id: str
+    agent_name: str = ""
+
+
+# ---------------------------------------------------------------------------
 # Discriminated union — manual, explicit, every type listed
 # ---------------------------------------------------------------------------
 
@@ -326,7 +345,8 @@ BonfireEventUnion = Annotated[
     | XPAwarded
     | XPPenalty
     | XPRespawn
-    | AxiomLoaded,
+    | AxiomLoaded
+    | SecurityDenied,
     Field(discriminator="event_type"),
 ]
 
@@ -365,4 +385,5 @@ EVENT_REGISTRY: dict[str, type[BonfireEvent]] = {
     "xp.penalty": XPPenalty,
     "xp.respawn": XPRespawn,
     "axiom.loaded": AxiomLoaded,
+    "security.denial": SecurityDenied,
 }

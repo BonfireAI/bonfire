@@ -618,8 +618,7 @@ class TestDispatchOptions:
     # --- Field inventory lock ------------------------------------------
 
     def test_has_exactly_eight_fields(self):
-        """The V1 field inventory is frozen at eight. Adding or removing a
-        field is a breaking change that must flow through a migration."""
+        """The v0.1 field inventory is nine (BON-337 added ``role``)."""
         assert set(DispatchOptions.model_fields.keys()) == {
             "model",
             "max_turns",
@@ -629,7 +628,9 @@ class TestDispatchOptions:
             "tools",
             "cwd",
             "permission_mode",
+            "role",
         }
+        assert len(DispatchOptions.model_fields) == 9
 
 
 # ---------------------------------------------------------------------------

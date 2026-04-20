@@ -1,1 +1,6 @@
-"""bonfire.session — placeholder for v0.1 transfer."""
+"""Session state management and JSONL persistence."""
+
+from bonfire.session.persistence import SessionPersistence
+from bonfire.session.state import SessionState
+
+__all__ = ["SessionPersistence", "SessionState"]

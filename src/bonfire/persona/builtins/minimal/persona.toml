@@ -1,0 +1,15 @@
+[persona]
+name = "minimal"
+display_name = "Minimal"
+description = "Plain output, no personality. Structural text only."
+version = "1.0.0"
+
+[display_names]
+researcher = "Research Agent"
+tester = "Test Agent"
+implementer = "Build Agent"
+verifier = "Verify Agent"
+publisher = "Publish Agent"
+reviewer = "Review Agent"
+closer = "Release Agent"
+synthesizer = "Synthesis Agent"

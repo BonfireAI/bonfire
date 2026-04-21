@@ -1,0 +1,52 @@
+[stage.started]
+phrases = [
+    "Stage {stage_name} started ({agent_name}).",
+    "Running {stage_name} with {agent_name}.",
+]
+
+[stage.completed]
+phrases = [
+    "Stage {stage_name} completed in {duration_seconds}s (${cost_usd}).",
+    "{stage_name} finished — {duration_seconds}s, ${cost_usd}.",
+]
+
+[stage.failed]
+phrases = [
+    "Stage {stage_name} failed: {error_message}",
+    "{stage_name} did not complete: {error_message}",
+]
+
+[pipeline.started]
+phrases = [
+    "Pipeline {plan_name} started (budget ${budget_usd}).",
+]
+
+[pipeline.completed]
+phrases = [
+    "Pipeline completed: {stages_completed} stages, {duration_seconds}s, ${total_cost_usd}.",
+]
+
+[pipeline.failed]
+phrases = [
+    "Pipeline failed at {failed_stage}: {error_message}",
+]
+
+[session.started]
+phrases = [
+    "Session started: {task} ({workflow}).",
+]
+
+[quality.failed]
+phrases = [
+    "Gate {gate_name} failed for {stage_name} ({severity}): {message}",
+]
+
+[cost.budget_warning]
+phrases = [
+    "Budget warning: {percent}% used (${current_usd} / ${budget_usd}).",
+]
+
+[dispatch.failed]
+phrases = [
+    "Dispatch failed for {agent_name}: {error_message}",
+]

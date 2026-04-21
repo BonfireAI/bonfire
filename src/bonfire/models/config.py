@@ -43,7 +43,7 @@ class PipelineConfig(BaseModel):
     model: str = "claude-sonnet-4-6"
     max_turns: int = 10
     max_budget_usd: float = 5.0
-    persona: str = "passelewe"
+    persona: str = "default"
 
     @field_validator("max_budget_usd")
     @classmethod

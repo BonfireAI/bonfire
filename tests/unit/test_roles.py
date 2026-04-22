@@ -7,8 +7,8 @@ from bonfire.naming import ROLE_DISPLAY, DisplayNames
 class TestAgentRole:
     """AgentRole StrEnum is the canonical identity for all agent roles."""
 
-    def test_all_eight_roles_exist(self):
-        assert len(AgentRole) == 8
+    def test_all_nine_roles_exist(self):
+        assert len(AgentRole) == 9
 
     def test_values_are_lowercase_strings(self):
         for role in AgentRole:
@@ -38,6 +38,9 @@ class TestAgentRole:
 
     def test_synthesizer(self):
         assert AgentRole.SYNTHESIZER == "synthesizer"
+
+    def test_analyst(self):
+        assert AgentRole.ANALYST == "analyst"
 
     def test_serialization_roundtrip(self):
         """StrEnum value serializes to string and deserializes back."""

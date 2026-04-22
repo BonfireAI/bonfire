@@ -59,6 +59,7 @@ publisher = "Bard"
 reviewer = "Wizard"
 closer = "Herald"
 synthesizer = "Sage"
+analyst = "Analysis Agent"
 """
 
 
@@ -73,7 +74,7 @@ def _persona_toml(
 ) -> str:
     """Build a persona.toml content string with optional unknown-table extras."""
     body = (
-        f'[persona]\n'
+        f"[persona]\n"
         f'name = "{name}"\n'
         f'display_name = "{display_name}"\n'
         f'description = "{description}"\n'
@@ -112,6 +113,7 @@ def _persona_toml_missing_role(missing: AgentRole) -> str:
         AgentRole.REVIEWER: "Wizard",
         AgentRole.CLOSER: "Herald",
         AgentRole.SYNTHESIZER: "Sage",
+        AgentRole.ANALYST: "Analysis Agent",
     }
     assert missing in mapping
     del mapping[missing]
@@ -214,13 +216,9 @@ class TestRequiredFields:
             f"Error must name the missing field '{field}': got {exc.value!r}"
         )
 
-    def test_missing_persona_table_raises(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_missing_persona_table_raises(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """persona.toml with no [persona] table at all is invalid."""
-        _create_persona_dir(
-            builtin_dir, "nopersona", persona_toml="[other]\nkey = 'x'\n"
-        )
+        _create_persona_dir(builtin_dir, "nopersona", persona_toml="[other]\nkey = 'x'\n")
         with pytest.raises(PersonaSchemaError) as exc:
             loader.validate("nopersona")
         assert "persona" in str(exc.value).lower()
@@ -234,16 +232,14 @@ class TestRequiredFields:
 class TestFieldTypes:
     """All four required fields are strings. Ints, bools, arrays are rejected."""
 
-    def test_version_int_rejected(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_version_int_rejected(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """Numeric ``version = 1`` is rejected — semver is a string."""
         toml_str = (
-            '[persona]\n'
+            "[persona]\n"
             'name = "intver"\n'
             'display_name = "IntVer"\n'
             'description = "bad"\n'
-            'version = 1\n'
+            "version = 1\n"
             "\n" + _FULL_DISPLAY_NAMES_BLOCK
         )
         _create_persona_dir(builtin_dir, "intver", persona_toml=toml_str)
@@ -251,11 +247,9 @@ class TestFieldTypes:
             loader.validate("intver")
         assert "version" in str(exc.value).lower()
 
-    def test_name_non_string_rejected(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_name_non_string_rejected(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         toml_str = (
-            '[persona]\n'
+            "[persona]\n"
             "name = 42\n"
             'display_name = "X"\n'
             'description = "bad"\n'
@@ -271,7 +265,7 @@ class TestFieldTypes:
         self, loader: PersonaLoader, builtin_dir: Path
     ) -> None:
         toml_str = (
-            '[persona]\n'
+            "[persona]\n"
             'name = "ok"\n'
             'display_name = "X"\n'
             "description = true\n"
@@ -307,7 +301,7 @@ class TestEmptyValues:
         }
         values[field] = ""
         toml_str = (
-            '[persona]\n'
+            "[persona]\n"
             f'name = "{values["name"]}"\n'
             f'display_name = "{values["display_name"]}"\n'
             f'description = "{values["description"]}"\n'
@@ -328,9 +322,7 @@ class TestEmptyValues:
 class TestDisplayNamesCoverage:
     """[display_names] must map every AgentRole value to a non-empty string."""
 
-    def test_valid_full_coverage_passes(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_valid_full_coverage_passes(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """Sanity: a TOML with complete coverage validates without raising."""
         _create_persona_dir(builtin_dir, "valid", persona_toml=_persona_toml())
         loader.validate("valid")  # must not raise
@@ -356,17 +348,14 @@ class TestDisplayNamesCoverage:
         with pytest.raises(PersonaSchemaError) as exc:
             loader.validate("onemissing")
         assert missing_role.value in str(exc.value), (
-            f"Error must mention missing role '{missing_role.value}': "
-            f"got {exc.value!r}"
+            f"Error must mention missing role '{missing_role.value}': got {exc.value!r}"
         )
 
     def test_empty_display_names_table_rejected(
         self, loader: PersonaLoader, builtin_dir: Path
     ) -> None:
         """``[display_names]`` present but empty is invalid."""
-        toml_str = (
-            _persona_toml(include_display_names=False) + "\n[display_names]\n"
-        )
+        toml_str = _persona_toml(include_display_names=False) + "\n[display_names]\n"
         _create_persona_dir(builtin_dir, "emptymap", persona_toml=toml_str)
         with pytest.raises(PersonaSchemaError) as exc:
             loader.validate("emptymap")
@@ -406,8 +395,8 @@ class TestDisplayNamesCoverage:
     ) -> None:
         """Role values in [display_names] must be strings."""
         toml_str = _persona_toml(include_display_names=False) + (
-            '\n[display_names]\n'
-            'researcher = 42\n'
+            "\n[display_names]\n"
+            "researcher = 42\n"
             'tester = "Knight"\n'
             'implementer = "Warrior"\n'
             'verifier = "Assayer"\n'
@@ -415,6 +404,7 @@ class TestDisplayNamesCoverage:
             'reviewer = "Wizard"\n'
             'closer = "Herald"\n'
             'synthesizer = "Sage"\n'
+            'analyst = "Analysis Agent"\n'
         )
         _create_persona_dir(builtin_dir, "intval", persona_toml=toml_str)
         with pytest.raises(PersonaSchemaError) as exc:
@@ -463,10 +453,7 @@ class TestExtrasPolicy:
     ) -> None:
         """Multiple extra top-level tables all pass validation."""
         toml_str = _persona_toml(
-            extras_block=(
-                '[metadata]\nauthor = "Anta"\n'
-                '\n[notes]\ncomment = "ok"\n'
-            )
+            extras_block=('[metadata]\nauthor = "Anta"\n\n[notes]\ncomment = "ok"\n')
         )
         _create_persona_dir(builtin_dir, "extras2", persona_toml=toml_str)
         loader.validate("extras2")
@@ -480,17 +467,13 @@ class TestExtrasPolicy:
 class TestVersionField:
     """Version field must be a non-empty string. Semver is recommended."""
 
-    def test_version_must_be_string(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_version_must_be_string(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """Positive: semver strings validate."""
         toml_str = _persona_toml(version="2.1.0")
         _create_persona_dir(builtin_dir, "v21", persona_toml=toml_str)
         loader.validate("v21")
 
-    def test_version_any_string_accepted(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_version_any_string_accepted(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """Any non-empty version string passes — shape validation is advisory."""
         toml_str = _persona_toml(version="calver-2026.04")
         _create_persona_dir(builtin_dir, "calver", persona_toml=toml_str)

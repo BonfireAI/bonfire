@@ -27,6 +27,7 @@ class AgentRole(StrEnum):
         reviewer    -> Review Agent    / Wizard
         closer      -> Release Agent   / Herald
         synthesizer -> Synthesis Agent / Sage
+        analyst     -> Analysis Agent  / Architect
     """
 
     RESEARCHER = "researcher"
@@ -37,3 +38,4 @@ class AgentRole(StrEnum):
     REVIEWER = "reviewer"
     CLOSER = "closer"
     SYNTHESIZER = "synthesizer"
+    ANALYST = "analyst"

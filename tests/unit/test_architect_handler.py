@@ -78,12 +78,9 @@ from bonfire.models.envelope import Envelope, TaskStatus
 from bonfire.models.plan import StageSpec
 from bonfire.naming import ROLE_DISPLAY
 
-
 _HANDLER_XFAIL = pytest.mark.xfail(
     condition=not _HANDLER_PRESENT,
-    reason=(
-        "v0.1 gap: bonfire.handlers.architect.ArchitectHandler not yet ported"
-    ),
+    reason=("v0.1 gap: bonfire.handlers.architect.ArchitectHandler not yet ported"),
     strict=False,
 )
 
@@ -98,10 +95,7 @@ _VAULT_XFAIL = pytest.mark.xfail(
 
 _CHUNKER_XFAIL = pytest.mark.xfail(
     condition=not _CHUNKER_PRESENT,
-    reason=(
-        "v0.1 gap: bonfire.vault.chunker not yet ported — "
-        "deferred to BON-W5.3-vault-port"
-    ),
+    reason=("v0.1 gap: bonfire.vault.chunker not yet ported — deferred to BON-W5.3-vault-port"),
     strict=False,
 )
 
@@ -280,9 +274,7 @@ class TestGenericVocabularyDiscipline:
         assert architect_mod.__doc__.strip()
 
     @_HANDLER_XFAIL
-    def test_role_matches_stage_spec_role_field(
-        self, architect_stage: StageSpec
-    ) -> None:
+    def test_role_matches_stage_spec_role_field(self, architect_stage: StageSpec) -> None:
         """Integration: stage.role ('analyst') == handler module ROLE."""
         import bonfire.handlers.architect as architect_mod
 
@@ -354,9 +346,7 @@ class TestScannerDiscovery:
 
     @_SCANNER_XFAIL
     def test_extracts_imports(self, tmp_path) -> None:
-        (tmp_path / "mod.py").write_text(
-            "import os\nfrom pathlib import Path\n\ndef f(): pass\n"
-        )
+        (tmp_path / "mod.py").write_text("import os\nfrom pathlib import Path\n\ndef f(): pass\n")
         scanner = ProjectScanner(tmp_path)
         manifest = scanner.discover()
         sigs = scanner.extract_signatures(manifest)
@@ -388,9 +378,7 @@ class TestChunker:
 
     @_CHUNKER_XFAIL
     def test_chunk_markdown_each_chunk_has_content_hash(self) -> None:
-        chunks = chunk_markdown(
-            "# A\n\nContent A.\n\n# B\n\nContent B.\n", source_path="doc.md"
-        )
+        chunks = chunk_markdown("# A\n\nContent A.\n\n# B\n\nContent B.\n", source_path="doc.md")
         for chunk in chunks:
             assert chunk.content_hash
 
@@ -443,6 +431,9 @@ class TestConstruction:
 
 class TestScanAndStore:
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
+    @_CHUNKER_XFAIL
+    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_returns_completed_envelope_with_json_summary(
         self,
@@ -460,6 +451,8 @@ class TestScanAndStore:
         assert "entries_skipped" in summary
 
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
+    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_manifest_entry(
         self,
@@ -478,6 +471,8 @@ class TestScanAndStore:
         assert manifests, "Expected at least one project_manifest entry"
 
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
+    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_signature_entries(
         self,
@@ -494,6 +489,8 @@ class TestScanAndStore:
         assert sigs, "Expected module_signature entries"
 
     @_HANDLER_XFAIL
+    @_CHUNKER_XFAIL
+    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_code_chunks(
         self,
@@ -510,6 +507,7 @@ class TestScanAndStore:
         assert chunks
 
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_skips_already_existing_hashes(
         self,
@@ -575,6 +573,7 @@ class TestScanAndStore:
 
 class TestErrorHandling:
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_vault_store_failure_returns_failed_envelope(
         self,
@@ -604,6 +603,7 @@ class TestErrorHandling:
         assert result.error.error_type == "RuntimeError"
 
     @_HANDLER_XFAIL
+    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_vault_exists_failure_wraps_in_failed_envelope(
         self,

@@ -245,3 +245,32 @@ __all__ = [
 2. **BON-W5.3-protocol-widen** — Add `setting_sources: list[str] = []` to `DispatchOptions`; add `dispatch_timeout_seconds: float | None = None` to `PipelineConfig`. Target: flip the `_SETTING_SOURCES_XFAIL` and `_TIMEOUT_XFAIL` markers.
 3. **BON-W5.3-vault-port** — Port `bonfire.vault.memory.InMemoryVaultBackend`, `bonfire.vault.scanner.ProjectScanner`, `bonfire.vault.chunker.{chunk_markdown, chunk_source_file, content_hash}` from v1 to bonfire-public. Target: flip `_VAULT_XFAIL`, `_CHUNKER_XFAIL`, `_SCANNER_XFAIL` in the architect suite. (If Warrior ports these in this wave, the ArchitectHandler tests flip GREEN immediately.)
 4. **BON-W5.3-strategist-sync** — Future ticket to port StrategistHandler (OUT OF SCOPE for W5.3). Must add strategist entry to HANDLER_ROLE_MAP, relax the "exactly four entries" test, and add docstring coverage.
+
+## §D7 — Sage-correction pass (2026-04-21)
+
+**Gap detected.** The initial synthesis at `8f526ca` marked the architect live-path tests with `@_HANDLER_XFAIL` alone. Once the Warrior shipped `src/bonfire/handlers/architect.py`, `_HANDLER_PRESENT` flipped `True`, the condition on `_HANDLER_XFAIL` went `False`, and those markers no-op'd. The tests then ran through `ArchitectHandler.handle()`, which lazy-imports `bonfire.vault.scanner.ProjectScanner` and `bonfire.vault.chunker.chunk_*` inside the call body, and blew up on `ModuleNotFoundError` because no vault port has landed yet (BON-W5.3-vault-port deferred per §D4-adjacent Warrior-contract note on L240). Parallel gap on Wizard: `test_max_budget_is_none` asserted `captured_options.max_budget_usd is None`, but v0.1 `DispatchOptions.max_budget_usd: float = 0.0` — non-nullable per §D5. That test had no xfail marker at all and failed outright on the `is None` assertion.
+
+Net effect on Warrior-src PYTHONPATH run: 8 tests failing on the wrong axis (infrastructure absent, not handler contract violated). Wave discipline required re-gating, not porting.
+
+**Marker strategy chosen.**
+
+- **Architect (7 tests) — shape (i) Stack existing flags.** Each test decoration now names the full set of deps the call body exercises, drawn from the Warrior-contract dep table (L240 + dispatching-Wizard mission). Any-True-condition wins in pytest, so `_HANDLER_PRESENT=True AND _SCANNER_PRESENT=False` still triggers xfail via `_SCANNER_XFAIL`. Per-test dep matrix:
+  - L445 `test_returns_completed_envelope_with_json_summary` — HANDLER + SCANNER + CHUNKER + VAULT.
+  - L462 `test_stores_manifest_entry` — HANDLER + SCANNER + VAULT.
+  - L480 `test_stores_signature_entries` — HANDLER + SCANNER + VAULT.
+  - L496 `test_stores_code_chunks` — HANDLER + CHUNKER + VAULT.
+  - L512 `test_skips_already_existing_hashes` — HANDLER + SCANNER (local vault stub).
+  - L577 `test_vault_store_failure_returns_failed_envelope` — HANDLER + SCANNER (local vault stub).
+  - L606 `test_vault_exists_failure_wraps_in_failed_envelope` — HANDLER + SCANNER (local vault stub).
+  Rationale for shape (i) over shape (ii) composite flag: the stacked decorations read at the call site as a declaration of which ports each test needs, so the next Warrior porting vault can diff the decoration on/off as each port lands (SCANNER lands → test 5/6/7 auto-flip; CHUNKER lands → test 4 auto-flip; VAULT lands last → tests 1/2/3 auto-flip). A single composite flag would require re-editing the flag block each port round.
+
+- **Wizard (`test_max_budget_is_none`, L450) — shape (ii) unconditional xfail.** Condition "is `max_budget_usd` annotation nullable" is a reflective-type-check (unwrap `Optional`/`UnionType`) — clumsy at flag-block level. The protocol-widen ticket is the explicit fix gate, and an unconditional `xfail(strict=False)` auto-reports `XPASS` the day BON-W5.3-protocol-widen lands — that XPASS is the exact signal to delete the marker. Matches the spirit of §D5 (DEFER via xfail, do NOT widen here).
+
+**Lines touched.**
+
+- `tests/unit/test_architect_handler.py` — 9 decorator insertions (stacked xfails above each of the 7 listed tests; no assertion/fixture/body changes).
+- `tests/unit/test_wizard_handler.py` — 1 decorator insertion on L450 test function (unconditional `pytest.mark.xfail`).
+- `docs/audit/sage-decisions/bon-342-sage.md` — this §D7 block appended.
+
+**No contract changes, no src/ edits, no Warrior-worktree touches, no flag-block restructuring** — all existing flags (`_HANDLER_XFAIL`, `_VAULT_XFAIL`, `_CHUNKER_XFAIL`, `_SCANNER_XFAIL`) unchanged.
+

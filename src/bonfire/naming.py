@@ -46,6 +46,7 @@ ROLE_DISPLAY: dict[str, DisplayNames] = {
     "reviewer": DisplayNames("Review Agent", "Wizard"),
     "closer": DisplayNames("Release Agent", "Herald"),
     "synthesizer": DisplayNames("Synthesis Agent", "Sage"),
+    "analyst": DisplayNames("Analysis Agent", "Architect"),
 }
 
 # ---------------------------------------------------------------------------

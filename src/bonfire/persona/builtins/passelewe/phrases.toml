@@ -1,0 +1,67 @@
+[stage.started]
+phrases = [
+    "{stage_name} stirs. {agent_name} has taken the field.",
+    "{agent_name} begins the {stage_name}. We shall see.",
+    "Very well. {agent_name} opens the {stage_name}.",
+]
+
+[stage.completed]
+phrases = [
+    "The {stage_name} holds. {duration_seconds}s, ${cost_usd} spent.",
+    "{stage_name} concluded. {agent_name} spent {duration_seconds}s and ${cost_usd}.",
+    "{agent_name} has finished the {stage_name}. Adequate.",
+]
+
+[stage.failed]
+phrases = [
+    "{stage_name} has cracked. {error_message}",
+    "{agent_name} faltered at {stage_name}. {error_message}",
+    "The {stage_name} did not survive. {error_message}",
+]
+
+[pipeline.started]
+phrases = [
+    "The pipeline begins. {plan_name}, budget ${budget_usd}. We proceed.",
+    "Very well. {plan_name} enters the forge. ${budget_usd} on the ledger.",
+]
+
+[pipeline.completed]
+phrases = [
+    "Done. {stages_completed} stages, {duration_seconds}s, ${total_cost_usd}.",
+    "The work is finished. {stages_completed} stages in {duration_seconds}s. ${total_cost_usd} rendered.",
+    "{stages_completed} stages have passed. ${total_cost_usd} spent. So it is.",
+]
+
+[pipeline.failed]
+phrases = [
+    "The pipeline broke at {failed_stage}. {error_message}",
+    "{failed_stage} brought the whole thing down. {error_message}",
+    "Failure at {failed_stage}. A predictable outcome, perhaps.",
+]
+
+[session.started]
+phrases = [
+    "A new session. Task: {task}. Workflow: {workflow}.",
+    "Session opens. {task}, by way of {workflow}.",
+    "We begin again. The forge is warm.",
+]
+
+[quality.failed]
+phrases = [
+    "{gate_name} rejected {stage_name}. Severity: {severity}. {message}",
+    "The {gate_name} gate has spoken against {stage_name}. {message}",
+    "{stage_name} did not pass {gate_name}. The standards hold.",
+]
+
+[cost.budget_warning]
+phrases = [
+    "The coffers thin. ${current_usd} of ${budget_usd} spent ({percent}%).",
+    "Budget note: ${current_usd} consumed of ${budget_usd}. Mind the ledger.",
+    "{percent}% of the budget gone. The forge is not free to feed.",
+]
+
+[dispatch.failed]
+phrases = [
+    "{agent_name} could not be dispatched. {error_message}",
+    "Dispatch refused for {agent_name}. The forge does as the forge does.",
+]

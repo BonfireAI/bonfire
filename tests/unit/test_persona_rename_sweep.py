@@ -36,7 +36,7 @@ _PERSONA_DIR = _SRC_DIR / "persona"
 _BUILTINS_DIR = _PERSONA_DIR / "builtins"
 _CONFIG_PATH = _SRC_DIR / "models" / "config.py"
 
-# The 8 canonical AgentRole values — mirrors bonfire.agent.roles.AgentRole.
+# The 9 canonical AgentRole values — mirrors bonfire.agent.roles.AgentRole.
 _CANONICAL_ROLES = frozenset(
     {
         "researcher",
@@ -47,6 +47,7 @@ _CANONICAL_ROLES = frozenset(
         "reviewer",
         "closer",
         "synthesizer",
+        "analyst",
     }
 )
 
@@ -105,9 +106,8 @@ class TestPhrasePoolReferencesGone:
             for i, line in enumerate(text.splitlines(), start=1):
                 if "PhrasePool" in line:
                     offenders.append((path, i, line.rstrip()))
-        assert not offenders, (
-            "Found stale 'PhrasePool' references in src/bonfire/:\n"
-            + "\n".join(f"  {p}:{n}: {line}" for p, n, line in offenders)
+        assert not offenders, "Found stale 'PhrasePool' references in src/bonfire/:\n" + "\n".join(
+            f"  {p}:{n}: {line}" for p, n, line in offenders
         )
 
     def test_no_phrase_pool_in_persona_init_exports(self) -> None:
@@ -116,8 +116,7 @@ class TestPhrasePoolReferencesGone:
         assert init_path.exists(), "src/bonfire/persona/__init__.py must exist"
         text = init_path.read_text(encoding="utf-8")
         assert "PhrasePool" not in text, (
-            "bonfire.persona.__init__ re-exports 'PhrasePool' — "
-            "must be renamed to PhraseBank."
+            "bonfire.persona.__init__ re-exports 'PhrasePool' — must be renamed to PhraseBank."
         )
 
 
@@ -132,9 +131,7 @@ class TestPoolModuleGone:
     def test_pool_py_does_not_exist_in_persona(self) -> None:
         """``src/bonfire/persona/pool.py`` must not exist."""
         stale = _PERSONA_DIR / "pool.py"
-        assert not stale.exists(), (
-            f"Stale module {stale} still exists — rename to phrase_bank.py."
-        )
+        assert not stale.exists(), f"Stale module {stale} still exists — rename to phrase_bank.py."
 
     def test_no_imports_from_persona_pool_in_src(self) -> None:
         """No ``from bonfire.persona.pool import ...`` anywhere in src/bonfire/."""
@@ -150,9 +147,8 @@ class TestPoolModuleGone:
                     if needle in line:
                         offenders.append((path, i, line.rstrip()))
                         break
-        assert not offenders, (
-            "Found stale imports from bonfire.persona.pool:\n"
-            + "\n".join(f"  {p}:{n}: {line}" for p, n, line in offenders)
+        assert not offenders, "Found stale imports from bonfire.persona.pool:\n" + "\n".join(
+            f"  {p}:{n}: {line}" for p, n, line in offenders
         )
 
     def test_phrase_bank_module_is_the_replacement(self) -> None:
@@ -207,9 +203,8 @@ class TestPasseleweNotDefault:
                     if pat in line:
                         offenders.append((path, i, line.rstrip()))
                         break
-        assert not offenders, (
-            "Found 'passelewe' literal in src/bonfire/:\n"
-            + "\n".join(f"  {p}:{n}: {line}" for p, n, line in offenders)
+        assert not offenders, "Found 'passelewe' literal in src/bonfire/:\n" + "\n".join(
+            f"  {p}:{n}: {line}" for p, n, line in offenders
         )
 
 
@@ -255,9 +250,7 @@ class TestBuiltinPersonaTomlShape:
     """Every built-in persona's persona.toml must supply a full display-name map."""
 
     def test_builtins_dir_exists(self) -> None:
-        assert _BUILTINS_DIR.is_dir(), (
-            f"Expected builtin personas directory at {_BUILTINS_DIR}"
-        )
+        assert _BUILTINS_DIR.is_dir(), f"Expected builtin personas directory at {_BUILTINS_DIR}"
 
     def test_at_least_one_builtin_exists(self) -> None:
         personas = _builtin_personas()
@@ -270,22 +263,16 @@ class TestBuiltinPersonaTomlShape:
         """The ``default`` persona must ship as a built-in."""
         default_dir = _BUILTINS_DIR / "default"
         toml_path = default_dir / "persona.toml"
-        assert toml_path.is_file(), (
-            f"Default persona's persona.toml missing at {toml_path}"
-        )
+        assert toml_path.is_file(), f"Default persona's persona.toml missing at {toml_path}"
 
     def test_minimal_persona_ships(self) -> None:
         """The ``minimal`` persona must ship as a built-in (Sage D5)."""
         minimal_dir = _BUILTINS_DIR / "minimal"
         toml_path = minimal_dir / "persona.toml"
-        assert toml_path.is_file(), (
-            f"Minimal persona's persona.toml missing at {toml_path}"
-        )
+        assert toml_path.is_file(), f"Minimal persona's persona.toml missing at {toml_path}"
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
-    def test_each_builtin_has_display_names_section(
-        self, persona_dir: Path
-    ) -> None:
+    def test_each_builtin_has_display_names_section(self, persona_dir: Path) -> None:
         """Each persona.toml has a top-level ``[display_names]`` section."""
         toml_path = persona_dir / "persona.toml"
         with toml_path.open("rb") as f:
@@ -298,9 +285,7 @@ class TestBuiltinPersonaTomlShape:
         )
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
-    def test_each_builtin_display_names_covers_all_roles(
-        self, persona_dir: Path
-    ) -> None:
+    def test_each_builtin_display_names_covers_all_roles(self, persona_dir: Path) -> None:
         """[display_names] must contain an entry for every AgentRole value."""
         toml_path = persona_dir / "persona.toml"
         with toml_path.open("rb") as f:
@@ -309,14 +294,11 @@ class TestBuiltinPersonaTomlShape:
         keys = set(display_names.keys())
         missing = _CANONICAL_ROLES - keys
         assert not missing, (
-            f"{persona_dir.name}/persona.toml [display_names] is missing roles: "
-            f"{sorted(missing)}"
+            f"{persona_dir.name}/persona.toml [display_names] is missing roles: {sorted(missing)}"
         )
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
-    def test_each_builtin_display_names_values_are_strings(
-        self, persona_dir: Path
-    ) -> None:
+    def test_each_builtin_display_names_values_are_strings(self, persona_dir: Path) -> None:
         """Every [display_names] value must be a non-empty string."""
         toml_path = persona_dir / "persona.toml"
         with toml_path.open("rb") as f:
@@ -330,9 +312,7 @@ class TestBuiltinPersonaTomlShape:
             )
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
-    def test_each_builtin_display_names_has_no_extra_keys(
-        self, persona_dir: Path
-    ) -> None:
+    def test_each_builtin_display_names_has_no_extra_keys(self, persona_dir: Path) -> None:
         """[display_names] must not contain keys outside the 8 AgentRole values.
 
         Sage D1 — strict rejection of unknown role keys. This is the
@@ -360,9 +340,7 @@ class TestHookspecDeferredInSource:
     def test_hookspec_py_does_not_exist_in_persona(self) -> None:
         """``src/bonfire/persona/hookspec.py`` must not exist."""
         stale = _PERSONA_DIR / "hookspec.py"
-        assert not stale.exists(), (
-            f"{stale} must not exist in v0.1 — hookspec is deferred."
-        )
+        assert not stale.exists(), f"{stale} must not exist in v0.1 — hookspec is deferred."
 
     def test_no_persona_hookspec_identifier_in_src(self) -> None:
         """``PersonaHookSpec`` must not appear in any Python source in src/."""

@@ -78,7 +78,7 @@ class TestPipelineConfig:
         assert p.model == "claude-sonnet-4-6"
         assert p.max_turns == 10
         assert p.max_budget_usd == 5.0
-        assert p.persona == "passelewe"
+        assert p.persona == "default"
 
     def test_custom_values(self):
         p = PipelineConfig(
@@ -243,7 +243,7 @@ class TestBonfireSettingsTomlLoading:
         assert s.bonfire.tier == "partial"
         # Not set in TOML — falls back to defaults
         assert s.bonfire.max_budget_usd == 5.0
-        assert s.bonfire.persona == "passelewe"
+        assert s.bonfire.persona == "default"
 
 
 # ---------------------------------------------------------------------------

@@ -31,83 +31,14 @@ from typing import Any
 
 import pytest
 
-# --- v0.1-tolerant imports ---------------------------------------------------
-
-try:
-    from bonfire.handlers.architect import ArchitectHandler  # type: ignore[import-not-found]
-
-    _HANDLER_PRESENT = True
-except ImportError:  # pragma: no cover
-    ArchitectHandler = None  # type: ignore[assignment,misc]
-    _HANDLER_PRESENT = False
-
-
-try:
-    from bonfire.vault.memory import InMemoryVaultBackend  # type: ignore[import-not-found]
-
-    _VAULT_PRESENT = True
-except ImportError:  # pragma: no cover
-    InMemoryVaultBackend = None  # type: ignore[assignment,misc]
-    _VAULT_PRESENT = False
-
-
-try:
-    from bonfire.vault.chunker import (  # type: ignore[import-not-found]
-        chunk_markdown,
-        chunk_source_file,
-    )
-
-    _CHUNKER_PRESENT = True
-except ImportError:  # pragma: no cover
-    chunk_markdown = None  # type: ignore[assignment]
-    chunk_source_file = None  # type: ignore[assignment]
-    _CHUNKER_PRESENT = False
-
-
-try:
-    from bonfire.vault.scanner import ProjectScanner  # type: ignore[import-not-found]
-
-    _SCANNER_PRESENT = True
-except ImportError:  # pragma: no cover
-    ProjectScanner = None  # type: ignore[assignment,misc]
-    _SCANNER_PRESENT = False
-
-
 from bonfire.agent.roles import AgentRole
+from bonfire.handlers.architect import ArchitectHandler
+from bonfire.knowledge.chunker import chunk_markdown, chunk_source_file
+from bonfire.knowledge.memory import InMemoryVaultBackend
+from bonfire.knowledge.scanner import ProjectScanner
 from bonfire.models.envelope import Envelope, TaskStatus
 from bonfire.models.plan import StageSpec
 from bonfire.naming import ROLE_DISPLAY
-
-_HANDLER_XFAIL = pytest.mark.xfail(
-    condition=not _HANDLER_PRESENT,
-    reason=("v0.1 gap: bonfire.handlers.architect.ArchitectHandler not yet ported"),
-    strict=False,
-)
-
-_VAULT_XFAIL = pytest.mark.xfail(
-    condition=not _VAULT_PRESENT,
-    reason=(
-        "v0.1 gap: bonfire.vault.memory.InMemoryVaultBackend not yet ported — "
-        "deferred to BON-W5.3-vault-port"
-    ),
-    strict=False,
-)
-
-_CHUNKER_XFAIL = pytest.mark.xfail(
-    condition=not _CHUNKER_PRESENT,
-    reason=("v0.1 gap: bonfire.vault.chunker not yet ported — deferred to BON-W5.3-vault-port"),
-    strict=False,
-)
-
-_SCANNER_XFAIL = pytest.mark.xfail(
-    condition=not _SCANNER_PRESENT,
-    reason=(
-        "v0.1 gap: bonfire.vault.scanner.ProjectScanner not yet ported — "
-        "deferred to BON-W5.3-vault-port"
-    ),
-    strict=False,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -230,7 +161,6 @@ class TestGenericVocabularyDiscipline:
         assert ROLE_DISPLAY["analyst"].gamified == "Architect"
         assert ROLE_DISPLAY["analyst"].professional == "Analysis Agent"
 
-    @_HANDLER_XFAIL
     def test_module_exposes_role_constant_bound_to_analyst(self) -> None:
         """D2: architect.ROLE is AgentRole.ANALYST."""
         import bonfire.handlers.architect as architect_mod
@@ -241,14 +171,12 @@ class TestGenericVocabularyDiscipline:
         assert architect_mod.ROLE is AgentRole.ANALYST
         assert isinstance(architect_mod.ROLE, AgentRole)
 
-    @_HANDLER_XFAIL
     def test_role_constant_value_is_analyst_string(self) -> None:
         """StrEnum value equality: ROLE == 'analyst'."""
         import bonfire.handlers.architect as architect_mod
 
         assert architect_mod.ROLE == "analyst"
 
-    @_HANDLER_XFAIL
     def test_handler_class_docstring_cites_generic_role_or_architect(self) -> None:
         """Handler class docstring must cite the generic identity.
 
@@ -265,7 +193,6 @@ class TestGenericVocabularyDiscipline:
             "('analyst') or its canonical name ('architect')."
         )
 
-    @_HANDLER_XFAIL
     def test_handler_module_docstring_present(self) -> None:
         """Module docstring present (generic-role citation is encouraged)."""
         import bonfire.handlers.architect as architect_mod
@@ -273,7 +200,6 @@ class TestGenericVocabularyDiscipline:
         assert architect_mod.__doc__ is not None
         assert architect_mod.__doc__.strip()
 
-    @_HANDLER_XFAIL
     def test_role_matches_stage_spec_role_field(self, architect_stage: StageSpec) -> None:
         """Integration: stage.role ('analyst') == handler module ROLE."""
         import bonfire.handlers.architect as architect_mod
@@ -287,7 +213,6 @@ class TestGenericVocabularyDiscipline:
 
 
 class TestScannerDiscovery:
-    @_SCANNER_XFAIL
     def test_discovers_python_files(self, simple_project) -> None:
         """ProjectScanner.discover() lists Python files."""
         scanner = ProjectScanner(simple_project)
@@ -297,7 +222,6 @@ class TestScannerDiscovery:
         assert len(python_files) >= 1
         assert any("main.py" in p for p in paths)
 
-    @_SCANNER_XFAIL
     def test_discovers_markdown_files(self, simple_project) -> None:
         scanner = ProjectScanner(simple_project)
         manifest = scanner.discover()
@@ -306,7 +230,6 @@ class TestScannerDiscovery:
         assert len(md_files) >= 1
         assert any("README.md" in p for p in paths)
 
-    @_SCANNER_XFAIL
     def test_excludes_pycache(self, simple_project) -> None:
         """__pycache__ dirs are excluded from discovery."""
         scanner = ProjectScanner(simple_project)
@@ -314,7 +237,6 @@ class TestScannerDiscovery:
         all_paths = {str(f.path) for f in manifest.files}
         assert not any("__pycache__" in p for p in all_paths)
 
-    @_SCANNER_XFAIL
     def test_manifest_counts_match(self, simple_project) -> None:
         scanner = ProjectScanner(simple_project)
         manifest = scanner.discover()
@@ -323,14 +245,12 @@ class TestScannerDiscovery:
         assert manifest.total_python_source == python_count
         assert manifest.total_files > 0
 
-    @_SCANNER_XFAIL
     def test_empty_dir(self, tmp_path) -> None:
         scanner = ProjectScanner(tmp_path)
         manifest = scanner.discover()
         assert manifest.files == []
         assert manifest.total_files == 0
 
-    @_SCANNER_XFAIL
     def test_extracts_classes_and_functions(self, simple_project) -> None:
         """extract_signatures returns classes + functions."""
         scanner = ProjectScanner(simple_project)
@@ -344,7 +264,6 @@ class TestScannerDiscovery:
         assert "App" in all_classes
         assert "run" in all_functions
 
-    @_SCANNER_XFAIL
     def test_extracts_imports(self, tmp_path) -> None:
         (tmp_path / "mod.py").write_text("import os\nfrom pathlib import Path\n\ndef f(): pass\n")
         scanner = ProjectScanner(tmp_path)
@@ -360,7 +279,6 @@ class TestScannerDiscovery:
 
 
 class TestChunker:
-    @_CHUNKER_XFAIL
     def test_chunk_markdown_returns_vault_entries(self) -> None:
         from bonfire.protocols import VaultEntry
 
@@ -370,19 +288,16 @@ class TestChunker:
         for chunk in chunks:
             assert isinstance(chunk, VaultEntry)
 
-    @_CHUNKER_XFAIL
     def test_chunk_markdown_entry_type_is_code_chunk(self) -> None:
         chunks = chunk_markdown("# Heading\n\nParagraph.\n", source_path="doc.md")
         for chunk in chunks:
             assert chunk.entry_type == "code_chunk"
 
-    @_CHUNKER_XFAIL
     def test_chunk_markdown_each_chunk_has_content_hash(self) -> None:
         chunks = chunk_markdown("# A\n\nContent A.\n\n# B\n\nContent B.\n", source_path="doc.md")
         for chunk in chunks:
             assert chunk.content_hash
 
-    @_CHUNKER_XFAIL
     def test_chunk_source_file_returns_vault_entries(self) -> None:
         from bonfire.protocols import VaultEntry
 
@@ -402,7 +317,6 @@ class TestChunker:
 
 
 class TestConstruction:
-    @_HANDLER_XFAIL
     def test_satisfies_stage_handler_protocol(
         self,
         vault: Any,
@@ -415,7 +329,6 @@ class TestConstruction:
         )
         assert isinstance(handler, StageHandler)
 
-    @_HANDLER_XFAIL
     def test_handle_signature_matches_stage_handler_protocol(self) -> None:
         """handle(stage, envelope, prior_results) -> Envelope is sealed."""
         sig = inspect.signature(ArchitectHandler.handle)
@@ -430,10 +343,6 @@ class TestConstruction:
 
 
 class TestScanAndStore:
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
-    @_CHUNKER_XFAIL
-    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_returns_completed_envelope_with_json_summary(
         self,
@@ -450,9 +359,6 @@ class TestScanAndStore:
         assert "entries_stored" in summary
         assert "entries_skipped" in summary
 
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
-    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_manifest_entry(
         self,
@@ -470,9 +376,6 @@ class TestScanAndStore:
         manifests = [e for e in entries if getattr(e, "entry_type", None) == "project_manifest"]
         assert manifests, "Expected at least one project_manifest entry"
 
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
-    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_signature_entries(
         self,
@@ -488,9 +391,6 @@ class TestScanAndStore:
         sigs = [e for e in entries if getattr(e, "entry_type", None) == "module_signature"]
         assert sigs, "Expected module_signature entries"
 
-    @_HANDLER_XFAIL
-    @_CHUNKER_XFAIL
-    @_VAULT_XFAIL
     @pytest.mark.asyncio
     async def test_stores_code_chunks(
         self,
@@ -506,8 +406,6 @@ class TestScanAndStore:
         chunks = [e for e in entries if getattr(e, "entry_type", None) == "code_chunk"]
         assert chunks
 
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_skips_already_existing_hashes(
         self,
@@ -544,7 +442,6 @@ class TestScanAndStore:
         assert summary["entries_stored"] == 0
         assert summary["entries_skipped"] > 0
 
-    @_HANDLER_XFAIL
     @pytest.mark.asyncio
     async def test_dedups_by_content_hash_on_re_scan(
         self,
@@ -572,8 +469,6 @@ class TestScanAndStore:
 
 
 class TestErrorHandling:
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_vault_store_failure_returns_failed_envelope(
         self,
@@ -602,8 +497,6 @@ class TestErrorHandling:
         assert result.error is not None
         assert result.error.error_type == "RuntimeError"
 
-    @_HANDLER_XFAIL
-    @_SCANNER_XFAIL
     @pytest.mark.asyncio
     async def test_vault_exists_failure_wraps_in_failed_envelope(
         self,
@@ -641,7 +534,6 @@ class TestErrorHandling:
         assert "vault storage unavailable" in result.error.message
         assert result.error.stage_name == architect_stage.name
 
-    @_HANDLER_XFAIL
     @pytest.mark.asyncio
     async def test_nonexistent_project_root_fails_gracefully(
         self,
@@ -670,7 +562,6 @@ class TestErrorHandling:
 
 
 class TestNegativeDriftGuards:
-    @_HANDLER_XFAIL
     def test_handler_source_does_not_hardcode_gamified_display(self) -> None:
         """D3: no title-cased ``"Architect"`` string literal in code body."""
         import bonfire.handlers.architect as architect_mod
@@ -700,14 +591,12 @@ class TestNegativeDriftGuards:
 
 
 class TestIdentitySealInvariants:
-    @_HANDLER_XFAIL
     def test_handle_signature_matches_stage_handler_protocol(self) -> None:
         sig = inspect.signature(ArchitectHandler.handle)
         params = list(sig.parameters.keys())
         assert params == ["self", "stage", "envelope", "prior_results"]
         assert asyncio.iscoroutinefunction(ArchitectHandler.handle)
 
-    @_HANDLER_XFAIL
     @pytest.mark.asyncio
     async def test_handle_returns_envelope(
         self,

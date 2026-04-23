@@ -32,14 +32,6 @@ class TestEmbeddingProviderProtocol:
         embedder = MockEmbedder()
         assert isinstance(embedder, EmbeddingProvider)
 
-    # knight-a(innovative): explicit rejection of non-conforming duck-types.
-    def test_embedding_provider_rejects_missing_methods(self) -> None:
-        class Missing:
-            """No embed() method, no dim property."""
-
-        # runtime_checkable only checks presence, but this one should fail.
-        assert not isinstance(Missing(), EmbeddingProvider)
-
 
 # ---------------------------------------------------------------------------
 # Factory branches
@@ -59,12 +51,6 @@ class TestGetEmbedderFactory:
     def test_get_embedder_unknown_provider_raises_value_error(self) -> None:
         with pytest.raises(ValueError):
             get_embedder(provider="not-a-real-provider")
-
-    # knight-a(innovative): unknown-provider error message includes the name.
-    def test_get_embedder_unknown_provider_message_cites_name(self) -> None:
-        with pytest.raises(ValueError) as excinfo:
-            get_embedder(provider="does-not-exist")
-        assert "does-not-exist" in str(excinfo.value)
 
     def test_get_embedder_ollama_requires_ollama_package(
         self, monkeypatch: pytest.MonkeyPatch

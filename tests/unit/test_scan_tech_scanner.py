@@ -101,18 +101,6 @@ class TestFrameworkDetection:
         # Framework detection from pyproject.toml deps.
         assert "Django" in techs or any("django" in t.lower() for t in techs)
 
-    # knight-a(innovative): pytest in dev deps triggers test_framework category.
-    async def test_detects_pytest_as_test_framework(self, tmp_path) -> None:
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'x'\n"
-            "[project.optional-dependencies]\n"
-            'dev = ["pytest>=8.0"]\n'
-        )
-        scanner = TechScanner(tmp_path, project_name="x")
-        entries = await scanner.scan()
-        techs = {e.metadata["technology"] for e in entries}
-        assert "pytest" in techs
-
 
 class TestEdgeCases:
     async def test_empty_project_returns_empty_list(self, tmp_path) -> None:

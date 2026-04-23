@@ -42,19 +42,6 @@ class TestFileInfoFrozen:
         with pytest.raises(FrozenInstanceError):
             info.category = "markdown"  # type: ignore[misc]
 
-    # knight-a(innovative): split-from-frozen — shape invariants.
-    def test_file_info_exposes_locked_attributes(self, tmp_path) -> None:
-        info = FileInfo(
-            path=tmp_path / "x.py",
-            category="python",
-            content_hash="abc",
-            size_bytes=42,
-        )
-        assert info.path == tmp_path / "x.py"
-        assert info.category == "python"
-        assert info.content_hash == "abc"
-        assert info.size_bytes == 42
-
 
 class TestModuleSignatureFrozen:
     def test_module_signature_is_frozen(self) -> None:

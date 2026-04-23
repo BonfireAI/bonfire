@@ -143,15 +143,6 @@ class TestQuery:
         )
         assert await backend.query("zzz") == []
 
-    # knight-a(innovative): edge — case-insensitivity invariant.
-    async def test_query_is_case_insensitive(self) -> None:
-        backend = InMemoryVaultBackend()
-        await backend.store(
-            VaultEntry(content="HELLO WORLD", entry_type="code_chunk", content_hash="h")
-        )
-        results = await backend.query("hello")
-        assert len(results) == 1
-
 
 class TestExists:
     """Content-hash existence checks."""

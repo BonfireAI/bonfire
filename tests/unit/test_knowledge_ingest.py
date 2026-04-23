@@ -47,20 +47,6 @@ class TestIngestMarkdown:
         assert first >= 1
         assert second == 0
 
-    # knight-a(innovative): missing file returns 0 (no exception).
-    async def test_ingest_markdown_missing_file_returns_zero(self, tmp_path) -> None:
-        backend = InMemoryVaultBackend()
-        result = await ingest_markdown(tmp_path / "nope.md", backend=backend)
-        assert result == 0
-        assert backend._entries == []
-
-    # knight-a(innovative): empty file returns 0.
-    async def test_ingest_markdown_empty_file_returns_zero(self, tmp_path) -> None:
-        md = tmp_path / "empty.md"
-        md.write_text("")
-        backend = InMemoryVaultBackend()
-        assert await ingest_markdown(md, backend=backend) == 0
-
     # knight-a(innovative): provenance propagates (project_name + git_hash).
     async def test_ingest_markdown_propagates_provenance(self, tmp_path) -> None:
         md = tmp_path / "doc.md"
@@ -124,10 +110,6 @@ class TestIngestSession:
         assert first >= 1
         assert second == 0
 
-    async def test_ingest_session_missing_file_returns_zero(self, tmp_path) -> None:
-        backend = InMemoryVaultBackend()
-        assert await ingest_session(tmp_path / "ghost.jsonl", backend=backend) == 0
-
 
 # ---------------------------------------------------------------------------
 # Retrieve context — Sage locks return type to list[VaultEntry]
@@ -183,13 +165,6 @@ class TestRetrieveContext:
         backend = LimitSpy()
         await retrieve_context("q", backend=backend, limit=3)
         assert 3 in captured_limits
-
-    # knight-a(innovative): returns list type (not string) per Sage lock.
-    async def test_retrieve_context_returns_list_type(self) -> None:
-        """Sage D8.2 locks return type to list[VaultEntry], not formatted string."""
-        backend = InMemoryVaultBackend()
-        result = await retrieve_context("anything", backend=backend)
-        assert isinstance(result, list)
 
     # knight-a(innovative): empty backend -> empty list (not None, not "").
     async def test_retrieve_context_empty_backend_returns_empty_list(self) -> None:

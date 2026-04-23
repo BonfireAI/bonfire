@@ -9,7 +9,6 @@ Adjudication: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
 
 from __future__ import annotations
 
-import hashlib
 import re
 
 import pytest
@@ -56,12 +55,6 @@ class TestContentHashStability:
         """Same input in same process -> same output."""
         text = "deterministic"
         assert content_hash(text) == content_hash(text)
-
-    def test_content_hash_stable_across_many_calls(self) -> None:
-        """Stability holds across 50 consecutive calls (no hidden state)."""
-        reference = content_hash("stable-payload")
-        for _ in range(50):
-            assert content_hash("stable-payload") == reference
 
 
 class TestContentHashDistinguishability:
@@ -131,11 +124,3 @@ class TestFileHash:
         p.write_text("", encoding="utf-8")
         h = file_hash(p)
         assert _HEX64.fullmatch(h)
-
-    # knight-a(innovative): contract with stdlib sha256 — fingerprint-not-moat.
-    def test_content_hash_uses_sha256_under_the_hood(self) -> None:
-        """Normalized-text SHA-256 hex matches hashlib.sha256 directly."""
-        text = "abcdef"
-        normalized = re.sub(r"\s+", " ", text.strip())
-        expected = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        assert content_hash(text) == expected

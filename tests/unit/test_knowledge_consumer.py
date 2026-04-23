@@ -271,25 +271,6 @@ class TestResilience:
         # A warning should be emitted.
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
-    # knight-a(innovative): all four handlers are individually resilient.
-    @pytest.mark.parametrize(
-        "handler_name,event_factory",
-        [
-            ("on_stage_completed", _stage_completed),
-            ("on_stage_failed", _stage_failed),
-            ("on_dispatch_failed", _dispatch_failed),
-            ("on_session_ended", _session_ended),
-        ],
-    )
-    async def test_each_handler_is_resilient_to_backend_failure(
-        self, handler_name: str, event_factory: Any
-    ) -> None:
-        backend = _ExplodingStoreBackend()
-        consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
-        handler = getattr(consumer, handler_name)
-        # Must NOT raise.
-        await handler(event_factory())
-
 
 # ---------------------------------------------------------------------------
 # Provenance

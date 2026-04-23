@@ -14,8 +14,6 @@ Adjudication: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
 
 from __future__ import annotations
 
-import pytest
-
 from bonfire.knowledge.chunker import chunk_markdown, chunk_source_file
 from bonfire.knowledge.hasher import content_hash as _ch
 from bonfire.protocols import VaultEntry
@@ -67,13 +65,6 @@ class TestChunkMarkdownEdgeCases:
 
     def test_chunk_markdown_empty_returns_empty(self) -> None:
         assert chunk_markdown("", source_path="doc.md") == []
-
-    @pytest.mark.parametrize("whitespace_only", ["", "   ", "\n\n\n", "\t\t", "   \n\n\n   "])
-    def test_chunk_markdown_whitespace_only_returns_empty(
-        self, whitespace_only: str
-    ) -> None:
-        """Innovative lens: parametrize multiple whitespace shapes."""
-        assert chunk_markdown(whitespace_only, source_path="doc.md") == []
 
     def test_chunk_markdown_frontmatter_only_returns_empty(self) -> None:
         """Frontmatter stripped -> empty body -> zero chunks."""

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from bonfire.events.consumers.cost import CostTracker
 from bonfire.events.consumers.display import DisplayConsumer
+from bonfire.events.consumers.knowledge_ingest import KnowledgeIngestConsumer
 from bonfire.events.consumers.logger import SessionLoggerConsumer
-from bonfire.events.consumers.vault_ingest import VaultIngestConsumer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 __all__ = [
     "CostTracker",
     "DisplayConsumer",
+    "KnowledgeIngestConsumer",
     "SessionLoggerConsumer",
-    "VaultIngestConsumer",
     "wire_consumers",
 ]
 
@@ -39,7 +39,7 @@ def wire_consumers(
     - ``DisplayConsumer(display_callback)`` — four typed subscriptions.
     - ``cost_tracker.register(bus)`` — caller owns the tracker so the
       running total is observable after wiring.
-    - ``VaultIngestConsumer(vault_backend, project_name="bonfire")``.
+    - ``KnowledgeIngestConsumer(backend=vault_backend, project_name="bonfire")``.
     """
     logger_consumer = SessionLoggerConsumer(persistence=persistence)
     logger_consumer.register(bus)
@@ -49,5 +49,5 @@ def wire_consumers(
 
     cost_tracker.register(bus)
 
-    vault_consumer = VaultIngestConsumer(backend=vault_backend, project_name="bonfire")
-    vault_consumer.register(bus)
+    knowledge_consumer = KnowledgeIngestConsumer(backend=vault_backend, project_name="bonfire")
+    knowledge_consumer.register(bus)

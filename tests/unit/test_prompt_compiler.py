@@ -1229,6 +1229,7 @@ class TestDependencyConstraints:
         "bonfire.workflows",
         "bonfire.session",
         "bonfire.vault",
+        "bonfire.knowledge",
         "bonfire.handlers",
         "bonfire.git",
         "bonfire.github",

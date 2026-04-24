@@ -10,11 +10,10 @@ Four consumers land in the public bus package:
 * ``CostTracker`` (``bonfire.events.consumers.cost``) — accumulates cost from
   ``DispatchCompleted`` events and emits budget warning / exceeded events at
   80% / 100% thresholds (each latched — fires at most once).
-* ``VaultIngestConsumer`` (``bonfire.events.consumers.vault_ingest``) — public
-  surface only in W2.3: constructor + ``register(bus)`` that subscribes to
-  the four event types. Deep storage semantics (hashing, dedup, backend
-  protocol) are OUT of W2.3 scope — they belong to the future
-  ``bonfire.vault`` transfer wave.
+* ``KnowledgeIngestConsumer`` (``bonfire.events.consumers.knowledge_ingest``) — full
+  consumer with content-hash dedup, `VaultEntry` construction, and
+  backend.store resilience. Re-exports the canonical implementation from
+  ``bonfire.knowledge.consumer``.
 
 A ``wire_consumers(*, bus, persistence, cost_tracker, display_callback,
 vault_backend)`` helper at ``bonfire.events.consumers`` registers all four
@@ -24,8 +23,8 @@ Public v0.1 adaptations vs. the hardened v1 engine:
 
 * No imports from ``bonfire.session.persistence`` (module is a placeholder in
   public v0.1). Persistence is stubbed via ``MagicMock``.
-* No imports from ``bonfire.vault.*`` (does not exist in public v0.1). A
-  minimal in-memory backend stub is defined inline where needed.
+* Imports from ``bonfire.knowledge.*`` are now live (`hasher.content_hash`,
+  `VaultEntry`). The BON-333 surface-only adaptation is gone.
 * No ``CostLedgerConsumer`` wiring — ``bonfire.costs`` is not part of W2.3.
 * No ``persona`` branch in ``DisplayConsumer`` — that wiring arrives with
   ``bonfire.persona``.
@@ -66,8 +65,8 @@ try:
     from bonfire.events.consumers import wire_consumers
     from bonfire.events.consumers.cost import CostTracker
     from bonfire.events.consumers.display import DisplayConsumer
+    from bonfire.events.consumers.knowledge_ingest import KnowledgeIngestConsumer
     from bonfire.events.consumers.logger import SessionLoggerConsumer
-    from bonfire.events.consumers.vault_ingest import VaultIngestConsumer
 except ImportError as _exc:  # pragma: no cover
     _IMPORT_ERROR: Exception | None = _exc
     EventBus = None  # type: ignore[assignment,misc]
@@ -75,7 +74,7 @@ except ImportError as _exc:  # pragma: no cover
     CostTracker = None  # type: ignore[assignment,misc]
     DisplayConsumer = None  # type: ignore[assignment,misc]
     SessionLoggerConsumer = None  # type: ignore[assignment,misc]
-    VaultIngestConsumer = None  # type: ignore[assignment,misc]
+    KnowledgeIngestConsumer = None  # type: ignore[assignment,misc]
 else:
     _IMPORT_ERROR = None
 
@@ -246,10 +245,12 @@ class TestConsumerImports:
 
         assert _SL is not None
 
-    def test_vault_ingest_importable(self):
-        from bonfire.events.consumers.vault_ingest import VaultIngestConsumer as _VI
+    def test_knowledge_ingest_importable(self):
+        from bonfire.events.consumers.knowledge_ingest import (
+            KnowledgeIngestConsumer as _KI,
+        )
 
-        assert _VI is not None
+        assert _KI is not None
 
     def test_wire_consumers_importable(self):
         from bonfire.events.consumers import wire_consumers as _wire
@@ -691,36 +692,34 @@ class TestCostTrackerThresholds:
 
 
 # ===========================================================================
-# 5. VaultIngestConsumer — surface contract only (deep storage OUT of scope)
+# 5. KnowledgeIngestConsumer — full semantic contract (ported in BON-341)
 # ===========================================================================
 
 
-class TestVaultIngestConsumerSurface:
-    """Surface-level contract — full storage semantics are OUT of W2.3 scope.
+class TestKnowledgeIngestConsumerSurface:
+    """Full semantic contract — hashing, dedup, backend-protocol details are
+    now covered by ``bonfire.knowledge.consumer`` (the canonical full
+    implementation). This test class exercises the ``events.consumers``
+    re-export surface; deep semantics live in ``test_knowledge_consumer.py``.
 
-    See ``docs/audit/sage-decisions/bon-333-sage-20260418T004958Z.md`` §2 for
-    rationale. The real ``VaultIngestConsumer`` lives at
-    ``bonfire.vault.consumer`` (not in public v0.1). In public v0.1, this
-    namespace exposes the class surface — enough for ``wire_consumers`` to
-    construct and register it — but hashing / dedup / backend-protocol
-    details are covered in the future vault-transfer wave.
+    Supersession: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
     """
 
     def test_class_is_importable(self):
-        assert VaultIngestConsumer is not None
+        assert KnowledgeIngestConsumer is not None
 
     def test_constructor_accepts_backend_and_project_name(self, vault_backend):
-        consumer = VaultIngestConsumer(backend=vault_backend, project_name="bonfire")
+        consumer = KnowledgeIngestConsumer(backend=vault_backend, project_name="bonfire")
         assert consumer is not None
 
     def test_register_is_a_method(self):
         """The consumer exposes a register(bus) method used by wire_consumers."""
-        assert hasattr(VaultIngestConsumer, "register")
-        assert callable(VaultIngestConsumer.register)
+        assert hasattr(KnowledgeIngestConsumer, "register")
+        assert callable(KnowledgeIngestConsumer.register)
 
     def test_register_subscribes_to_four_expected_event_types(self, vault_backend, bus):
         """register subscribes to StageCompleted, StageFailed, DispatchFailed, SessionEnded."""
-        consumer = VaultIngestConsumer(backend=vault_backend, project_name="bonfire")
+        consumer = KnowledgeIngestConsumer(backend=vault_backend, project_name="bonfire")
         consumer.register(bus)
 
         subscribed_types = {k for k, v in bus._typed.items() if len(v) > 0}
@@ -731,7 +730,7 @@ class TestVaultIngestConsumerSurface:
 
     async def test_register_and_emit_does_not_raise(self, vault_backend, bus):
         """End-to-end: emit each supported event type, no exceptions propagate."""
-        consumer = VaultIngestConsumer(backend=vault_backend, project_name="bonfire")
+        consumer = KnowledgeIngestConsumer(backend=vault_backend, project_name="bonfire")
         consumer.register(bus)
 
         # None of these should raise — they may or may not touch the backend.
@@ -920,11 +919,11 @@ class TestWireConsumersContract:
         await bus.emit(_dispatch_completed(cost_usd=0.75))
         assert tracker.total_cost_usd == pytest.approx(0.75)
 
-    async def test_wired_vault_ingest_is_registered(
+    async def test_wired_knowledge_ingest_is_registered(
         self, bus, mock_persistence, mock_callback, vault_backend
     ):
         """After wiring: StageCompleted, StageFailed, DispatchFailed, SessionEnded
-        all have at least one typed subscriber (VaultIngestConsumer)."""
+        all have at least one typed subscriber (KnowledgeIngestConsumer)."""
         tracker = CostTracker(budget_usd=10.0, bus=bus)
         wire_consumers(
             bus=bus,
@@ -935,7 +934,7 @@ class TestWireConsumersContract:
         )
 
         subscribed = {k for k, v in bus._typed.items() if len(v) > 0}
-        # VaultIngest + Display contribute these types; the intersection
-        # is the vault set. Every vault-expected type MUST be present.
+        # KnowledgeIngest + Display contribute these types; the intersection
+        # is the knowledge set. Every vault-expected type MUST be present.
         for t in (StageCompleted, StageFailed, DispatchFailed, SessionEnded):
             assert t in subscribed, f"{t.__name__} not subscribed after wire_consumers"

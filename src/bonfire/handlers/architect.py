@@ -8,12 +8,11 @@ vocabulary discipline. Display translation (analyst -> "Architect")
 happens in the display layer via ``ROLE_DISPLAY[ROLE].gamified``; this
 module never hardcodes the gamified display name in code.
 
-Note: the ``bonfire.vault`` subsystem (``ProjectScanner``, ``chunker``,
-``hasher``, ``memory.InMemoryVaultBackend``) is not yet present in v0.1.
-Imports are performed lazily inside :meth:`ArchitectHandler.handle` so
-the class remains importable and instantiable for class-shape tests. All
-behavior-level tests that exercise the vault are ``xfail``-gated until
-``BON-W5.3-vault-port`` lands.
+Note: the ``bonfire.knowledge`` subsystem (``ProjectScanner``, ``chunker``,
+``hasher``, ``memory.InMemoryVaultBackend``) is loaded lazily to defer module
+load until the Architect stage is dispatched. Imports are performed lazily
+inside :meth:`ArchitectHandler.handle` to defer loading of ``ast``, ``fnmatch``,
+and dataclass machinery until the stage runs.
 """
 
 from __future__ import annotations
@@ -75,11 +74,11 @@ class ArchitectHandler:
     ) -> Envelope:
         """Execute project scan. Returns envelope with JSON summary in result."""
         try:
-            # Lazy imports -- ``bonfire.vault`` is not yet present in v0.1.
+            # Lazy imports — defer knowledge module load until handler.handle() is invoked.
+            from bonfire.knowledge.chunker import chunk_markdown, chunk_source_file
+            from bonfire.knowledge.hasher import content_hash
+            from bonfire.knowledge.scanner import ProjectScanner
             from bonfire.protocols import VaultEntry
-            from bonfire.vault.chunker import chunk_markdown, chunk_source_file
-            from bonfire.vault.hasher import content_hash
-            from bonfire.vault.scanner import ProjectScanner
 
             scanner = ProjectScanner(
                 self._project_root,

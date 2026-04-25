@@ -28,7 +28,7 @@ v1 source per Sage §D9.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -496,7 +496,15 @@ class TestEmitKeywordShape:
 
     @pytest.mark.asyncio()
     async def test_emit_keyword_shape_locked(self) -> None:
-        bus = EventBus()
+        # Mock-bus pattern (Revision 1, contract-lock decision log).
+        # We assert on bus.emit.call_args BEFORE the bus's documented
+        # sequence-stamping step (bus.py:104-105 re-stamps via model_copy
+        # on every emit; that is the bus's contract, not the consumer's).
+        # Innovation 5 locks the consumer's emit-call CONSTRUCTION shape —
+        # the kwargs the consumer wires into XPRespawn before the bus
+        # takes over. AsyncMock is required because bus.emit is awaited
+        # (async def emit) — a MagicMock would yield a non-awaitable Mock.
+        bus = AsyncMock(spec=EventBus)
         tracker = _make_tracker_mock(total_xp=300, level_changed=False)
         calculator = MagicMock(spec=XPCalculator)
         calculator.calculate.return_value = _make_calculator_result(
@@ -506,28 +514,27 @@ class TestEmitKeywordShape:
             xp_penalty=10,
         )
 
-        XPConsumer(tracker=tracker, calculator=calculator, bus=bus)
-
-        respawn_captured: list[XPRespawn] = []
-
-        async def capture(event: XPRespawn) -> None:
-            respawn_captured.append(event)
-
-        bus.subscribe(XPRespawn, capture)
-
-        # Use a non-zero sequence to detect any drop/swap.
-        nonzero_event = _pipeline_completed(sequence=99)
         consumer_inst = XPConsumer(tracker=tracker, calculator=calculator, bus=bus)
+
+        # Use a non-zero sequence to detect any drop/swap in the consumer's
+        # construction. The bus's internal sequence counter is irrelevant
+        # here — we capture the unstamped XPRespawn the consumer constructs.
+        nonzero_event = _pipeline_completed(sequence=99)
         await consumer_inst.on_pipeline_completed(
             nonzero_event, success=True, stages_failed=3
         )
 
         # Sage §D8: XPRespawn(session_id, sequence, checkpoint, reason)
-        assert len(respawn_captured) >= 1
-        emitted = respawn_captured[-1]
-        # session_id forwarded verbatim
+        respawn_calls = [
+            call
+            for call in bus.emit.call_args_list
+            if call.args and isinstance(call.args[0], XPRespawn)
+        ]
+        assert len(respawn_calls) >= 1
+        emitted: XPRespawn = respawn_calls[-1].args[0]
+        # session_id forwarded verbatim from event
         assert emitted.session_id == _SESSION
-        # sequence forwarded verbatim
+        # sequence forwarded verbatim into the constructed event (pre-stamp)
         assert emitted.sequence == 99
         # checkpoint locked to "" per Appendix note 6 + consumer.py:108
         assert emitted.checkpoint == ""

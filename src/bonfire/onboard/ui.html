@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonfire — The Front Door</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --green-bright: #33ff77;
+    --green-dim: #00aa2a;
+    --bg: #0a0a0a;
+    --bg-panel: #0d0d0d;
+    --scanline: rgba(0, 255, 65, 0.03);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom, transparent, transparent 2px,
+      var(--scanline) 2px, var(--scanline) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  .glow { text-shadow: 0 0 5px var(--green), 0 0 10px rgba(0, 255, 65, 0.3); }
+
+  /* Phosphor bloom — stronger glow for headers and narration */
+  .bloom {
+    text-shadow:
+      0 0 4px var(--green),
+      0 0 8px var(--green),
+      0 0 16px rgba(0, 255, 65, 0.2);
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.97; }
+  }
+  .crt-flicker { animation: flicker 4s infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .crt-flicker { animation: none; }
+  }
+
+  #screen {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  #header {
+    text-align: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--green-dim);
+  }
+  #header h1 { font-size: 18px; font-weight: 700; letter-spacing: 2px; }
+
+  #scan-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .scan-panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--green-dim);
+    border-radius: 2px;
+    padding: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .scan-panel h2 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--green-dim);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--green-dim);
+  }
+  .scan-panel .items { flex: 1; font-size: 12px; }
+
+  .scan-item {
+    padding: 2px 0;
+    border-left: 2px solid transparent;
+    opacity: 0;
+    animation: reveal 0.4s ease forwards;
+  }
+  @keyframes reveal {
+    0% { opacity: 0; transform: translateX(-4px); border-left-color: var(--green); }
+    50% { opacity: 1; border-left-color: var(--green); }
+    100% { opacity: 1; transform: translateX(0); border-left-color: transparent; }
+  }
+  .scan-item .label { color: var(--green-dim); }
+  .scan-item .value { color: var(--green); }
+  .scan-item .detail { color: var(--green-dim); font-size: 11px; }
+
+  /* Panel completion indicator */
+  .scan-panel.complete {
+    border-color: var(--green);
+    transition: border-color 0.5s ease;
+  }
+  .scan-panel.complete h2 {
+    color: var(--green);
+  }
+  .scan-panel.complete h2::after {
+    content: ' \2713';
+    color: var(--green);
+  }
+  @keyframes panel-pulse {
+    0%, 100% { box-shadow: none; }
+    50% { box-shadow: 0 0 8px rgba(0, 255, 65, 0.15); }
+  }
+  .scan-panel.complete {
+    animation: panel-pulse 1s ease 1;
+  }
+
+  #narration {
+    min-height: 28px;
+    padding: 4px 12px;
+    font-style: italic;
+    color: var(--green-bright);
+    font-size: 13px;
+    text-shadow:
+      0 0 4px var(--green),
+      0 0 8px var(--green),
+      0 0 16px rgba(0, 255, 65, 0.2);
+  }
+
+  /* Scan-grid transition for conversation activation */
+  #scan-grid {
+    transition: flex 0.8s ease, grid-template-rows 0.8s ease;
+  }
+  #scan-grid.compressed {
+    flex: 0 0 auto;
+    grid-template-rows: 1fr;
+    max-height: 35vh;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--green-dim);
+    padding-bottom: 8px;
+  }
+  #scan-grid.compressed .scan-panel {
+    padding: 6px 8px;
+    min-height: 0;
+  }
+  #scan-grid.compressed .scan-panel h2 {
+    font-size: 10px;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+  }
+  #scan-grid.compressed .scan-item {
+    font-size: 11px;
+    padding: 1px 0;
+  }
+
+  #chat { display: none; flex-direction: column; gap: 12px; min-height: 0; }
+  #chat.active { display: flex; flex: 1; min-height: 40vh; }
+  #chat-log {
+    flex: 1; overflow-y: auto; padding: 12px;
+    background: var(--bg-panel); border: 1px solid var(--green-dim); border-radius: 2px;
+  }
+  .chat-msg { margin-bottom: 8px; padding: 4px 0; }
+  .chat-msg.passelewe { color: var(--green-bright); font-style: italic; }
+  .chat-msg.user { color: var(--green); }
+  #chat-input { display: flex; gap: 8px; }
+  #chat-input input {
+    flex: 1; background: var(--bg-panel); border: 1px solid var(--green-dim);
+    border-radius: 2px; color: var(--green); font-family: inherit;
+    font-size: 14px; padding: 8px 12px; outline: none;
+  }
+  #chat-input input:focus { border-color: var(--green); box-shadow: 0 0 5px rgba(0, 255, 65, 0.2); }
+  #chat-input button {
+    background: var(--bg-panel); border: 1px solid var(--green-dim);
+    border-radius: 2px; color: var(--green); font-family: inherit;
+    font-size: 13px; padding: 8px 16px; cursor: pointer;
+  }
+  #chat-input button:hover { border-color: var(--green); background: rgba(0, 255, 65, 0.05); }
+
+  #status { font-size: 11px; color: var(--green-dim); text-align: right; padding: 4px 0; }
+  #status::after {
+    content: ' \2588';
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Chat panel fade-in: opacity managed by .visible class (added after display:flex) */
+  #chat.active {
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  #chat.active.visible {
+    opacity: 1;
+  }
+
+  /* Allow full page scroll when both panels and chat are showing */
+  #screen.split {
+    height: auto;
+    min-height: 100vh;
+  }
+  #screen.split #scan-grid {
+    flex: none;
+  }
+
+  /* Cursor beat before first message */
+  @keyframes cursor-beat {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .cursor-beat::after {
+    content: '\2588';
+    animation: cursor-beat 0.6s step-end 3;
+  }
+
+  /* Reduced motion: disable all new animations */
+  @media (prefers-reduced-motion: reduce) {
+    .scan-item { animation: none; opacity: 1; }
+    .scan-panel.complete { animation: none; }
+    #scan-grid { transition: none; }
+    #chat.active { transition: none; opacity: 1; }
+    #status::after { animation: none; }
+    .cursor-beat::after { animation: none; }
+  }
+</style>
+</head>
+<body class="crt-flicker">
+<div id="screen">
+  <div id="header" class="glow bloom"><h1>BONFIRE &mdash; THE FRONT DOOR</h1></div>
+  <div id="scan-grid">
+    <div class="scan-panel" data-panel="project_structure"><h2>Project Structure</h2><div class="items"></div></div>
+    <div class="scan-panel" data-panel="cli_toolchain"><h2>CLI Toolchain</h2><div class="items"></div></div>
+    <div class="scan-panel" data-panel="claude_memory"><h2>Claude Memory</h2><div class="items"></div></div>
+    <div class="scan-panel" data-panel="git_state"><h2>Git State</h2><div class="items"></div></div>
+    <div class="scan-panel" data-panel="mcp_servers"><h2>MCP Servers</h2><div class="items"></div></div>
+    <div class="scan-panel" data-panel="vault_seed"><h2>Vault Seed</h2><div class="items"></div></div>
+  </div>
+  <div id="narration"></div>
+  <div id="chat">
+    <div id="chat-log"></div>
+    <div id="chat-input">
+      <input type="text" id="msg-input" placeholder="Type your answer..." autocomplete="off">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+  <div id="status">connecting...</div>
+</div>
+<script>
+(function() {
+  'use strict';
+  var wsUrl = 'ws://' + window.location.host + '/ws';
+  var statusEl = document.getElementById('status');
+  var narrationEl = document.getElementById('narration');
+  var chatEl = document.getElementById('chat');
+  var chatLog = document.getElementById('chat-log');
+  var msgInput = document.getElementById('msg-input');
+  var sendBtn = document.getElementById('send-btn');
+  var ws = null;
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var typeQueue = [];
+  var typing = false;
+
+  /**
+   * Typing effect for Passelewe narration and chat messages.
+   * Reveals text character-by-character at ~35ms per character.
+   * Falls back to instant display when prefers-reduced-motion is set.
+   */
+  function typeText(element, text, speed, callback) {
+    if (reducedMotion) {
+      element.textContent = text;
+      if (callback) callback();
+      return;
+    }
+    speed = speed || 35;
+    var i = 0;
+    element.textContent = '';
+    function tick() {
+      if (i < text.length) {
+        element.textContent += text.charAt(i);
+        i++;
+        setTimeout(tick, speed);
+      } else {
+        if (callback) callback();
+      }
+    }
+    tick();
+  }
+
+  /**
+   * Queue-based typing to prevent overlapping Passelewe messages.
+   * Each message waits for the previous to finish before starting.
+   */
+  function enqueueType(element, text, speed) {
+    typeQueue.push({ element: element, text: text, speed: speed });
+    if (!typing) processTypeQueue();
+  }
+
+  function processTypeQueue() {
+    if (typeQueue.length === 0) { typing = false; return; }
+    typing = true;
+    var job = typeQueue.shift();
+    typeText(job.element, job.text, job.speed, processTypeQueue);
+  }
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+    ws.onopen = function() { statusEl.textContent = 'connected \u2014 scanning...'; };
+    ws.onclose = function() { statusEl.textContent = 'disconnected'; };
+    ws.onerror = function() { statusEl.textContent = 'connection error'; };
+    ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case 'scan_start': statusEl.textContent = 'scanning ' + msg.panels.length + ' systems...'; break;
+      case 'scan_update': addScanItem(msg.panel, msg.label, msg.value, msg.detail || ''); break;
+      case 'scan_complete': markPanelComplete(msg.panel, msg.item_count); break;
+      case 'all_scans_complete': statusEl.textContent = msg.total_items + ' findings catalogued'; break;
+      case 'conversation_start': activateChat(); break;
+      case 'passelewe_message':
+        if (msg.subtype === 'narration') { setNarration(msg.text); }
+        else { addChatMessage('passelewe', msg.text); }
+        break;
+      case 'config_generated': statusEl.textContent = 'config generated'; break;
+    }
+  }
+
+  var KNOWN_PANELS = ['project_structure','cli_toolchain','claude_memory','git_state','mcp_servers','vault_seed'];
+
+  function addScanItem(panel, label, value, detail) {
+    if (KNOWN_PANELS.indexOf(panel) === -1) return;
+    var el = document.querySelector('[data-panel="' + panel + '"] .items');
+    if (!el) return;
+    var item = document.createElement('div');
+    item.className = 'scan-item';
+    item.innerHTML = '<span class="label">' + esc(label) + '</span> '
+      + '<span class="value">' + esc(value) + '</span>'
+      + (detail ? ' <span class="detail">' + esc(detail) + '</span>' : '');
+    el.appendChild(item);
+  }
+
+  function markPanelComplete(panel, count) {
+    if (KNOWN_PANELS.indexOf(panel) === -1) return;
+    var panelEl = document.querySelector('[data-panel="' + panel + '"]');
+    if (!panelEl) return;
+    panelEl.classList.add('complete');
+    var h2 = panelEl.querySelector('h2');
+    if (h2) h2.textContent += ' [' + count + ']';
+  }
+
+  function setNarration(text) { enqueueType(narrationEl, text, 35); }
+
+  function activateChat() {
+    var scanGrid = document.getElementById('scan-grid');
+    var screen = document.getElementById('screen');
+    // Allow body to scroll so panels + chat both live on screen
+    document.body.style.overflow = 'auto';
+    if (reducedMotion) {
+      scanGrid.classList.add('compressed');
+      screen.classList.add('split');
+      chatEl.classList.add('active');
+      chatEl.classList.add('visible');
+      msgInput.focus();
+      return;
+    }
+    // 1. Compress scan grid (shrink, stay readable)
+    scanGrid.classList.add('compressed');
+    screen.classList.add('split');
+    // 2. Brief pause, then reveal chat with fade-in
+    setTimeout(function() {
+      chatEl.classList.add('active');
+      // Force layout before adding visible (enables CSS transition)
+      chatEl.offsetHeight; // eslint-disable-line no-unused-expressions
+      chatEl.classList.add('visible');
+      // 3. Focus input after fade-in completes
+      setTimeout(function() { msgInput.focus(); }, 600);
+    }, 800);
+  }
+
+  function addChatMessage(role, text) {
+    var div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    chatLog.appendChild(div);
+    if (role === 'passelewe') {
+      enqueueType(div, text, 35);
+    } else {
+      div.textContent = text;
+    }
+    chatLog.scrollTop = chatLog.scrollHeight;
+    // Keep scroll pinned as typing progresses
+    if (role === 'passelewe') {
+      var scrollInterval = setInterval(function() {
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }, 100);
+      setTimeout(function() { clearInterval(scrollInterval); }, text.length * 40 + 500);
+    }
+  }
+
+  function sendMessage() {
+    var text = msgInput.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'user_message', text: text }));
+    addChatMessage('user', text);
+    msgInput.value = '';
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  msgInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') sendMessage(); });
+
+  function esc(s) { var el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
+
+  connect();
+})();
+</script>
+</body>
+</html>

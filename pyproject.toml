@@ -51,6 +51,7 @@ Issues = "https://github.com/BonfireAI/bonfire/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bonfire"]
+include = ["src/bonfire/onboard/ui.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -71,7 +71,7 @@ class DispatchOptions(BaseModel):
     permission_mode: str = "dontAsk"
     role: str = Field(default="", strict=True)
 
-    # Security hook policy (BON-338)
+    # Security hook policy
     security_hooks: SecurityHooksConfig = Field(default_factory=SecurityHooksConfig)
 
 

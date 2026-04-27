@@ -157,8 +157,12 @@ class TestGitConfig:
 
 class TestBonfireSettingsShape:
     def test_top_level_fields_exactly_these(self):
-        """Public v0.1 contract: config_version, bonfire, memory, git, agents."""
-        expected = {"config_version", "bonfire", "memory", "git", "agents"}
+        """Public v0.1 contract: config_version, bonfire, memory, git, models, agents.
+
+        BON-350 ratchet (Sage §D-CL.2): the ``models`` section is added
+        as the per-tier model strings carrier.
+        """
+        expected = {"config_version", "bonfire", "memory", "git", "models", "agents"}
         assert set(BonfireSettings.model_fields.keys()) == expected
 
     def test_no_workflow_field(self):
@@ -368,3 +372,121 @@ class TestAgentsDict:
         s = BonfireSettings()
         assert "knight" in s.agents
         assert s.agents["knight"].prompt == "from toml"
+
+
+# ---------------------------------------------------------------------------
+# CONTRACT-LOCKED — BON-350 — ModelsConfig (Sage §D2 / §D5 / §D8 file 4 / 4)
+#
+# Locks the ``[models]`` TOML schema delivered by BON-350:
+#
+#   * §D5 — three string fields (``reasoning``/``fast``/``balanced``)
+#     defaulting to ``claude-opus-4-7``/``claude-haiku-4-5``/``claude-sonnet-4-6``.
+#   * §D5 — TOML ``[models]`` section loads onto ``BonfireSettings.models``;
+#     missing section falls back to defaults (backward-compatible).
+#   * §D5 — Arbitrary strings accepted (BYOK passthrough).
+#   * §D2 — ``BonfireSettings.models`` is a ``ModelsConfig`` instance.
+#
+# Drift-guard ``TestModelsConfigTomlPartialOverride`` extends with a
+# parametrized 4-case partial-override matrix (Sage §D5 line 264 precedent).
+# ---------------------------------------------------------------------------
+
+
+class TestModelsConfig:
+    """Sage §D8 file 4: 4 floor tests for the ``[models]`` TOML section."""
+
+    def test_default_construction_recommends_anthropic(self):
+        """Sage §D5: defaults are the Anthropic catalogue."""
+        from bonfire.models.config import ModelsConfig
+
+        m = ModelsConfig()
+        assert m.reasoning == "claude-opus-4-7"
+        assert m.fast == "claude-haiku-4-5"
+        assert m.balanced == "claude-sonnet-4-6"
+
+    def test_custom_strings_accepted_byok(self):
+        """Sage §D5: any string is valid -- BYOK honors arbitrary provider strings."""
+        from bonfire.models.config import ModelsConfig
+
+        m = ModelsConfig(reasoning="gpt-5", fast="haiku-mini", balanced="custom/v3")
+        assert m.reasoning == "gpt-5"
+        assert m.fast == "haiku-mini"
+        assert m.balanced == "custom/v3"
+
+    def test_models_section_loaded_from_toml(self, tmp_path, monkeypatch):
+        """Sage §D5: ``[models]`` partial TOML merges with defaults."""
+        toml_path = tmp_path / "bonfire.toml"
+        toml_path.write_text(
+            '[models]\nreasoning = "opus-from-toml"\nfast = "haiku-from-toml"\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        s = BonfireSettings()
+        assert s.models.reasoning == "opus-from-toml"
+        assert s.models.fast == "haiku-from-toml"
+        # balanced not set in TOML -- falls back to default
+        assert s.models.balanced == "claude-sonnet-4-6"
+
+    def test_default_models_section_is_modelsconfig(self, tmp_path, monkeypatch):
+        from bonfire.models.config import ModelsConfig
+
+        monkeypatch.chdir(tmp_path)
+        s = BonfireSettings()
+        assert isinstance(s.models, ModelsConfig)
+
+
+class TestModelsConfigTomlPartialOverride:
+    """Parametrized partial-override of ``[models]`` TOML keys.
+
+    Cites Sage §D5 (line 264 'partial TOML coexists with default-filled
+    missing sections') and ``test_config.py::TestBonfireSettingsTomlLoading::
+    test_toml_partial_merge_preserves_defaults`` precedent.
+    Guards against: a Pydantic submodel rewrite that requires all three
+    fields to be specified together (which would silently break user
+    configs that override only one tier).
+    """
+
+    @pytest.mark.parametrize(
+        ("toml_body", "expected_reasoning", "expected_fast", "expected_balanced"),
+        [
+            (
+                '[models]\nreasoning = "X"\n',
+                "X",
+                "claude-haiku-4-5",
+                "claude-sonnet-4-6",
+            ),
+            (
+                '[models]\nfast = "Y"\n',
+                "claude-opus-4-7",
+                "Y",
+                "claude-sonnet-4-6",
+            ),
+            (
+                '[models]\nbalanced = "Z"\n',
+                "claude-opus-4-7",
+                "claude-haiku-4-5",
+                "Z",
+            ),
+            (
+                '[models]\nreasoning = "X"\nfast = "Y"\n',
+                "X",
+                "Y",
+                "claude-sonnet-4-6",
+            ),
+        ],
+        ids=["only-reasoning", "only-fast", "only-balanced", "two-of-three"],
+    )
+    def test_partial_toml_overrides_only_specified_keys(
+        self,
+        tmp_path,
+        monkeypatch,
+        toml_body: str,
+        expected_reasoning: str,
+        expected_fast: str,
+        expected_balanced: str,
+    ):
+        toml_path = tmp_path / "bonfire.toml"
+        toml_path.write_text(toml_body)
+        monkeypatch.chdir(tmp_path)
+        s = BonfireSettings()
+        assert s.models.reasoning == expected_reasoning
+        assert s.models.fast == expected_fast
+        assert s.models.balanced == expected_balanced

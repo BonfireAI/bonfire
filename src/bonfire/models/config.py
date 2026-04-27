@@ -77,6 +77,21 @@ class GitConfig(BaseModel):
     require_pr: bool = True
 
 
+class ModelsConfig(BaseModel):
+    """Per-tier model strings -- BYOK provider model identifiers.
+
+    Maps the three capability tiers (reasoning/fast/balanced) to the
+    user's chosen model. Defaults are the Anthropic catalogue; users may
+    swap to any provider model string by editing ``[models]`` in
+    ``bonfire.toml`` -- Bonfire passes the string verbatim to the
+    configured backend.
+    """
+
+    reasoning: str = "claude-opus-4-7"
+    fast: str = "claude-haiku-4-5"
+    balanced: str = "claude-sonnet-4-6"
+
+
 # ---------------------------------------------------------------------------
 # Legacy key migration
 # ---------------------------------------------------------------------------
@@ -118,6 +133,7 @@ _DEFAULTS = {
     "bonfire": PipelineConfig(),
     "memory": VaultConfig(),
     "git": GitConfig(),
+    "models": ModelsConfig(),
 }
 
 
@@ -141,6 +157,7 @@ class BonfireSettings(BaseSettings):
     bonfire: PipelineConfig = PipelineConfig()
     memory: VaultConfig = VaultConfig()
     git: GitConfig = GitConfig()
+    models: ModelsConfig = ModelsConfig()
     agents: dict[str, AgentConfig] = {}
 
     @classmethod

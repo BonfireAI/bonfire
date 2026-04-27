@@ -1,4 +1,26 @@
-"""Pipeline execution engine -- the heart of Bonfire."""
+"""Pipeline execution engine — the heart of Bonfire.
+
+This package walks a frozen :class:`~bonfire.models.plan.WorkflowPlan`
+in topological order and turns each stage into an envelope-carrying
+agent dispatch with quality gates, checkpoints, and observable cost.
+
+Public surface:
+
+- :class:`PipelineEngine` / :class:`PipelineResult` — top-level
+  orchestrator and its terminal result type.
+- :class:`StageExecutor` — runs a single stage: build input, dispatch
+  the handler, evaluate gates, emit events.
+- :class:`ContextBuilder` — assembles per-stage prompt context from
+  prior stage results and project state.
+- The six shipped quality gates (:class:`CompletionGate`,
+  :class:`TestPassGate`, :class:`RedPhaseGate`,
+  :class:`VerificationGate`, :class:`ReviewApprovalGate`,
+  :class:`CostLimitGate`) plus :class:`GateChain` for sequential
+  evaluation with short-circuit on error severity.
+- The checkpoint trio (:class:`CheckpointManager`,
+  :class:`CheckpointData`, :class:`CheckpointSummary`) — durable
+  resume state written between stages.
+"""
 
 from bonfire.engine.checkpoint import CheckpointData, CheckpointManager, CheckpointSummary
 from bonfire.engine.context import ContextBuilder

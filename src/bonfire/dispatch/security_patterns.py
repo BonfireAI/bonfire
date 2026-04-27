@@ -1,4 +1,4 @@
-"""Security pattern catalogue for the Bonfire pre-exec hook (BON-338).
+"""Security pattern catalogue for the Bonfire pre-exec hook.
 
 Public surface — three symbols:
 - ``DenyRule`` — frozen slotted dataclass describing one pattern rule.
@@ -9,8 +9,8 @@ Public surface — three symbols:
   reason is prefixed ``"WARN: "``; the tool call still proceeds.
 
 Action (deny vs warn) is implicit in which tuple a rule lives in — the
-dataclass does NOT carry it. All patterns are derived from Scout-2/338 §2
-tables.
+dataclass does NOT carry it. All patterns are derived from a curated
+pattern catalogue.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Pre-execution security hook for the Bonfire dispatcher (BON-338).
+"""Pre-execution security hook for the Bonfire dispatcher.
 
 Public surface (via ``__all__``):
 - ``SecurityHooksConfig`` — frozen Pydantic config model.

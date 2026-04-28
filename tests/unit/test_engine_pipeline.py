@@ -1185,3 +1185,124 @@ class TestInitialEnvelope:
         await engine.run(plan, initial_envelope=initial)
 
         assert backend.calls[0].metadata.get("role") == "stage-role"
+
+
+# ===========================================================================
+# 18. BON-351 — Per-role model tier resolver wiring at pipeline:498 (D1, D2)
+# ===========================================================================
+#
+# The pipeline engine's pipeline-mode dispatch path now consults
+# ``resolve_model_for_role(spec.role, settings)`` when constructing
+# DispatchOptions. Precedence (Sage memo D2(b)):
+#
+#   1. spec.model_override (per-stage explicit override)   -- wins
+#   2. resolve_model_for_role(spec.role, settings)         -- wins next
+#   3. self._config.model (pipeline default)               -- final fallback
+#
+# Knight A locks the conservative spine: the resolver is called with
+# spec.role verbatim (gamified workflow value -- D1), the per-stage
+# override beats the resolver, and the config fallback beats an empty
+# resolver result.
+
+
+class _OptionsRecordingPipelineBackend:
+    """Captures DispatchOptions across pipeline-mode dispatches."""
+
+    def __init__(self) -> None:
+        self.captured_options: list[DispatchOptions] = []
+        self.calls: list[Envelope] = []
+
+    async def execute(
+        self, envelope: Envelope, *, options: DispatchOptions
+    ) -> Envelope:
+        self.calls.append(envelope)
+        self.captured_options.append(options)
+        return envelope.with_result(f"{envelope.agent_name} done", cost_usd=0.01)
+
+    async def health_check(self) -> bool:
+        return True
+
+
+class TestModelResolution:
+    """RED tests for BON-351 D1/D2 — pipeline wires resolver into option model."""
+
+    async def test_pipeline_passes_role_to_resolver(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D1 — the pipeline passes ``spec.role`` (gamified
+        workflow value) into the resolver verbatim. Honors BON-350
+        §D-CL.4 -- BON-351 passes stage.role/spec.role, NOT options.role.
+        """
+        captured: dict[str, str] = {}
+
+        def fake_resolver(role: str, settings: object) -> str:
+            captured["role"] = role
+            return "claude-haiku-4-5"
+
+        monkeypatch.setattr(
+            "bonfire.engine.pipeline.resolve_model_for_role", fake_resolver
+        )
+
+        backend = _OptionsRecordingPipelineBackend()
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="role-pass",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
+        )
+        await engine.run(plan)
+        assert captured.get("role") == "warrior"
+
+    async def test_pipeline_model_override_wins_over_resolver(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D2(b) — ``spec.model_override`` BEATS the resolver
+        result. Operator escape hatch sits above role-based routing.
+        """
+        monkeypatch.setattr(
+            "bonfire.engine.pipeline.resolve_model_for_role",
+            lambda role, settings: "RESOLVER-MODEL",
+        )
+
+        backend = _OptionsRecordingPipelineBackend()
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="override-wins",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    role="warrior",
+                    model_override="STAGE-OVERRIDE",
+                )
+            ],
+        )
+        await engine.run(plan)
+        assert len(backend.captured_options) == 1
+        assert backend.captured_options[0].model == "STAGE-OVERRIDE"
+
+    async def test_pipeline_config_model_wins_when_resolver_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D2(b) — when the resolver returns "" and no per-stage
+        override exists, the pipeline falls back to ``self._config.model``.
+        Preserves the empty-role-case behavior (third fallback is
+        intentional).
+        """
+        monkeypatch.setattr(
+            "bonfire.engine.pipeline.resolve_model_for_role",
+            lambda role, settings: "",
+        )
+
+        cfg = PipelineConfig(model="pipeline-config-fallback")
+        backend = _OptionsRecordingPipelineBackend()
+        engine = _make_engine(backend=backend, config=cfg)
+        plan = WorkflowPlan(
+            name="config-fallback",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", role="")],
+        )
+        await engine.run(plan)
+        assert len(backend.captured_options) == 1
+        assert backend.captured_options[0].model == "pipeline-config-fallback"

@@ -1,106 +1,267 @@
 # Bonfire
 
-> ### ⚠ PRE-RELEASE — DO NOT USE
+**AI Build Pipelines for Real Code.** Define agents. Wire stages. Ship quality.
+
+> ### Alpha — `v0.1.0`
 >
-> `bonfire-ai 0.0.0a1` is a **name reservation**. The features described
-> below are aspirational and not yet implemented. The `bonfire` command
-> prints a placeholder message and does nothing else.
+> This is the first functional release of `bonfire-ai`. The pipeline
+> primitives, BYOK model routing, and `bonfire scan` onboarding are
+> wired and exercised by the test suite. Knowledge-graph storage
+> ("the vault") and the end-to-end project workflow are still in
+> progress and ship in later 0.1.x releases.
 >
-> Functional releases begin at `v0.1.0`. Track progress at
-> [github.com/BonfireAI/bonfire](https://github.com/BonfireAI/bonfire).
+> If you are an early adopter, run it against a throwaway repo, file
+> issues at [github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues),
+> and tell us where it bites. The vocabulary, the protocols, and the
+> config schema are stable for 0.1.x.
 
 ---
 
-**AI Build Pipelines for Real Code**
+## What Bonfire Is
 
-Define agents. Wire stages. Ship quality.
-
-```bash
-pip install bonfire-ai
-bonfire scan ./your-repo
-bonfire run "Fix the authentication bug in login.py"
-```
-
-Bonfire dispatches a pipeline of specialized agents -- each with its own
-identity, tools, and quality gates. TDD built in. Code review built in.
-Your repo, your rules.
-
-## What Bonfire Does
-
-`bonfire run` takes a task and runs it through a pipeline of 8 agents:
-
-| Agent | Role | What It Does |
-|-------|------|-------------|
-| Research Agent | researcher | Investigates the task, gathers codebase context |
-| Test Agent | tester | Writes failing tests that define the contract (TDD RED) |
-| Build Agent | implementer | Writes code to pass the tests (TDD GREEN) |
-| Verify Agent | verifier | Independent quality verification |
-| Publish Agent | publisher | Creates branches, commits, opens PRs |
-| Review Agent | reviewer | Code review with structured verdicts |
-| Release Agent | closer | Merges approved PRs, announces completion |
-| Synthesis Agent | synthesizer | Combines multiple reports into unified analysis |
-
-Quality gates between stages enforce standards. If the Review Agent
-rejects, work bounces back to the Build Agent. The loop continues
-until quality passes or budget is exhausted.
+Bonfire runs a pipeline of role-specialized AI agents — researcher,
+tester, implementer, verifier, publisher, reviewer, closer — with
+quality gates between every stage and TDD discipline (RED → GREEN)
+baked into the contract. You bring your own provider key. You pick
+the model per role. The framework handles dispatch, isolation, gate
+evaluation, and the retry loop. Source code is the deliverable.
 
 ## Quick Start
 
 ```bash
-# Install
 pip install bonfire-ai
-
-# Scan your repo (first-time setup)
-bonfire scan ./my-project
-
-# Run a task
-bonfire run "Add input validation to the user registration endpoint"
 ```
 
-## Your Keys, Your Models
+The PyPI package is `bonfire-ai`; the installed console script is
+`bonfire`. Python 3.12+ is required.
 
-Bonfire never sells LLM tokens. You bring your own API key.
-Configure model routing per agent role:
+```bash
+# Initialize a project (creates bonfire.toml and .bonfire/)
+bonfire init .
+
+# Launch the browser-based onboarding scan
+bonfire scan
+
+# Inspect cumulative cost across all sessions
+bonfire cost
+
+# List installed personas
+bonfire persona list
+```
+
+Available subcommands in `v0.1.0`: `init`, `scan`, `status`, `resume`,
+`handoff`, `persona`, `cost`. Run `bonfire --help` for the full surface
+or `bonfire <command> --help` for any single command.
+
+## Architecture Overview
+
+A Bonfire pipeline is an ordered sequence of stages. Each stage
+dispatches an agent of a specific `AgentRole` (researcher, tester,
+implementer, verifier, publisher, reviewer, closer, synthesizer,
+analyst). Between stages, `QualityGate` instances inspect the
+envelope and decide whether to proceed, retry, or abort.
+
+The TDD contract is enforced at the role boundary: the **tester**
+writes failing tests that define the contract (RED), the
+**implementer** writes code to pass them (GREEN), and the
+**verifier** runs an independent quality check before the
+**publisher** opens a PR. The **reviewer** can bounce work back
+into the loop until it passes or the budget is exhausted.
+
+Models are resolved per role through `resolve_model_for_role`, which
+maps each `AgentRole` to a capability tier (`reasoning`, `fast`, or
+`balanced`) and returns the corresponding provider model string from
+your config. Pure synchronous resolution, never raises on a string
+input.
+
+## Naming Glossary
+
+Bonfire ships three vocabularies for the same set of roles. The
+**generic concept** is what the role does. The **professional
+name** (`AgentRole`) is the canonical serialized form used in TOML,
+JSONL, CLI output, and grep patterns. The **gamified name** is a
+workflow alias emitted by the standard and research workflow
+templates and normalized through `GAMIFIED_TO_GENERIC` before tier
+lookup.
+
+| Generic Concept                                   | Professional (`AgentRole`) | Gamified (workflow alias) |
+| ------------------------------------------------- | -------------------------- | ------------------------- |
+| Investigates the task and gathers context         | `researcher`               | `scout`                   |
+| Writes failing tests (TDD RED)                    | `tester`                   | `knight`                  |
+| Writes code to pass the tests (TDD GREEN)         | `implementer`              | `warrior`                 |
+| Independent quality verification                  | `verifier`                 | `assayer`, `prover`       |
+| Creates branches, commits, opens PRs              | `publisher`                | `bard`                    |
+| Code review with structured verdicts              | `reviewer`                 | `wizard`                  |
+| Merges approved PRs and announces completion      | `closer`                   | `herald`                  |
+| Combines multiple reports into unified analysis   | `synthesizer`              | `sage`                    |
+| Architectural and structural analysis             | `analyst`                  | `architect`               |
+
+The `verifier` role has two gamified aliases (`assayer` and `prover`)
+because the workflow templates use both interchangeably depending on
+the stage's framing.
+
+## Config Reference
+
+Bonfire reads `bonfire.toml` from the current working directory.
+Settings priority is: constructor kwargs → environment variables
+(`BONFIRE_` prefix, `__` nested delimiter) → `bonfire.toml` → field
+defaults.
+
+A minimal complete config showing every section and its real
+defaults:
 
 ```toml
 # bonfire.toml
-[bonfire.models]
-reasoning = "claude-sonnet-4-20250514"    # researcher, reviewer
-fast = "claude-haiku-4-5-20251001"        # tester, implementer
-balanced = "claude-sonnet-4-20250514"     # verifier, synthesizer
+
+[bonfire]
+tier = "free"                       # commercial tier
+model = "claude-sonnet-4-6"         # default model when no role match
+max_turns = 10                      # per-agent turn cap (must be > 0)
+max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
+persona = "default"                 # CLI output persona
+
+[models]                            # most-likely-customized — BYOK lives here
+reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
+fast      = "claude-haiku-4-5"      # tester, implementer, verifier, publisher, closer
+balanced  = "claude-sonnet-4-6"     # fallback for unknown role strings
+
+[memory]
+session_dir  = ".bonfire/sessions"
+context_file = ".bonfire/context.json"
+
+[git]
+auto_branch          = true
+auto_commit_on_green = true
+require_pr           = true
 ```
+
+The `[models]` section is BYOK: Bonfire passes the configured string
+verbatim to the agent backend. To use a different provider, swap the
+strings to that provider's model identifiers and plug in a matching
+`AgentBackend` (see Extension Points below).
+
+## Per-Role Model Routing
+
+`resolve_model_for_role(role, settings) -> str` is the public
+primitive. Given a role string (canonical or gamified) and a
+`BonfireSettings`, it normalizes the input, looks up the canonical
+`AgentRole`, maps that role to a `ModelTier`, and returns the
+provider model string for that tier from `settings.models`.
+
+The default role-to-tier mapping:
+
+| `AgentRole`     | `ModelTier`  |
+| --------------- | ------------ |
+| `researcher`    | `reasoning`  |
+| `tester`        | `fast`       |
+| `implementer`   | `fast`       |
+| `verifier`      | `fast`       |
+| `publisher`     | `fast`       |
+| `reviewer`      | `reasoning`  |
+| `closer`        | `fast`       |
+| `synthesizer`   | `reasoning`  |
+| `analyst`       | `reasoning`  |
+
+If the input string matches neither a canonical `AgentRole` nor a
+gamified alias, the resolver falls back to `ModelTier.BALANCED` and
+returns `settings.models.balanced`. The function never raises on a
+string input — unknown roles degrade to the balanced model rather
+than failing the dispatch.
 
 ## Personality (Optional)
 
-Bonfire ships with a professional default voice. Want personality?
+Bonfire ships with persona-driven CLI output. The persona affects
+**display only** — it never enters agent prompts and never changes
+quality standards.
 
 ```bash
-bonfire run --persona forge "Fix the auth bug"
+bonfire scan --persona forge
 ```
 
-The forge persona turns "Dispatching Research Agent" into
-"Scout takes the field." Same pipeline. Different voice.
+Use `bonfire persona list` to see installed personas and
+`bonfire persona set <name>` to make a choice persistent in
+`bonfire.toml`. Custom personas live in `~/.bonfire/personas/`.
 
 ## Extension Points
 
-Four protocols define Bonfire's pluggable boundaries:
-
-- **AgentBackend** -- swap the LLM provider
-- **VaultBackend** -- swap the knowledge store
-- **QualityGate** -- custom pass/fail logic between stages
-- **StageHandler** -- custom stage behavior
+Four `@runtime_checkable` Protocols define Bonfire's pluggable
+boundaries. The composition root verifies conformance at registration
+time, so any object with the matching shape works — no inheritance
+required.
 
 ```python
-from bonfire.protocols import AgentBackend
+from typing import Protocol, runtime_checkable
 
-class MyBackend(AgentBackend):
-    async def dispatch(self, envelope, options):
-        # your implementation
-        ...
+from bonfire.protocols import (
+    AgentBackend,
+    DispatchOptions,
+    QualityGate,
+    StageHandler,
+    VaultBackend,
+    VaultEntry,
+)
 ```
+
+**`AgentBackend`** — swap the LLM provider that executes a single
+agent turn.
+
+```python
+@runtime_checkable
+class AgentBackend(Protocol):
+    async def execute(
+        self, envelope: Envelope, *, options: DispatchOptions
+    ) -> Envelope: ...
+    async def health_check(self) -> bool: ...
+```
+
+**`VaultBackend`** — swap the persistent knowledge store. Embedding
+is internal to the backend; callers pass text, never vectors.
+
+```python
+@runtime_checkable
+class VaultBackend(Protocol):
+    async def store(self, entry: VaultEntry) -> str: ...
+    async def query(
+        self, query: str, *, limit: int = 5, entry_type: str | None = None
+    ) -> list[VaultEntry]: ...
+    async def exists(self, content_hash: str) -> bool: ...
+    async def get_by_source(self, source_path: str) -> list[VaultEntry]: ...
+```
+
+**`QualityGate`** — custom pass/fail logic between pipeline stages.
+
+```python
+@runtime_checkable
+class QualityGate(Protocol):
+    async def evaluate(
+        self, envelope: Envelope, context: GateContext
+    ) -> GateResult: ...
+```
+
+**`StageHandler`** — custom stage orchestration when an agent
+dispatch is the wrong shape (parallel fan-out, human-in-the-loop,
+external APIs).
+
+```python
+@runtime_checkable
+class StageHandler(Protocol):
+    async def handle(
+        self,
+        stage: StageSpec,
+        envelope: Envelope,
+        prior_results: dict[str, str],
+    ) -> Envelope: ...
+```
+
+The full vault knowledge-graph implementation lands in a later 0.1.x
+release. The protocol is stable today; the default backend ships
+once the schema is locked.
+
+## Built by The Forge
+
+Bonfire is developed at [github.com/BonfireAI](https://github.com/BonfireAI).
+Issues, PRs, and discussion welcome.
 
 ## License
 
-Apache-2.0. Open source. Free as in free beer.
-
-Built by [The Forge](https://github.com/BonfireAI).
+Apache-2.0.

@@ -20,6 +20,7 @@ class DispatchRecord(BaseModel):
     agent_name: str
     cost_usd: float
     duration_seconds: float
+    model: str = ""
 
 
 class PipelineRecord(BaseModel):
@@ -56,3 +57,12 @@ class AgentCost(BaseModel):
     total_cost_usd: float
     dispatch_count: int
     avg_cost_usd: float
+
+
+class ModelCost(BaseModel):
+    """Cumulative cost for one model across all sessions."""
+
+    model: str
+    total_cost_usd: float
+    dispatch_count: int
+    total_duration_seconds: float

@@ -254,6 +254,36 @@ class TestDispatchEvents:
             DispatchRetry(agent_name="a", attempt=1, reason="r", **SESSION).category == "dispatch"
         )
 
+    # -- BON-351 D4 -- DispatchCompleted gains a ``model`` field ----------------
+    #
+    # Symmetric with DispatchStarted.model. The runner has options.model in
+    # scope at both emission points. Default is "" so the existing
+    # _minimal_kwargs registry (line 608-613) does NOT need updating —
+    # registry sentinel survives unchanged.
+
+    def test_dispatch_completed_has_model_field(self):
+        """Sage memo D4 — DispatchCompleted.model defaults to empty string,
+        keeping the existing _minimal_kwargs registry compatible without
+        mutation. Locks the backward-compat invariant for the registry
+        sentinel test (TestEventCount).
+        """
+        e = DispatchCompleted(agent_name="x", cost_usd=0.0, duration_seconds=0.0, **SESSION)
+        assert e.model == ""
+
+    def test_dispatch_completed_accepts_model(self):
+        """Sage memo D4 — when the runner sets ``model=options.model`` on
+        emission, the value round-trips onto the event for downstream
+        consumers (CostLedgerConsumer per D7).
+        """
+        e = DispatchCompleted(
+            agent_name="x",
+            cost_usd=0.0,
+            duration_seconds=0.0,
+            model="claude-opus-4-7",
+            **SESSION,
+        )
+        assert e.model == "claude-opus-4-7"
+
 
 # ---------------------------------------------------------------------------
 # Category: Quality (3)

@@ -27,6 +27,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.executor import (
@@ -52,7 +53,7 @@ from bonfire.protocols import DispatchOptions
 if TYPE_CHECKING:
     from bonfire.dispatch.tool_policy import ToolPolicy
     from bonfire.events.bus import EventBus
-    from bonfire.models.config import PipelineConfig
+    from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.protocols import AgentBackend, QualityGate, StageHandler
 
 
@@ -100,7 +101,10 @@ class PipelineEngine:
         context_builder: ContextBuilder | None = None,
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
+        settings: BonfireSettings | None = None,
     ) -> None:
+        from bonfire.models.config import BonfireSettings as _BonfireSettings
+
         self._backend = backend
         self._bus = bus
         self._config = config
@@ -109,6 +113,7 @@ class PipelineEngine:
         self._context_builder = context_builder or ContextBuilder()
         self._project_root = project_root
         self._tool_policy = tool_policy
+        self._settings = settings if settings is not None else _BonfireSettings()
 
     # -- Public API ----------------------------------------------------------
 
@@ -495,7 +500,11 @@ class PipelineEngine:
                 else:
                     role_tools = self._tool_policy.tools_for(spec.role)
                 options = DispatchOptions(
-                    model=spec.model_override or self._config.model,
+                    model=(
+                        spec.model_override
+                        or resolve_model_for_role(spec.role, self._settings)
+                        or self._config.model
+                    ),
                     max_turns=self._config.max_turns,
                     max_budget_usd=self._config.max_budget_usd,
                     cwd=str(self._project_root) if self._project_root else "",

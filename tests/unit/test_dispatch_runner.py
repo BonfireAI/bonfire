@@ -752,6 +752,34 @@ class TestEventEmission:
         for event in capture.events:
             assert event.session_id == env.envelope_id
 
+    # -- BON-351 D4 -- DispatchCompleted carries options.model ------------------
+    #
+    # The runner now passes ``model=options.model`` into the
+    # DispatchCompleted event so downstream consumers (CostLedgerConsumer
+    # per D7, CostAnalyzer.model_costs() per D8) can attribute spend
+    # per-model. Symmetric with the existing DispatchStarted.model field.
+
+    async def test_dispatch_completed_carries_options_model(self):
+        """Sage memo D4 — DispatchCompleted MUST carry the model string from
+        the DispatchOptions, so cost attribution by model is observable on
+        completion. The runner has ``options.model`` in scope at the
+        emission site (runner.py:184-193) — no new wiring beyond a single
+        keyword pass-through.
+        """
+        bus, capture = _bus_with_capture(DispatchCompleted)
+        env = _envelope()
+        backend = ScriptedBackend([env.with_result("ok", cost_usd=0.05)])
+        await execute_with_retry(
+            backend,
+            env,
+            _options(model="claude-haiku-4-5"),
+            event_bus=bus,
+            retry_delay=0.0,
+        )
+        completed = capture.of_type(DispatchCompleted)
+        assert len(completed) == 1
+        assert completed[0].model == "claude-haiku-4-5"  # type: ignore[attr-defined]
+
 
 # ---------------------------------------------------------------------------
 # No event bus — must not crash
@@ -924,3 +952,94 @@ class TestDefaults:
         backend = SlowBackend(delay=0.05)  # Tiny delay, no timeout should crash it.
         result = await execute_with_retry(backend, env, _options(), retry_delay=0.0)
         assert result.envelope.status == TaskStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# BON-351 Knight B — model identity preservation across retries.
+#
+# Sage memo D4 (DispatchCompleted gains `model: str = ""`) + D4 AMBIG
+# resolution (the model on Completed reflects the model the dispatch was
+# REQUESTED with -- the START model -- not whatever the last retry happened
+# to mutate to).
+#
+# The runner does NOT mutate `options.model` between attempts.  Because
+# `cumulative_cost` aggregates retries indiscriminately (Scout report §A
+# line 82), the model identifier MUST be the start identifier so the
+# ledger row attributes the full retry-burn to one model.  These tests
+# pin that invariant before warriors get a chance to drift it.
+#
+# Knight A's spine test (`test_dispatch_completed_carries_options_model`)
+# covers the happy single-attempt case.  Knight B locks the retry corner.
+# ---------------------------------------------------------------------------
+
+
+class TestModelOnRetry:
+    """BON-351 D4 — model on Completed equals start model across retries."""
+
+    async def test_model_unchanged_across_retries(self):
+        """Backend sees the same `options.model` string on every attempt.
+
+        Locks Sage D4: the runner does not rewrite `options.model` between
+        attempts. A future "fallback to cheaper model on rate-limit"
+        feature would be a separate, explicit ticket (D-FT F).
+        """
+        env = _envelope()
+
+        observed_models: list[str] = []
+
+        class _ObservingBackend:
+            call_count = 0
+
+            async def execute(
+                self, envelope: Envelope, *, options: DispatchOptions
+            ) -> Envelope:
+                observed_models.append(options.model)
+                _ObservingBackend.call_count += 1
+                if _ObservingBackend.call_count < 3:
+                    raise RuntimeError(f"transient {_ObservingBackend.call_count}")
+                return envelope.with_result("ok", cost_usd=0.01)
+
+            async def health_check(self) -> bool:
+                return True
+
+        opts = DispatchOptions(model="claude-opus-4-7", max_budget_usd=1.0)
+        result = await execute_with_retry(
+            _ObservingBackend(), env, opts, max_retries=3, retry_delay=0.0
+        )
+
+        assert result.envelope.status == TaskStatus.COMPLETED
+        assert result.retries == 2
+        assert len(observed_models) == 3
+        # Same model on every attempt — runner does NOT mutate options.model.
+        assert observed_models == ["claude-opus-4-7"] * 3
+
+    async def test_completed_model_equals_started_model(self):
+        """`DispatchCompleted.model` equals `DispatchStarted.model` for one dispatch.
+
+        Locks Sage D4 AMBIG resolution: Completed reflects the START model.
+        Across a multi-retry success, the Started event fires once at
+        attempt 1, the Completed event fires once at success — both must
+        carry the same model string.
+
+        This test ALSO locks the new `model` field on `DispatchCompleted`
+        (D4): without the field, the assertion below resolves to
+        AttributeError -> RED.
+        """
+        bus, capture = _bus_with_capture(DispatchStarted, DispatchCompleted)
+
+        env = _envelope(agent_name="warrior")
+        success = env.with_result("ok", cost_usd=0.01)
+        backend = ScriptedBackend([RuntimeError("net"), RuntimeError("net2"), success])
+
+        opts = DispatchOptions(model="claude-haiku-4-5", max_budget_usd=1.0)
+        await execute_with_retry(
+            backend, env, opts, max_retries=3, event_bus=bus, retry_delay=0.0
+        )
+
+        started = capture.of_type(DispatchStarted)
+        completed = capture.of_type(DispatchCompleted)
+        assert len(started) == 1
+        assert len(completed) == 1
+        # The new field on DispatchCompleted (BON-351 D4) carries the start model.
+        assert completed[0].model == started[0].model  # type: ignore[attr-defined]
+        assert completed[0].model == "claude-haiku-4-5"  # type: ignore[attr-defined]

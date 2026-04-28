@@ -134,6 +134,7 @@ class DispatchCompleted(BonfireEvent):
     agent_name: str
     cost_usd: float
     duration_seconds: float
+    model: str = ""
 
 
 class DispatchFailed(BonfireEvent):

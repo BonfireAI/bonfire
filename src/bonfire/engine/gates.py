@@ -13,16 +13,24 @@ from __future__ import annotations
 
 import re
 
-from bonfire.models.envelope import Envelope, TaskStatus
+from bonfire.models.envelope import (
+    META_PREFLIGHT_TEST_DEBT_NOTED,
+    Envelope,
+    TaskStatus,
+)
 from bonfire.models.plan import GateContext, GateResult
 
 # Pattern matching a non-zero count followed by "failed" (case-insensitive).
 _NONZERO_FAILED_RE = re.compile(r"[1-9]\d*\s+failed", re.IGNORECASE)
 
+# Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.
+_MERGE_PREFLIGHT_GATE_NAME: str = "merge_preflight_passed"
+
 __all__ = [
     "CompletionGate",
     "CostLimitGate",
     "GateChain",
+    "MergePreflightGate",
     "RedPhaseGate",
     "ReviewApprovalGate",
     "TestPassGate",
@@ -120,6 +128,62 @@ class CostLimitGate:
                 if passed
                 else f"Cost ${context.pipeline_cost_usd:.2f} exceeds budget ${self.budget_usd:.2f}"
             ),
+        )
+
+
+class MergePreflightGate:
+    """Gate adapter for :class:`MergePreflightHandler` envelopes.
+
+    Per Sage memo bon-519-sage-20260428T033101Z.md §D-CL.1 lines 845-848,
+    §D-CL.6 #5 (line 1071), and §A Q6 (ALLOW-WITH-ANNOTATION ratified).
+
+    Severity table:
+        - COMPLETED + clean metadata
+              -> ``passed=True, severity="info"``
+        - COMPLETED + ``META_PREFLIGHT_TEST_DEBT_NOTED is True``
+              -> ``passed=True, severity="warning"`` (Q6)
+        - FAILED with ``error_type`` ∈ {cross_wave_interaction,
+          pure_warrior_bug, pytest_collection_error, merge_conflict}
+              -> ``passed=False, severity="error"``
+        - Any other shape (defensive)
+              -> ``passed=False, severity="error"``
+
+    Gate name is locked at ``"merge_preflight_passed"``.
+    """
+
+    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
+        del context  # gate is envelope-only
+        if envelope.status == TaskStatus.COMPLETED:
+            debt = envelope.metadata.get(META_PREFLIGHT_TEST_DEBT_NOTED)
+            if debt is True:
+                return GateResult(
+                    gate_name=_MERGE_PREFLIGHT_GATE_NAME,
+                    passed=True,
+                    severity="warning",
+                    message=(
+                        "Preflight passed with pre-existing test debt "
+                        "(allow-with-annotation per Q6)."
+                    ),
+                )
+            return GateResult(
+                gate_name=_MERGE_PREFLIGHT_GATE_NAME,
+                passed=True,
+                severity="info",
+                message="Preflight passed.",
+            )
+
+        # FAILED (or any non-COMPLETED) -> blocking gate.
+        error_type = (
+            envelope.error.error_type if envelope.error is not None else "unknown"
+        )
+        message = (
+            envelope.error.message if envelope.error is not None else "preflight blocked"
+        )
+        return GateResult(
+            gate_name=_MERGE_PREFLIGHT_GATE_NAME,
+            passed=False,
+            severity="error",
+            message=f"Preflight blocked merge: {error_type} -- {message}",
         )
 
 

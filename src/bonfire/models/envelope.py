@@ -171,3 +171,6 @@ META_PR_URL: str = "pr_url"
 META_REVIEW_SEVERITY: str = "review_severity"
 META_REVIEW_VERDICT: str = "review_verdict"
 META_TICKET_REF: str = "ticket_ref"
+# Preflight metadata (Sage §D10 line 753 — merge-preflight pipeline stage).
+META_PREFLIGHT_CLASSIFICATION: str = "preflight_classification"
+META_PREFLIGHT_TEST_DEBT_NOTED: str = "preflight_test_debt_noted"

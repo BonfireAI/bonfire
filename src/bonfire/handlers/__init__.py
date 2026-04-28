@@ -10,6 +10,11 @@ handler implements lives in ``HANDLER_ROLE_MAP`` and as a module-level
 | wizard     | WizardHandler       | reviewer     | Wizard           |
 | herald     | HeraldHandler       | closer       | Herald           |
 | architect  | ArchitectHandler    | analyst      | Architect        |
+
+Note: ``MergePreflightHandler`` is a deterministic verification handler
+and bypasses the gamified-display map (``HANDLER_ROLE_MAP``); it appears
+in ``__all__`` but not in the role map. See Sage memo
+``bon-519-sage-20260428T033101Z.md`` §A Q1 Path β + §D10 line 745.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from bonfire.agent.roles import AgentRole
 from bonfire.handlers.architect import ArchitectHandler
 from bonfire.handlers.bard import BardHandler
 from bonfire.handlers.herald import HeraldHandler
+from bonfire.handlers.merge_preflight import MergePreflightHandler
 from bonfire.handlers.wizard import WizardHandler
 
 HANDLER_ROLE_MAP: dict[str, AgentRole] = {
@@ -32,5 +38,6 @@ __all__ = [
     "ArchitectHandler",
     "BardHandler",
     "HeraldHandler",
+    "MergePreflightHandler",
     "WizardHandler",
 ]

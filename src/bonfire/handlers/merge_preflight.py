@@ -33,11 +33,15 @@ never hardcodes the gamified name in code.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from bonfire.agent.roles import AgentRole
 from bonfire.models.envelope import (
@@ -52,9 +56,12 @@ from bonfire.models.envelope import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from bonfire.git.scratch import ScratchWorktreeFactory
+    from bonfire.git.scratch import ScratchWorktreeFactory, ScratchWorktreeInfo
     from bonfire.models.envelope import Envelope
     from bonfire.models.plan import StageSpec
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +134,22 @@ class PreflightClassification:
     pytest_stdout_tail: str = ""
 
 
+@dataclass(frozen=True)
+class _PytestResult:
+    """Internal record of a single pytest invocation in a scratch worktree.
+
+    Carried between :py:meth:`MergePreflightHandler._run_pytest_in_worktree`
+    and :py:meth:`MergePreflightHandler._classify_preflight_run`. Field
+    shape mirrors what :py:func:`classify_pytest_run` consumes plus the
+    JUnit XML path for the parser. Sage §D2 lines 279-280.
+    """
+
+    returncode: int
+    duration_seconds: float
+    stdout_tail: str
+    junit_xml_path: Path
+
+
 # ---------------------------------------------------------------------------
 # Module-private metadata key constants. The cross-module ``META_PREFLIGHT_*``
 # constants live in ``bonfire.models.envelope``; these are handler-internal
@@ -140,6 +163,18 @@ _SKIP_RESULT_TEMPLATE: str = "preflight: skipped (wizard verdict not approve)"
 # Maximum bytes of pytest stdout retained in the classification result for
 # forensics (Sage §D-CL.7 #6: envelope-size discipline).
 _PYTEST_STDOUT_TAIL_BYTES: int = 2048
+
+# Maximum number of failing-test entries retained in the classification
+# result before truncation (Sage §D-CL.7 #6 envelope-size discipline). On
+# overflow the live body appends a sentinel ``FailingTest`` whose
+# ``file_path`` carries an overflow marker.
+_FAILING_TESTS_LIMIT: int = 100
+_FAILING_TESTS_OVERFLOW_PATH: str = "<overflow>"
+
+# Filename of the JUnit XML emitted into the scratch worktree by pytest.
+# Passed explicitly via ``--junit-xml=<path>`` to override any project
+# pyproject.toml junit config (Sage §D-CL.7 #3 path-traversal safety).
+_JUNIT_XML_FILENAME: str = "preflight-junit.xml"
 
 # Regex extracting ``file.py:LINE`` references from JUnit XML failure text.
 # Used to populate ``FailingTest.traceback_files`` so the cross-wave
@@ -480,15 +515,17 @@ class MergePreflightHandler:
     (``protocols.py:195``). All exceptions in the handler body produce a
     FAILED envelope with structured :class:`ErrorDetail`.
 
-    The v0.1 ``handle()`` body covers the spine (PR-number extraction,
-    Wizard verdict gate, scratch acquisition, classifier dispatch, result
-    envelope construction). The full git-apply / pytest-invocation /
-    JUnit-parse pipeline lives in :py:meth:`_classify_preflight_run` and
-    is exercised end-to-end in :file:`tests/integration/
-    test_merge_preflight_pipeline.py` via canned handlers; the unit-level
-    classifier surface is exercised in
-    :file:`tests/unit/test_merge_preflight_handler.py` directly against
-    :py:func:`classify_pytest_run` (pure function).
+    The ``handle()`` body covers the spine (PR-number extraction, Wizard
+    verdict gate, sibling detection, scratch acquisition, classifier
+    dispatch, result envelope construction). The full git-apply /
+    pytest-invocation / JUnit-parse pipeline lives in
+    :py:meth:`_classify_preflight_run` plus the three private helpers
+    :py:meth:`_apply_diff_to_worktree`, :py:meth:`_run_pytest_in_worktree`,
+    and :py:meth:`_get_baseline_failures`. End-to-end behaviour is
+    exercised in :file:`tests/integration/test_merge_preflight_pipeline.py`
+    via canned handlers; the unit-level classifier surface is exercised
+    in :file:`tests/unit/test_merge_preflight_handler.py` directly
+    against :py:func:`classify_pytest_run` (pure function).
     """
 
     def __init__(
@@ -552,29 +589,33 @@ class MergePreflightHandler:
                     },
                 )
 
-            # Step 3: Acquire scratch worktree (try/finally guarantee
+            # Step 3: Sibling-batch detection (Sage §D2 line 272 + §D5
+            # lines 510-522). Performed BEFORE scratch acquire so the
+            # sibling file-set is in hand when diffs are applied.
+            sibling_files, sibling_status = await detect_sibling_prs(
+                self._github_client,
+                self._base_branch,
+                current_pr_number=pr_number,
+                sibling_detection=self._sibling_detection,
+            )
+
+            # Step 4: Acquire scratch worktree (try/finally guarantee
             # via async-with). Sage §D2 line 273.
             ctx = self._scratch_factory.acquire(
                 self._base_branch,
                 pr_number=pr_number,
             )
             async with ctx as info:
-                # Step 4-8: Run pytest in scratch worktree, parse output,
-                # classify deterministically. v0.1 returns a stub GREEN
-                # classification here; the algorithmic body (apply diff,
-                # sibling-batch, pytest, parse) is exercised via the
-                # canned-handler integration tests + the pure classifier
-                # tests on :py:func:`classify_pytest_run`. The full
-                # subprocess invocation is a Wave-3 follow-up flagged
-                # as a D-FT in the Sage memo §B line 184.
+                # Steps 5-10: Apply current PR diff, apply sibling diffs,
+                # run pytest, parse, classify. Sage §D2 lines 273-291.
                 classification = await self._classify_preflight_run(
-                    envelope=envelope,
                     info=info,
-                    prior_results=prior_results,
                     pr_number=pr_number,
+                    sibling_files=sibling_files,
+                    sibling_status=sibling_status,
                 )
 
-                # Step 9: Build result envelope per the verdict.
+                # Step 11: Build result envelope per the verdict.
                 return self._build_result_envelope(
                     envelope=envelope,
                     classification=classification,
@@ -591,31 +632,295 @@ class MergePreflightHandler:
                 ),
             )
 
-    # -- algorithm-body steps (private; canned in v0.1) --------------------
+    # -- algorithm-body steps (private) -----------------------------------
 
     async def _classify_preflight_run(
         self,
         *,
-        envelope: Envelope,
-        info: Any,
-        prior_results: dict[str, str],
+        info: ScratchWorktreeInfo,
         pr_number: int,
+        sibling_files: dict[int, frozenset[str]],
+        sibling_status: Literal["ok", "skipped", "error"],
     ) -> PreflightClassification:
-        """Default v0.1 classifier path: GREEN-on-acquisition.
+        """Live body: apply diff, run pytest, classify.
 
-        The canned-handler integration tests (:file:`tests/integration/
-        test_merge_preflight_pipeline.py`) drive each verdict shape via
-        their own mode-toggling handler so the pipeline can verify halt
-        / proceed semantics for all six verdicts without standing up a
-        live git-apply / pytest invocation.
+        Per Sage memo bon-519-sage-20260428T033101Z.md §D2 lines 273-291.
+        Supersedes the prior v0.1 stub that returned GREEN unconditionally;
+        this method now drives the full subprocess pipeline (current PR
+        diff -> sibling diffs -> pytest -> JUnit parse -> baseline cache
+        -> deterministic classifier).
 
-        The pure classifier itself (and JUnit / stdout parsers) is unit-
-        tested directly against :py:func:`classify_pytest_run`. This
-        method becomes the wiring layer once the live subprocess body
-        ships (Sage §B line 184 D-FT).
+        Step ordering mirrors the §D2 pseudocode exactly:
+            5. Apply current PR diff in scratch (``git apply --3way``).
+            6. Apply sibling-batch diffs in ascending PR-number order
+               (Sage §D-CL.7 #4: later PR's diff takes precedence on
+               conflict via ``--3way``).
+            7. Run pytest with ``--junit-xml=<known-path>`` (§D-CL.7 #3).
+            8. Parse failures from JUnit XML; fall back to stdout regex
+               if XML is empty AND returncode != 0.
+            9. Compute / cache baseline failures on ``origin/<base>``.
+           10. Call :py:func:`classify_pytest_run` (Warrior B's pure fn).
+
+        Envelope-size discipline (§D-CL.7 #6):
+            - ``pytest_stdout_tail`` is truncated to 2KB.
+            - ``failing_tests`` is truncated to 100 entries; on overflow
+              a sentinel ``FailingTest`` with ``file_path='<overflow>'``
+              is appended so downstream forensics can detect truncation.
+
+        Path-guard discipline (§D-CL.7 #7): error messages name PRs by
+        number and never embed the absolute scratch worktree path.
+
+        Subprocess discipline (§D-CL.7 #8): all invocations use
+        ``asyncio.create_subprocess_exec`` with ``tuple[str, ...]`` args;
+        no shell interpolation anywhere in the chain.
         """
-        del envelope, info, prior_results, pr_number  # unused in v0.1 stub
-        return PreflightClassification(verdict=PreflightVerdict.GREEN)
+        # Step 5: apply current PR's diff. Exceptions from get_pr_diff
+        # propagate to handle()'s outer try/except; apply failures
+        # downgrade to a MERGE_CONFLICT verdict (no raise).
+        diff_text = await self._github_client.get_pr_diff(pr_number)
+        try:
+            await self._apply_diff_to_worktree(diff_text, info.path)
+        except RuntimeError as exc:
+            return PreflightClassification(
+                verdict=PreflightVerdict.MERGE_CONFLICT,
+                failing_tests=(),
+                sibling_pr_numbers=tuple(sorted(sibling_files.keys())),
+                sibling_detection_status=sibling_status,
+                pytest_returncode=-1,
+                pytest_duration_seconds=0.0,
+                pytest_stdout_tail=(
+                    f"git apply --3way failed for PR #{pr_number}: {exc}"
+                )[:_PYTEST_STDOUT_TAIL_BYTES],
+            )
+
+        # Step 6: apply each sibling's diff in ascending PR-number order
+        # (Sage §D-CL.7 #4: deterministic ordering, later PR wins on
+        # conflict via ``--3way``). Sibling-fetch errors are logged + skipped
+        # (graceful degradation -- a transient gh failure should NOT block
+        # the whole preflight). Sibling-apply failures DO produce a
+        # MERGE_CONFLICT verdict naming the offending PR.
+        for sibling_pr_n in sorted(sibling_files.keys()):
+            try:
+                sibling_diff = await self._github_client.get_pr_diff(
+                    sibling_pr_n,
+                )
+            except Exception:
+                logger.warning(
+                    "merge_preflight.sibling_diff_fetch_failed pr=%d",
+                    sibling_pr_n,
+                )
+                continue
+
+            try:
+                await self._apply_diff_to_worktree(sibling_diff, info.path)
+            except RuntimeError as exc:
+                return PreflightClassification(
+                    verdict=PreflightVerdict.MERGE_CONFLICT,
+                    failing_tests=(),
+                    sibling_pr_numbers=tuple(sorted(sibling_files.keys())),
+                    sibling_detection_status=sibling_status,
+                    pytest_returncode=-1,
+                    pytest_duration_seconds=0.0,
+                    pytest_stdout_tail=(
+                        f"git apply --3way failed for sibling PR "
+                        f"#{sibling_pr_n}: {exc}"
+                    )[:_PYTEST_STDOUT_TAIL_BYTES],
+                )
+
+        # Step 7: run pytest in scratch worktree.
+        result = await self._run_pytest_in_worktree(info.path)
+
+        # Step 8: parse failures from JUnit XML; fall back to stdout regex
+        # only when the XML yielded nothing AND pytest exited non-zero.
+        failing = parse_pytest_junit_xml(result.junit_xml_path)
+        if not failing and result.returncode != 0:
+            failing = parse_pytest_stdout_fallback(result.stdout_tail)
+
+        # Envelope-size bound (Sage §D-CL.7 #6): truncate failing_tests
+        # to 100 entries; append an overflow sentinel so forensics see it.
+        if len(failing) > _FAILING_TESTS_LIMIT:
+            failing = (
+                *failing[:_FAILING_TESTS_LIMIT],
+                FailingTest(file_path=_FAILING_TESTS_OVERFLOW_PATH),
+            )
+
+        # Step 9: baseline failures on origin/<base> (cached).
+        baseline = await self._get_baseline_failures(info.base_sha)
+
+        # Step 10: deterministic classification (Warrior B pure function).
+        # Sage §A Q4 lines 79-122. ``pytest_stdout`` is already 2KB-tail
+        # bounded inside _run_pytest_in_worktree.
+        return classify_pytest_run(
+            failing_tests=failing,
+            sibling_files=sibling_files,
+            baseline_failures=baseline,
+            sibling_detection_status=sibling_status,
+            pytest_returncode=result.returncode,
+            pytest_duration_seconds=result.duration_seconds,
+            pytest_stdout=result.stdout_tail,
+        )
+
+    async def _apply_diff_to_worktree(
+        self,
+        diff_text: str,
+        worktree_path: Path,
+    ) -> None:
+        """Apply *diff_text* to *worktree_path* via ``git apply --3way``.
+
+        Sage §D2 line 275 + §D-CL.7 #8 (no shell, args as tuple) +
+        §D-CL.7 #4 (``--3way`` lets later PRs win on textual conflict).
+        Diff content is piped via stdin; we never write a temporary file
+        on disk. Empty diff is a no-op (git apply with empty stdin returns
+        zero).
+
+        Raises ``RuntimeError`` on non-zero git exit. Error message names
+        only the worktree's basename to honour §D-CL.7 #7 (no absolute
+        paths in error messages).
+        """
+        proc = await asyncio.create_subprocess_exec(
+            *(
+                "git",
+                "-C",
+                str(worktree_path),
+                "apply",
+                "--3way",
+                "-",
+            ),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate(input=diff_text.encode("utf-8"))
+        if proc.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            # Truncate stderr so a verbose 3-way conflict message does not
+            # blow the envelope budget (§D-CL.7 #6). Path-guard (§D-CL.7
+            # #7): we name only the basename of the worktree.
+            tail = stderr_text[:512]
+            raise RuntimeError(
+                f"git apply --3way failed (exit {proc.returncode}) "
+                f"in scratch '{worktree_path.name}': {tail}",
+            )
+
+    async def _run_pytest_in_worktree(
+        self,
+        worktree_path: Path,
+    ) -> _PytestResult:
+        """Run pytest inside *worktree_path*; return a :class:`_PytestResult`.
+
+        Sage §D2 lines 279-280 + §D-CL.7 #2/#3/#8.
+
+        Subprocess discipline:
+            - Args built as a ``tuple[str, ...]``; never a shell string
+              (§D-CL.7 #8).
+            - Explicit ``--junit-xml=<known-path>`` overrides any project
+              pyproject.toml junit setting (§D-CL.7 #3).
+            - On ``asyncio.TimeoutError`` we call ``proc.kill()`` AND
+              ``await proc.wait()`` before returning so the kernel
+              releases the pid before the worktree is torn down
+              (§D-CL.7 #2 resource-leak discipline).
+
+        On timeout the result is shaped to drive the classifier into
+        ``PYTEST_COLLECTION_ERROR`` (returncode=-1, no failing_tests).
+        """
+        junit_xml_path = worktree_path / _JUNIT_XML_FILENAME
+
+        # ``self._pytest_command`` already begins with "pytest" by default
+        # (see __init__). We append the junit + quiet flags as additional
+        # args; tuple concatenation keeps argv as ``tuple[str, ...]`` per
+        # §D-CL.7 #8 ("never as a single shell string").
+        pytest_args: tuple[str, ...] = (
+            *self._pytest_command,
+            f"--junit-xml={junit_xml_path}",
+            "--no-header",
+            "-q",
+        )
+
+        start = time.monotonic()
+        proc = await asyncio.create_subprocess_exec(
+            *pytest_args,
+            cwd=str(worktree_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        timeout = self._pytest_timeout_seconds
+        try:
+            if timeout is not None:
+                stdout_b, _ = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout,
+                )
+            else:
+                stdout_b, _ = await proc.communicate()
+        except asyncio.TimeoutError:
+            # §D-CL.7 #2: actively kill + reap before the worktree is
+            # torn down so the process holds no FDs into the scratch.
+            proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            elapsed = time.monotonic() - start
+            return _PytestResult(
+                returncode=-1,
+                duration_seconds=elapsed,
+                stdout_tail="pytest timed out",
+                junit_xml_path=junit_xml_path,
+            )
+
+        elapsed = time.monotonic() - start
+        stdout_text = stdout_b.decode("utf-8", errors="replace")
+        # Tail-truncate to envelope-size budget (§D-CL.7 #6).
+        stdout_tail = stdout_text[-_PYTEST_STDOUT_TAIL_BYTES:]
+        return _PytestResult(
+            returncode=proc.returncode if proc.returncode is not None else -1,
+            duration_seconds=elapsed,
+            stdout_tail=stdout_tail,
+            junit_xml_path=junit_xml_path,
+        )
+
+    async def _get_baseline_failures(
+        self,
+        base_sha: str,
+    ) -> frozenset[str]:
+        """Return cached baseline failures on ``origin/<base>``; compute on miss.
+
+        Sage §D2 line 281 + §A Q7 line 165 ("one-time amortization").
+        On miss we acquire a SECOND scratch worktree at the base ref (NO
+        PR diff applied), run pytest there, and intersect the failing
+        test file paths into a frozenset. The result is cached on
+        ``self._baseline_cache`` keyed by ``base_sha`` so subsequent
+        preflights in the same session reuse the work.
+
+        Failures during baseline computation degrade to an empty
+        frozenset (the classifier then cannot classify any failure as
+        PRE_EXISTING_DEBT, which is the safe default -- pure-Warrior bug
+        is the harsher verdict).
+        """
+        cached = self._baseline_cache.get(base_sha)
+        if cached is not None:
+            return cached
+
+        try:
+            ctx = self._scratch_factory.acquire(
+                self._base_branch,
+                pr_number=None,
+                prefix="baseline",
+            )
+            async with ctx as baseline_info:
+                result = await self._run_pytest_in_worktree(baseline_info.path)
+                failing = parse_pytest_junit_xml(result.junit_xml_path)
+                if not failing and result.returncode != 0:
+                    failing = parse_pytest_stdout_fallback(result.stdout_tail)
+                baseline = frozenset(ft.file_path for ft in failing)
+        except Exception:
+            logger.warning(
+                "merge_preflight.baseline_compute_failed base_sha=%s",
+                base_sha[:12],
+            )
+            baseline = frozenset()
+
+        self._baseline_cache[base_sha] = baseline
+        return baseline
 
     def _build_result_envelope(
         self,

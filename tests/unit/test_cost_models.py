@@ -22,6 +22,7 @@ from pydantic import ValidationError
 from bonfire.cost.models import (
     AgentCost,
     DispatchRecord,
+    ModelCost,
     PipelineRecord,
     SessionCost,
 )
@@ -327,3 +328,94 @@ class TestModelsEdge:
         assert agent.avg_cost_usd >= 0.0
         restored = AgentCost.model_validate_json(agent.model_dump_json())
         assert restored == agent
+
+
+# ---------------------------------------------------------------------------
+# BON-351 — DispatchRecord.model field (D5)
+#
+# The ledger gains a per-model attribution slice. New rows carry a model
+# string; legacy rows (without the field) load via the empty-string default
+# so JSONL round-trip stays backward compatible.
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchRecordModel:
+    """RED tests for BON-351 D5 — DispatchRecord gains ``model: str = ""``."""
+
+    def test_dispatch_record_has_model_default_empty(self) -> None:
+        """Sage memo D5 — default is empty string so existing constructors
+        compose without specifying the new field.
+        """
+        record = DispatchRecord(
+            timestamp=0.0,
+            session_id="s",
+            agent_name="a",
+            cost_usd=0.0,
+            duration_seconds=0.0,
+        )
+        assert record.model == ""
+
+    def test_dispatch_record_accepts_model(self) -> None:
+        """Sage memo D5 — when a producer sets ``model``, the field round-trips."""
+        record = DispatchRecord(
+            timestamp=0.0,
+            session_id="s",
+            agent_name="a",
+            cost_usd=0.0,
+            duration_seconds=0.0,
+            model="claude-opus-4-7",
+        )
+        assert record.model == "claude-opus-4-7"
+
+    def test_legacy_jsonl_row_without_model_loads(self) -> None:
+        """Sage memo D5 — pre-BON-351 ledger rows omit ``model`` entirely.
+        Pydantic must apply the default so the row stays parseable. This is
+        the backward-compat invariant that lets BON-351 ship without a
+        schema migration.
+        """
+        legacy = (
+            '{"type":"dispatch","timestamp":0.0,"session_id":"s","agent_name":"a",'
+            '"cost_usd":0.0,"duration_seconds":0.0}'
+        )
+        record = DispatchRecord.model_validate_json(legacy)
+        assert record.model == ""
+
+
+# ---------------------------------------------------------------------------
+# BON-351 — ModelCost aggregator output type (D5 / D8)
+#
+# A new Pydantic model that ``CostAnalyzer.model_costs()`` returns. Mirrors
+# AgentCost's four-field shape: name-key + total + count + secondary metric.
+# The secondary is total_duration_seconds (per-model burn-time), not avg —
+# avg is derivable but burn-time-per-model is operationally interesting.
+# ---------------------------------------------------------------------------
+
+
+class TestModelCost:
+    """RED tests for BON-351 D5 — new ``ModelCost`` Pydantic class."""
+
+    def test_model_cost_construction(self) -> None:
+        """Sage memo D5 — four required fields, all positional-by-name."""
+        m = ModelCost(
+            model="claude-opus-4-7",
+            total_cost_usd=1.0,
+            dispatch_count=3,
+            total_duration_seconds=12.5,
+        )
+        assert m.model == "claude-opus-4-7"
+        assert m.total_cost_usd == 1.0
+        assert m.dispatch_count == 3
+        assert m.total_duration_seconds == 12.5
+
+    def test_model_cost_serialization_roundtrip(self) -> None:
+        """Sage memo D5 — ModelCost round-trips through JSON like its
+        AgentCost sibling so it can be persisted/transported uniformly.
+        """
+        m = ModelCost(
+            model="claude-haiku-4-5",
+            total_cost_usd=0.42,
+            dispatch_count=7,
+            total_duration_seconds=84.0,
+        )
+        restored = ModelCost.model_validate_json(m.model_dump_json())
+        assert restored == m

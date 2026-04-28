@@ -331,3 +331,66 @@ class TestConsumerEdge:
         )
         # Ledger file does not exist yet (consumer never fired).
         assert not ledger_path.exists() or ledger_path.read_text() == ""
+
+
+# ---------------------------------------------------------------------------
+# BON-351 — CostLedgerConsumer passes model field through (D7)
+#
+# DispatchCompleted carries a new ``model`` field (D4). The consumer reads
+# it and persists it onto the DispatchRecord ledger row. Default is the
+# empty string so old emitters / fixtures that don't set ``model=`` keep
+# producing valid records (record.model == "").
+# ---------------------------------------------------------------------------
+
+
+class TestModelFieldPassthrough:
+    """RED tests for BON-351 D7 — consumer threads ``DispatchCompleted.model``
+    onto the persisted ``DispatchRecord.model`` field.
+    """
+
+    async def test_dispatch_completed_with_model_persisted(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        """Sage memo D7 — when the producer sets ``model`` on
+        DispatchCompleted, the consumer MUST persist that exact string onto
+        the ledger row. This is the producer-to-record round trip.
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        event = DispatchCompleted(
+            session_id="ses_001",
+            sequence=0,
+            agent_name="warrior",
+            cost_usd=0.05,
+            duration_seconds=2.0,
+            model="claude-haiku-4-5",
+        )
+        await bus.emit(event)
+
+        line = ledger_path.read_text().strip().splitlines()[0]
+        record = DispatchRecord.model_validate_json(line)
+        assert record.model == "claude-haiku-4-5"
+
+    async def test_dispatch_completed_without_model_persists_empty(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        """Sage memo D7 — when the producer omits ``model`` (default = "")
+        the persisted record carries an empty model string. This keeps the
+        consumer's append-mode JSONL ledger gracefully accepting the wider
+        shape without breaking legacy emitters.
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        event = DispatchCompleted(
+            session_id="ses_002",
+            sequence=0,
+            agent_name="scout",
+            cost_usd=0.01,
+            duration_seconds=1.0,
+            # model intentionally omitted -> defaults to ""
+        )
+        await bus.emit(event)
+
+        line = ledger_path.read_text().strip().splitlines()[0]
+        record = DispatchRecord.model_validate_json(line)
+        assert record.model == ""

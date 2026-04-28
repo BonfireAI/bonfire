@@ -752,6 +752,34 @@ class TestEventEmission:
         for event in capture.events:
             assert event.session_id == env.envelope_id
 
+    # -- BON-351 D4 -- DispatchCompleted carries options.model ------------------
+    #
+    # The runner now passes ``model=options.model`` into the
+    # DispatchCompleted event so downstream consumers (CostLedgerConsumer
+    # per D7, CostAnalyzer.model_costs() per D8) can attribute spend
+    # per-model. Symmetric with the existing DispatchStarted.model field.
+
+    async def test_dispatch_completed_carries_options_model(self):
+        """Sage memo D4 — DispatchCompleted MUST carry the model string from
+        the DispatchOptions, so cost attribution by model is observable on
+        completion. The runner has ``options.model`` in scope at the
+        emission site (runner.py:184-193) — no new wiring beyond a single
+        keyword pass-through.
+        """
+        bus, capture = _bus_with_capture(DispatchCompleted)
+        env = _envelope()
+        backend = ScriptedBackend([env.with_result("ok", cost_usd=0.05)])
+        await execute_with_retry(
+            backend,
+            env,
+            _options(model="claude-haiku-4-5"),
+            event_bus=bus,
+            retry_delay=0.0,
+        )
+        completed = capture.of_type(DispatchCompleted)
+        assert len(completed) == 1
+        assert completed[0].model == "claude-haiku-4-5"  # type: ignore[attr-defined]
+
 
 # ---------------------------------------------------------------------------
 # No event bus — must not crash

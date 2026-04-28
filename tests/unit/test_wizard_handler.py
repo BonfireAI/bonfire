@@ -513,6 +513,80 @@ class TestDispatchOptionsPlumbing:
         )
         assert backend.captured_options.model == "claude-sonnet-4-6"
 
+    # -- BON-351 D6 -- wizard handler passes role=ROLE.value to DispatchOptions --
+    #
+    # Scout §C line 164 flagged the wizard handler as the ONLY call site
+    # where role was invisible to the runner. Without this fix, the
+    # DispatchStarted event emits with options.role == "" — breaking the
+    # invariant that every non-trivial dispatch carries a role string.
+    # The metadata-level role on the envelope (line 307) does NOT flow
+    # through to DispatchOptions.role.
+
+    @pytest.mark.asyncio
+    async def test_role_is_reviewer(self) -> None:
+        """Sage memo D6 — DispatchOptions.role MUST equal ROLE.value
+        ("reviewer"). Surfaces the canonical AgentRole value to the runner
+        so cost / event observers can attribute the dispatch to the
+        reviewer role. BON-337 D4 invariant honored: ``ROLE.value`` is a
+        non-empty ``str``.
+        """
+        handler, backend, _ = _make_handler()
+        await handler.handle(_make_stage(), _make_envelope(), {})
+        assert backend.captured_options.role == "reviewer"
+
+
+# ---------------------------------------------------------------------------
+# BON-351 — Resolver wiring at handlers/wizard.py:303-308 (D1, D2)
+#
+# The wizard handler builds a review envelope whose model is now sourced
+# via the resolver-aware precedence (Sage memo D2(c)):
+#
+#   1. stage.model_override                              -- wins
+#   2. resolve_model_for_role("reviewer", settings)      -- wins next
+#   3. self._config.model                                -- final fallback
+#
+# D1 — the wizard handler is the canonical-string call site
+# (ROLE.value == "reviewer"). The resolver internally accepts both
+# vocabularies; the call site passes the canonical form.
+# ---------------------------------------------------------------------------
+
+
+class TestResolverWiring:
+    """RED tests for BON-351 D1/D2(c) — wizard handler resolver wiring."""
+
+    @pytest.mark.asyncio
+    async def test_resolver_called_for_review_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D1 + D2(c) — the wizard handler MUST call
+        resolve_model_for_role with the canonical role string
+        ``ROLE.value`` ("reviewer"). The resolved model lands on the
+        DispatchOptions for the review dispatch when no per-stage override
+        is set.
+        """
+        captured: dict[str, object] = {}
+
+        def fake_resolver(role: str, settings: object) -> str:
+            captured["role"] = role
+            return "RESOLVED-FOR-REVIEWER"
+
+        monkeypatch.setattr(
+            "bonfire.handlers.wizard.resolve_model_for_role", fake_resolver
+        )
+
+        # Stage with NO model_override -> resolver result must win over
+        # config.model per the documented precedence (D2).
+        handler, backend, _ = _make_handler(
+            canned="<verdict>APPROVE</verdict>",
+            config=_make_config(model="config-fallback"),
+        )
+        await handler.handle(_make_stage(model_override=None), _make_envelope(), {})
+
+        # Resolver was called with the canonical reviewer string.
+        assert captured.get("role") == "reviewer"
+        # Resolver result lands on the dispatch options' model field.
+        assert backend.captured_options.model == "RESOLVED-FOR-REVIEWER"
+
 
 # ---------------------------------------------------------------------------
 # Verdict -> GitHub event mapping

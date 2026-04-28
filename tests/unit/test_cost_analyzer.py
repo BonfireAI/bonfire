@@ -476,3 +476,182 @@ class TestAnalyzerEdge:
         analyzer = CostAnalyzer(ledger_path=ledger_path)
         agents = analyzer.agent_costs()
         assert {a.agent_name for a in agents} == {"a", "b"}
+
+
+# ---------------------------------------------------------------------------
+# BON-351 — CostAnalyzer.model_costs() per-model aggregator (D8)
+#
+# Sixth public method on the analyzer. Mirrors agent_costs() in shape:
+# group-by, sort-descending-by-spend, return list[ModelCost]. The empty-
+# string bucket IS preserved so operators can see how much spend predates
+# per-model attribution (legacy ledger rows).
+# ---------------------------------------------------------------------------
+
+
+class TestModelCosts:
+    """RED tests for BON-351 D8 — ``model_costs() -> list[ModelCost]``."""
+
+    def test_empty_ledger_returns_empty_list(self, tmp_path: Path) -> None:
+        """Sage memo D8 — a missing or empty ledger produces an empty list,
+        never raises. Mirrors the agent_costs() empty-state contract.
+        """
+        analyzer = CostAnalyzer(ledger_path=tmp_path / "absent.jsonl")
+        assert analyzer.model_costs() == []
+
+    def test_groups_records_by_model(self, ledger_path: Path) -> None:
+        """Sage memo D8 — records sharing a model string collapse into one
+        ModelCost entry. Different model strings => different entries.
+        """
+        from bonfire.cost.models import ModelCost
+
+        recs = [
+            DispatchRecord(
+                timestamp=1.0,
+                session_id="s",
+                agent_name="a",
+                cost_usd=0.10,
+                duration_seconds=1.0,
+                model="claude-opus-4-7",
+            ),
+            DispatchRecord(
+                timestamp=2.0,
+                session_id="s",
+                agent_name="b",
+                cost_usd=0.05,
+                duration_seconds=2.0,
+                model="claude-opus-4-7",
+            ),
+            DispatchRecord(
+                timestamp=3.0,
+                session_id="s",
+                agent_name="c",
+                cost_usd=0.20,
+                duration_seconds=3.0,
+                model="claude-haiku-4-5",
+            ),
+        ]
+        _write_records(ledger_path, recs)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        results = analyzer.model_costs()
+        assert len(results) == 2
+        assert all(isinstance(r, ModelCost) for r in results)
+        models_to_records = {r.model: r for r in results}
+        assert set(models_to_records) == {"claude-opus-4-7", "claude-haiku-4-5"}
+
+    def test_sort_descending_by_cost(self, ledger_path: Path) -> None:
+        """Sage memo D8 — sort key is ``total_cost_usd``, descending. Same
+        comparator as ``agent_costs()`` (analyzer.py:135) — consistent UX.
+        """
+        recs = [
+            DispatchRecord(
+                timestamp=1.0,
+                session_id="s",
+                agent_name="a",
+                cost_usd=0.05,
+                duration_seconds=1.0,
+                model="cheap-model",
+            ),
+            DispatchRecord(
+                timestamp=2.0,
+                session_id="s",
+                agent_name="b",
+                cost_usd=0.50,
+                duration_seconds=1.0,
+                model="expensive-model",
+            ),
+            DispatchRecord(
+                timestamp=3.0,
+                session_id="s",
+                agent_name="c",
+                cost_usd=0.25,
+                duration_seconds=1.0,
+                model="medium-model",
+            ),
+        ]
+        _write_records(ledger_path, recs)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        results = analyzer.model_costs()
+        models_in_order = [r.model for r in results]
+        assert models_in_order == ["expensive-model", "medium-model", "cheap-model"]
+
+    def test_legacy_empty_model_grouped_visible(self, ledger_path: Path) -> None:
+        """Sage memo D8 — legacy rows (model="") MUST appear as their own
+        bucket, not be silently dropped. Operators want to see how much
+        unattributed/legacy spend exists alongside the attributed spend.
+        """
+        recs = [
+            DispatchRecord(
+                timestamp=1.0,
+                session_id="s",
+                agent_name="legacy-a",
+                cost_usd=0.30,
+                duration_seconds=1.0,
+                # model defaults to ""
+            ),
+            DispatchRecord(
+                timestamp=2.0,
+                session_id="s",
+                agent_name="modern-b",
+                cost_usd=0.10,
+                duration_seconds=1.0,
+                model="claude-opus-4-7",
+            ),
+        ]
+        _write_records(ledger_path, recs)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        results = analyzer.model_costs()
+        assert len(results) == 2
+        models = {r.model for r in results}
+        assert "" in models
+        assert "claude-opus-4-7" in models
+
+    def test_dispatch_count_correct(self, ledger_path: Path) -> None:
+        """Sage memo D8 — ``dispatch_count`` reflects the number of records
+        sharing the same model string. Off-by-one bugs surface here.
+        """
+        recs = [
+            DispatchRecord(
+                timestamp=float(i),
+                session_id="s",
+                agent_name=f"a{i}",
+                cost_usd=0.01,
+                duration_seconds=1.0,
+                model="solo-model" if i == 0 else "shared-model",
+            )
+            for i in range(5)
+        ]
+        _write_records(ledger_path, recs)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        results = analyzer.model_costs()
+        counts = {r.model: r.dispatch_count for r in results}
+        assert counts["solo-model"] == 1
+        assert counts["shared-model"] == 4
+
+    def test_total_duration_summed(self, ledger_path: Path) -> None:
+        """Sage memo D8 — ``total_duration_seconds`` is summed across the
+        records sharing a model string. This is the per-model burn-time
+        operators care about.
+        """
+        recs = [
+            DispatchRecord(
+                timestamp=1.0,
+                session_id="s",
+                agent_name="a",
+                cost_usd=0.01,
+                duration_seconds=12.5,
+                model="claude-opus-4-7",
+            ),
+            DispatchRecord(
+                timestamp=2.0,
+                session_id="s",
+                agent_name="b",
+                cost_usd=0.02,
+                duration_seconds=7.5,
+                model="claude-opus-4-7",
+            ),
+        ]
+        _write_records(ledger_path, recs)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        results = analyzer.model_costs()
+        assert len(results) == 1
+        assert results[0].total_duration_seconds == pytest.approx(20.0)

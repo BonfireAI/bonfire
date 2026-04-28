@@ -948,3 +948,137 @@ class TestNeverRaises:
         )
         assert result["bad"].status == TaskStatus.FAILED
         assert result["good"].status == TaskStatus.COMPLETED
+
+
+# ===========================================================================
+# 14. BON-351 — Per-role model tier resolver wiring at executor:266 (D1, D2)
+# ===========================================================================
+#
+# The executor's ``_dispatch_backend`` now consults
+# ``resolve_model_for_role(stage.role, settings)`` when constructing
+# DispatchOptions. Precedence (Sage memo D2):
+#
+#   1. envelope.model (per-stage explicit override)        -- wins
+#   2. resolve_model_for_role(stage.role, settings)        -- wins next
+#   3. self._config.model (pipeline default)               -- final fallback
+#
+# Knight A locks the conservative spine: the resolver is called with the
+# stage's role string verbatim (no normalization at the call site -- D1),
+# the envelope override beats the resolver, and the config fallback beats
+# an empty-string resolver result.
+
+
+class TestModelResolution:
+    """RED tests for BON-351 D1/D2 — executor wires resolver into option model."""
+
+    async def test_executor_passes_role_to_resolver(
+        self, bus: EventBus, config: PipelineConfig, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D1 — the executor passes ``stage.role`` to
+        resolve_model_for_role verbatim. Gamified strings flow through
+        without normalization at the call site; the resolver internally
+        accepts both vocabularies (BON-350 D7).
+        """
+        from bonfire.engine.executor import StageExecutor
+
+        captured: dict[str, str] = {}
+
+        def fake_resolver(role: str, settings: object) -> str:
+            captured["role"] = role
+            return "claude-haiku-4-5"
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role", fake_resolver
+        )
+
+        backend = _MockBackend()
+        ex = StageExecutor(backend=backend, bus=bus, config=config)
+        stage = StageSpec(name="warrior-stage", agent_name="warrior", role="warrior")
+        plan = _plan(stage)
+        await ex.execute_single(
+            stage=stage, prior_results={}, total_cost=0.0, plan=plan, session_id="s"
+        )
+        assert captured.get("role") == "warrior"
+
+    async def test_executor_envelope_model_wins_over_resolver(
+        self, bus: EventBus, config: PipelineConfig, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D2 — the per-stage override (envelope.model) BEATS the
+        resolver result. Operators retain an explicit escape hatch above
+        the role-based routing.
+        """
+        from bonfire.engine.executor import StageExecutor
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role",
+            lambda role, settings: "RESOLVER-MODEL",
+        )
+
+        # Backend records DispatchOptions on every call.
+        class _OptionsRecordingBackend:
+            def __init__(self) -> None:
+                self.captured_options: DispatchOptions | None = None
+
+            async def execute(
+                self, envelope: Envelope, *, options: DispatchOptions
+            ) -> Envelope:
+                self.captured_options = options
+                return envelope.with_result("ok", cost_usd=0.01)
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _OptionsRecordingBackend()
+        ex = StageExecutor(backend=backend, bus=bus, config=config)
+        stage = StageSpec(
+            name="override-stage",
+            agent_name="warrior",
+            role="warrior",
+            model_override="ENVELOPE-OVERRIDE",
+        )
+        plan = _plan(stage)
+        await ex.execute_single(
+            stage=stage, prior_results={}, total_cost=0.0, plan=plan, session_id="s"
+        )
+        assert backend.captured_options is not None
+        assert backend.captured_options.model == "ENVELOPE-OVERRIDE"
+
+    async def test_executor_config_model_wins_when_resolver_empty(
+        self, bus: EventBus, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sage memo D2 — when the resolver returns the empty string AND no
+        per-stage override exists, the executor falls back to
+        ``self._config.model``. This preserves user-visible behavior for
+        the empty-role case (the third fallback is intentional, NOT removed).
+        """
+        from bonfire.engine.executor import StageExecutor
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role",
+            lambda role, settings: "",
+        )
+
+        cfg = PipelineConfig(model="config-fallback-model")
+
+        class _OptionsRecordingBackend:
+            def __init__(self) -> None:
+                self.captured_options: DispatchOptions | None = None
+
+            async def execute(
+                self, envelope: Envelope, *, options: DispatchOptions
+            ) -> Envelope:
+                self.captured_options = options
+                return envelope.with_result("ok", cost_usd=0.01)
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _OptionsRecordingBackend()
+        ex = StageExecutor(backend=backend, bus=bus, config=cfg)
+        stage = StageSpec(name="empty-role-stage", agent_name="agent", role="")
+        plan = _plan(stage)
+        await ex.execute_single(
+            stage=stage, prior_results={}, total_cost=0.0, plan=plan, session_id="s"
+        )
+        assert backend.captured_options is not None
+        assert backend.captured_options.model == "config-fallback-model"

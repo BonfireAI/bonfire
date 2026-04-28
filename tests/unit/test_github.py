@@ -705,12 +705,24 @@ class TestInterfaceParity:
             )
 
     def test_all_public_methods_are_async(self) -> None:
-        """Every public method on both classes must be a coroutine function."""
+        """Every public method on both classes must be a coroutine function.
+
+        Mock-only synchronous configuration helpers (e.g. ``set_open_prs``
+        for canned-data injection) are exempted via ``_SYNC_MOCK_HELPERS``;
+        they have no real-client counterpart and are not part of the
+        async wire protocol.
+        """
         from bonfire.github import GitHubClient, MockGitHubClient
+
+        # Sync helpers on the mock that exist purely for test-fixture
+        # configuration. They have no analogue on the real client.
+        _SYNC_MOCK_HELPERS: frozenset[str] = frozenset({"set_open_prs"})
 
         for cls in (GitHubClient, MockGitHubClient):
             for name in dir(cls):
                 if name.startswith("_"):
+                    continue
+                if cls is MockGitHubClient and name in _SYNC_MOCK_HELPERS:
                     continue
                 attr = getattr(cls, name)
                 if callable(attr) and not isinstance(attr, type):

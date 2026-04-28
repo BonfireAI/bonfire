@@ -111,13 +111,14 @@ class TestImports:
         assert hasattr(g, "__all__")
 
     def test_gates_dunder_all_matches_v1(self) -> None:
-        """V1 gates.py __all__ is the 7 canonical names."""
+        """V1 gates.py __all__ is the 7 canonical names plus the v0.1 MergePreflightGate."""
         import bonfire.engine.gates as g
 
         expected = {
             "CompletionGate",
             "CostLimitGate",
             "GateChain",
+            "MergePreflightGate",
             "RedPhaseGate",
             "ReviewApprovalGate",
             "TestPassGate",

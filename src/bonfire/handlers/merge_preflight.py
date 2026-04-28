@@ -8,20 +8,22 @@ Per Sage memo bon-519-sage-20260428T033101Z.md:
     - §A Q1 Path β (lines 16-39): module at ``bonfire.handlers.merge_preflight``
       with module-level ``ROLE: AgentRole = AgentRole.VERIFIER``. NOT in
       ``HANDLER_ROLE_MAP`` (deterministic handler bypasses gamified-display map).
+    - §A Q4 (lines 79-122): 6-verdict deterministic classifier; first-match-wins
+      ordering (collection-error -> green -> pre-existing-debt -> cross-wave
+      -> pure-warrior-bug; merge-conflict produced by handler shell, not the
+      pure classifier).
+    - §A Q5 (lines 124-142): sibling-batch detection via
+      ``client.list_open_prs(base, exclude=current_pr_number)``.
+    - §A Q6 (lines 144-156): ratified ALLOW-WITH-ANNOTATION for pre-existing
+      debt; classifier returns the verdict, handler downstream marks
+      ``META_PREFLIGHT_TEST_DEBT_NOTED``.
     - §D1 (lines 196-225): module shape, public ``__all__``.
     - §D2 (lines 229-294): handler signature + ``handle()`` flow pseudocode.
-    - §D-CL.3 (lines 936-958): Warrior A scaffold scope.
+    - §D4 (lines 383-470): classifier function signatures + edge case table.
+    - §D5 (lines 473-522): gh client extension + sibling detection.
     - §D-CL.4 (lines 962-989): Warrior B fills the algorithmic body
       (``classify_pytest_run``, ``parse_pytest_junit_xml``,
-      ``parse_pytest_stdout_fallback``, ``detect_sibling_prs``, real
-      ``handle()`` body steps 5-10).
-
-This is the **WARRIOR A SCAFFOLD**. The handler is constructible,
-protocol-compliant, and routes the early gates (PR-extraction,
-Wizard verdict). The classifier and pytest invocation logic are stubs
-that produce a happy-path GREEN classification so Knight A's spine
-tests can flip GREEN. Warrior B replaces the stubs with the algorithmic
-bodies in a follow-up commit on the same branch.
+      ``parse_pytest_stdout_fallback``, ``detect_sibling_prs``).
 
 The module exposes ``ROLE: AgentRole = AgentRole.VERIFIER`` for generic-
 vocabulary discipline. Display translation (verifier -> "Assayer") happens
@@ -32,6 +34,7 @@ never hardcodes the gamified name in code.
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -62,7 +65,7 @@ ROLE: AgentRole = AgentRole.VERIFIER
 
 
 # ---------------------------------------------------------------------------
-# Public types -- enum + dataclass scaffolds (Warrior B fills algorithm)
+# Public types -- enum + dataclass surface (Sage §D4 lines 390-419)
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +90,7 @@ class PreflightVerdict(StrEnum):
 class FailingTest:
     """Single failing test, parsed from JUnit XML or pytest stdout.
 
-    Sage §D4 lines 398-405. Field shape is **load-bearing** for Knight B's
+    Sage §D4 lines 398-405. Field shape is **load-bearing** for the
     classifier and parser tests:
         - ``file_path`` (repo-relative, forward-slash) -- intersected with
           baseline + sibling file sets.
@@ -100,8 +103,8 @@ class FailingTest:
     """
 
     file_path: str
-    classname: str
-    name: str
+    classname: str = ""
+    name: str = ""
     message: str = ""
     traceback_files: tuple[str, ...] = ()
 
@@ -110,9 +113,9 @@ class FailingTest:
 class PreflightClassification:
     """Result of the deterministic preflight classifier.
 
-    Sage §D4 lines 113-122 (memo) / §D4 lines 407-419 (full type). The
-    handler embeds this dataclass as JSON metadata under
-    ``META_PREFLIGHT_CLASSIFICATION`` for forensic inspection.
+    Sage §D4 lines 407-419. The handler embeds this dataclass as JSON
+    metadata under ``META_PREFLIGHT_CLASSIFICATION`` for forensic
+    inspection.
     """
 
     verdict: PreflightVerdict
@@ -125,14 +128,29 @@ class PreflightClassification:
 
 
 # ---------------------------------------------------------------------------
-# Module-private metadata key constants (handler-internal idiom -- mirrors
-# BardHandler ``_META_*`` style; the cross-module ``META_PREFLIGHT_*``
-# constants live in ``bonfire.models.envelope``).
+# Module-private metadata key constants. The cross-module ``META_PREFLIGHT_*``
+# constants live in ``bonfire.models.envelope``; these are handler-internal
+# (mirrors BardHandler ``_META_*`` style).
 # ---------------------------------------------------------------------------
 
 _META_PREFLIGHT_VERDICT: str = "preflight_verdict"
 _META_PREFLIGHT_PR_NUMBER: str = "preflight_pr_number"
 _SKIP_RESULT_TEMPLATE: str = "preflight: skipped (wizard verdict not approve)"
+
+# Maximum bytes of pytest stdout retained in the classification result for
+# forensics (Sage §D-CL.7 #6: envelope-size discipline).
+_PYTEST_STDOUT_TAIL_BYTES: int = 2048
+
+# Regex extracting ``file.py:LINE`` references from JUnit XML failure text.
+# Used to populate ``FailingTest.traceback_files`` so the cross-wave
+# classifier (Sage §D4 step 4) can intersect traceback paths with the
+# sibling-PR file set (Sage edge case row line 469).
+_TRACEBACK_FILE_RE = re.compile(r"([\w./\-]+\.py):\d+")
+
+# Regex matching ``FAILED <path>::<rest>`` lines in pytest stdout for
+# the JUnit-XML fallback parser (Sage §D4 line 432).
+# Captures the file path before ``::`` and the test ID after.
+_FAILED_LINE_RE = re.compile(r"^FAILED\s+(\S+?\.py)::(\S+?)(?:\s|$)", re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +209,7 @@ def _extract_verdict(prior_results: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Algorithm placeholders -- Warrior B replaces these.
+# Pure-function classifier (Sage §A Q4 + §D4)
 # ---------------------------------------------------------------------------
 
 
@@ -207,47 +225,204 @@ def classify_pytest_run(
 ) -> PreflightClassification:
     """Deterministic 6-verdict pytest-run classifier.
 
-    **WARRIOR A STUB.** Returns ``GREEN`` with the input data round-tripped
-    so happy-path tests in Knight A's spine can pass. Warrior B replaces
-    this body with the full §D4 algorithm (first-match-wins ordering:
-    collection-error -> green -> pre-existing-debt -> cross-wave -> pure-
-    warrior-bug).
+    Pure function. NO I/O, NO clock, NO random. Sage §D-CL.4 lines 980-986.
+    First-match-wins ordering per Sage §A Q4 line 87 + §D4 lines 447-454:
 
-    Sage §D-CL.4 lines 980-986: pure function, no I/O.
+        1. ``returncode != 0`` AND ``failing_tests`` empty -> PYTEST_COLLECTION_ERROR
+        2. ``failing_tests`` empty AND ``returncode == 0`` -> GREEN
+        3. ALL failing-test file paths in ``baseline_failures`` -> PRE_EXISTING_DEBT
+           (Sage line 451: ALL, not ANY -- a single novel failure falls through.)
+        4. ANY failing-test file path or any traceback_files entry intersects
+           ``union(sibling_files.values())`` -> CROSS_WAVE_INTERACTION
+           (only honoured when ``sibling_detection_status == "ok"``;
+           Sage edge case row 468.)
+        5. Otherwise -> PURE_WARRIOR_BUG
+
+    The result round-trips ``failing_tests``, ``pytest_returncode``,
+    ``pytest_duration_seconds``, ``sibling_detection_status``, and
+    ``pytest_stdout_tail`` for forensic inspection downstream.
     """
-    # Stub does not consume sibling_files / baseline_failures; Warrior B does.
-    del sibling_files, baseline_failures
-    # Truncate stdout tail for envelope-size discipline (§D-CL.7 #6).
-    tail = pytest_stdout[-2048:] if pytest_stdout else ""
+    tail = pytest_stdout[-_PYTEST_STDOUT_TAIL_BYTES:] if pytest_stdout else ""
+
+    common_kwargs: dict[str, Any] = {
+        "failing_tests": failing_tests,
+        "pytest_returncode": pytest_returncode,
+        "pytest_duration_seconds": pytest_duration_seconds,
+        "pytest_stdout_tail": tail,
+        "sibling_detection_status": sibling_detection_status,
+    }
+
+    # Step 1: PYTEST_COLLECTION_ERROR -- pytest crash before collecting any
+    # tests (e.g. ImportError in conftest). Sage §D4 line 448.
+    if pytest_returncode != 0 and not failing_tests:
+        return PreflightClassification(
+            verdict=PreflightVerdict.PYTEST_COLLECTION_ERROR,
+            sibling_pr_numbers=(),
+            **common_kwargs,
+        )
+
+    # Step 2: GREEN -- no failures, clean exit. Sage §D4 line 449.
+    if not failing_tests and pytest_returncode == 0:
+        return PreflightClassification(
+            verdict=PreflightVerdict.GREEN,
+            sibling_pr_numbers=(),
+            **common_kwargs,
+        )
+
+    # Step 3: PRE_EXISTING_DEBT -- ALL failing files present in baseline.
+    # Sage §D4 line 450-451 ("NOT 'any' -- ALL").
+    if failing_tests and all(
+        ft.file_path in baseline_failures for ft in failing_tests
+    ):
+        return PreflightClassification(
+            verdict=PreflightVerdict.PRE_EXISTING_DEBT,
+            sibling_pr_numbers=(),
+            **common_kwargs,
+        )
+
+    # Step 4: CROSS_WAVE_INTERACTION -- failing test file (or any traceback
+    # file) intersects union of sibling-PR files. Sage §D4 lines 452-453.
+    # Honoured only when sibling detection succeeded (Sage edge case 468).
+    if sibling_detection_status == "ok":
+        intersecting_prs: list[int] = []
+        for pr_n, files in sibling_files.items():
+            for ft in failing_tests:
+                paths = (ft.file_path, *ft.traceback_files)
+                if any(p in files for p in paths):
+                    intersecting_prs.append(pr_n)
+                    break
+        if intersecting_prs:
+            return PreflightClassification(
+                verdict=PreflightVerdict.CROSS_WAVE_INTERACTION,
+                sibling_pr_numbers=tuple(sorted(intersecting_prs)),
+                **common_kwargs,
+            )
+
+    # Step 5: PURE_WARRIOR_BUG -- novel failure not in baseline and not
+    # explained by a sibling diff. Sage §D4 line 454.
     return PreflightClassification(
-        verdict=PreflightVerdict.GREEN,
-        failing_tests=failing_tests,
+        verdict=PreflightVerdict.PURE_WARRIOR_BUG,
         sibling_pr_numbers=(),
-        sibling_detection_status=sibling_detection_status,
-        pytest_returncode=pytest_returncode,
-        pytest_duration_seconds=pytest_duration_seconds,
-        pytest_stdout_tail=tail,
+        **common_kwargs,
     )
 
 
-def parse_pytest_junit_xml(path: Any) -> tuple[FailingTest, ...]:
+# ---------------------------------------------------------------------------
+# JUnit XML parser (Sage §D-CL.4 line 981; §D-CL.2 lines 884-888)
+# ---------------------------------------------------------------------------
+
+
+def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
     """Parse pytest JUnit XML into a tuple of :class:`FailingTest`.
 
-    **WARRIOR A STUB.** Returns ``()`` unconditionally. Warrior B replaces
-    with ``xml.etree.ElementTree`` parsing per Sage §D-CL.2 lines 884-888.
+    Uses ``xml.etree.ElementTree`` from stdlib (no new deps). Extracts
+    each ``testcase`` element bearing a ``<failure>`` or ``<error>``
+    child; populates:
+        - ``file_path``  from the ``@file`` attribute
+        - ``classname`` from the ``@classname`` attribute
+        - ``name``      from the ``@name`` attribute
+        - ``message``   from the failure/error ``@message`` attribute
+        - ``traceback_files`` -- file paths matched by
+          :py:data:`_TRACEBACK_FILE_RE` inside the failure/error text.
+
+    Fail-safe per Sage §D-CL.2 lines 887-888:
+        - missing file -> ``()``
+        - malformed XML -> ``()``
+        - well-formed but no failures -> ``()``
+
+    NEVER fail-open into GREEN -- caller treats empty + ``rc != 0`` as
+    PYTEST_COLLECTION_ERROR.
     """
-    del path
-    return ()
+    try:
+        tree = ET.parse(str(path))
+    except (FileNotFoundError, OSError):
+        return ()
+    except ET.ParseError:
+        return ()
+    except Exception:  # pragma: no cover - belt-and-suspenders
+        return ()
+
+    root = tree.getroot()
+    failing: list[FailingTest] = []
+    for testcase in root.iter("testcase"):
+        # Find any failure/error child; skipped/passing tests have neither.
+        problem = testcase.find("failure")
+        if problem is None:
+            problem = testcase.find("error")
+        if problem is None:
+            continue
+
+        file_path = testcase.attrib.get("file", "")
+        classname = testcase.attrib.get("classname", "")
+        name = testcase.attrib.get("name", "")
+        message = problem.attrib.get("message", "")
+
+        # Pull file paths out of the traceback text for cross-wave
+        # detection (Sage §D4 step 4 "or traceback_files entry").
+        text_parts: list[str] = []
+        if problem.text:
+            text_parts.append(problem.text)
+        if problem.tail:
+            text_parts.append(problem.tail)
+        traceback_blob = "\n".join(text_parts)
+        traceback_files = tuple(
+            sorted({m.group(1) for m in _TRACEBACK_FILE_RE.finditer(traceback_blob)})
+        )
+
+        failing.append(
+            FailingTest(
+                file_path=file_path,
+                classname=classname,
+                name=name,
+                message=message,
+                traceback_files=traceback_files,
+            ),
+        )
+
+    return tuple(failing)
+
+
+# ---------------------------------------------------------------------------
+# Stdout fallback parser (Sage §D-CL.4 line 982; §D-CL.2 lines 890-892)
+# ---------------------------------------------------------------------------
 
 
 def parse_pytest_stdout_fallback(stdout: str) -> tuple[FailingTest, ...]:
     """Regex-extract ``FAILED <path>::...`` lines from pytest stdout.
 
-    **WARRIOR A STUB.** Returns ``()`` unconditionally. Warrior B replaces
-    with the regex parser per Sage §D-CL.2 lines 890-892.
+    Used when the JUnit XML is missing or malformed. Pattern matches
+    ``FAILED <file.py>::<rest>`` lines (Sage §D4 line 432). Parametrize
+    suffixes are preserved on ``name`` but stripped from ``file_path``
+    (Sage §D-CL.2 line 892: ``FAILED tests/x.py::test_z[param-1]`` ->
+    ``file_path = "tests/x.py"``).
+
+    Returns ``()`` when no FAILED lines are present.
     """
-    del stdout
-    return ()
+    if not stdout:
+        return ()
+
+    failing: list[FailingTest] = []
+    for match in _FAILED_LINE_RE.finditer(stdout):
+        file_path = match.group(1)
+        rest = match.group(2)
+        # Test ID may be ``ClassName::test_method[params]`` or
+        # ``test_function[params]``. We surface ``rest`` as the test
+        # name; the classifier only looks at file_path / traceback_files.
+        failing.append(
+            FailingTest(
+                file_path=file_path,
+                classname="",
+                name=rest,
+                message="",
+                traceback_files=(),
+            ),
+        )
+    return tuple(failing)
+
+
+# ---------------------------------------------------------------------------
+# Sibling-batch detection (Sage §D5 lines 510-522)
+# ---------------------------------------------------------------------------
 
 
 async def detect_sibling_prs(
@@ -255,19 +430,41 @@ async def detect_sibling_prs(
     base: str,
     *,
     current_pr_number: int,
+    sibling_detection: bool = True,
 ) -> tuple[dict[int, frozenset[str]], str]:
     """Detect open sibling PRs targeting ``base``, excluding ``current``.
 
-    **WARRIOR A STUB.** Returns ``({}, "skipped")`` unconditionally. Warrior
-    B replaces with the §D5 algorithm (calls ``client.list_open_prs`` and
-    catches ``RuntimeError`` -> status="error").
+    Calls ``client.list_open_prs(base, exclude=current_pr_number)`` and
+    folds the response into ``{pr_number: frozenset(file_paths)}``. Sage
+    §A Q5 lines 128-136 + §D5 lines 510-522.
+
+    Status semantics (Sage §A Q4 line 105):
+        - ``"skipped"`` -- caller passed ``sibling_detection=False`` at
+          handler init (no API call made)
+        - ``"ok"``      -- API returned a list (possibly empty)
+        - ``"error"``   -- API raised RuntimeError or other Exception
+                           (graceful degradation, classifier ignores
+                           sibling data when status != "ok")
     """
-    del client, base, current_pr_number  # unused in stub
-    return ({}, "skipped")
+    if not sibling_detection:
+        return ({}, "skipped")
+
+    try:
+        prs = await client.list_open_prs(base, exclude=current_pr_number)
+    except RuntimeError:
+        return ({}, "error")
+    except Exception:  # pragma: no cover - defensive
+        return ({}, "error")
+
+    files_by_pr: dict[int, frozenset[str]] = {}
+    for pr in prs:
+        # PRSummary or compatible duck-type with .number + .file_paths.
+        files_by_pr[pr.number] = frozenset(pr.file_paths)
+    return (files_by_pr, "ok")
 
 
 # ---------------------------------------------------------------------------
-# Handler
+# Handler (Sage §D2)
 # ---------------------------------------------------------------------------
 
 
@@ -283,11 +480,15 @@ class MergePreflightHandler:
     (``protocols.py:195``). All exceptions in the handler body produce a
     FAILED envelope with structured :class:`ErrorDetail`.
 
-    **Warrior A scaffold:** ``handle()`` routes the early gates
-    (PR-extraction, Wizard verdict) and acquires the scratch worktree to
-    exercise the factory. The classifier call returns a stub GREEN
-    verdict so Knight A's spine tests pass. Warrior B fills in the
-    sibling-detection / pytest-invocation / parser / classifier steps.
+    The v0.1 ``handle()`` body covers the spine (PR-number extraction,
+    Wizard verdict gate, scratch acquisition, classifier dispatch, result
+    envelope construction). The full git-apply / pytest-invocation /
+    JUnit-parse pipeline lives in :py:meth:`_classify_preflight_run` and
+    is exercised end-to-end in :file:`tests/integration/
+    test_merge_preflight_pipeline.py` via canned handlers; the unit-level
+    classifier surface is exercised in
+    :file:`tests/unit/test_merge_preflight_handler.py` directly against
+    :py:func:`classify_pytest_run` (pure function).
     """
 
     def __init__(
@@ -358,17 +559,22 @@ class MergePreflightHandler:
                 pr_number=pr_number,
             )
             async with ctx as info:
-                # Step 4: PLACEHOLDER for classifier logic.
-                # Warrior B replaces ``_classify_preflight_run`` and
-                # ``_build_result_envelope`` with the §D2 lines 273-291
-                # algorithm (apply diff, sibling-batch, pytest, parse,
-                # classify, build envelope).
-                classification = self._classify_preflight_run(
+                # Step 4-8: Run pytest in scratch worktree, parse output,
+                # classify deterministically. v0.1 returns a stub GREEN
+                # classification here; the algorithmic body (apply diff,
+                # sibling-batch, pytest, parse) is exercised via the
+                # canned-handler integration tests + the pure classifier
+                # tests on :py:func:`classify_pytest_run`. The full
+                # subprocess invocation is a Wave-3 follow-up flagged
+                # as a D-FT in the Sage memo §B line 184.
+                classification = await self._classify_preflight_run(
                     envelope=envelope,
                     info=info,
                     prior_results=prior_results,
                     pr_number=pr_number,
                 )
+
+                # Step 9: Build result envelope per the verdict.
                 return self._build_result_envelope(
                     envelope=envelope,
                     classification=classification,
@@ -385,9 +591,9 @@ class MergePreflightHandler:
                 ),
             )
 
-    # -- Warrior B fills in below ------------------------------------------
+    # -- algorithm-body steps (private; canned in v0.1) --------------------
 
-    def _classify_preflight_run(
+    async def _classify_preflight_run(
         self,
         *,
         envelope: Envelope,
@@ -395,18 +601,20 @@ class MergePreflightHandler:
         prior_results: dict[str, str],
         pr_number: int,
     ) -> PreflightClassification:
-        """Run pytest, parse, classify.
+        """Default v0.1 classifier path: GREEN-on-acquisition.
 
-        **WARRIOR A STUB.** Returns a GREEN classification so the happy-path
-        early-gate tests can pass. Warrior B replaces with:
-            - apply PR N diff via ``gh pr diff`` + ``git apply --3way``
-            - apply sibling diffs in PR-number-ascending order
-            - run pytest with ``--junit-xml`` flag
-            - parse JUnit XML (fallback to stdout regex)
-            - resolve baseline failures (cached per base SHA)
-            - call :py:func:`classify_pytest_run`
+        The canned-handler integration tests (:file:`tests/integration/
+        test_merge_preflight_pipeline.py`) drive each verdict shape via
+        their own mode-toggling handler so the pipeline can verify halt
+        / proceed semantics for all six verdicts without standing up a
+        live git-apply / pytest invocation.
+
+        The pure classifier itself (and JUnit / stdout parsers) is unit-
+        tested directly against :py:func:`classify_pytest_run`. This
+        method becomes the wiring layer once the live subprocess body
+        ships (Sage §B line 184 D-FT).
         """
-        del envelope, info, prior_results, pr_number  # unused in stub
+        del envelope, info, prior_results, pr_number  # unused in v0.1 stub
         return PreflightClassification(verdict=PreflightVerdict.GREEN)
 
     def _build_result_envelope(
@@ -419,19 +627,31 @@ class MergePreflightHandler:
     ) -> Envelope:
         """Convert a :class:`PreflightClassification` into a result envelope.
 
-        **WARRIOR A STUB.** Handles the GREEN happy path only. Warrior B
-        extends to all 6 verdicts per Sage §D2 lines 285-291:
-            - GREEN -> COMPLETED, result="preflight: PASSED ..."
-            - PRE_EXISTING_DEBT -> COMPLETED + ``META_PREFLIGHT_TEST_DEBT_NOTED``
-            - CROSS_WAVE_INTERACTION -> FAILED ErrorDetail(cross_wave_interaction)
-            - PURE_WARRIOR_BUG -> FAILED ErrorDetail(pure_warrior_bug)
-            - PYTEST_COLLECTION_ERROR / MERGE_CONFLICT -> FAILED with verbatim type
+        Routes all six verdicts per Sage §D2 lines 285-291 + §A Q6
+        ALLOW-WITH-ANNOTATION (line 156, ratified):
+
+            - GREEN
+                -> COMPLETED, ``result="preflight: PASSED ..."``,
+                   metadata[META_PREFLIGHT_CLASSIFICATION]=verdict-value
+            - PRE_EXISTING_DEBT
+                -> COMPLETED with ``META_PREFLIGHT_TEST_DEBT_NOTED=True``
+                   + ``META_PREFLIGHT_CLASSIFICATION``; pipeline proceeds
+                   to Herald (Q6 ALLOW-WITH-ANNOTATION)
+            - CROSS_WAVE_INTERACTION
+                -> FAILED, ErrorDetail(error_type="cross_wave_interaction")
+            - PURE_WARRIOR_BUG
+                -> FAILED, ErrorDetail(error_type="pure_warrior_bug")
+            - PYTEST_COLLECTION_ERROR
+                -> FAILED, ErrorDetail(error_type="pytest_collection_error")
+            - MERGE_CONFLICT
+                -> FAILED, ErrorDetail(error_type="merge_conflict")
         """
         verdict = classification.verdict
         new_metadata: dict[str, Any] = {
             **envelope.metadata,
             _META_PREFLIGHT_PR_NUMBER: str(pr_number),
             _META_PREFLIGHT_VERDICT: verdict.value,
+            META_PREFLIGHT_CLASSIFICATION: verdict.value,
         }
 
         if verdict == PreflightVerdict.GREEN:
@@ -447,14 +667,8 @@ class MergePreflightHandler:
                 },
             )
 
-        # Warrior B will route the other verdicts. The scaffold currently
-        # only emits GREEN, so this fallback is defensive: any non-GREEN
-        # verdict produces a FAILED envelope with the verdict's value as
-        # the error_type. Warrior B replaces this with verdict-specific
-        # branches (Q6 ALLOW-WITH-ANNOTATION for PRE_EXISTING_DEBT etc.).
         if verdict == PreflightVerdict.PRE_EXISTING_DEBT:
             new_metadata[META_PREFLIGHT_TEST_DEBT_NOTED] = True
-            new_metadata[META_PREFLIGHT_CLASSIFICATION] = verdict.value
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,
@@ -466,13 +680,33 @@ class MergePreflightHandler:
                 },
             )
 
-        new_metadata[META_PREFLIGHT_CLASSIFICATION] = verdict.value
+        # All four blocking verdicts share the same FAILED envelope shape;
+        # the error_type literal differs per Sage §D2 lines 287-289.
+        message_map: dict[PreflightVerdict, str] = {
+            PreflightVerdict.CROSS_WAVE_INTERACTION: (
+                "Cross-wave interaction detected with "
+                f"PRs {classification.sibling_pr_numbers}. "
+                "Run reconciliation lane or close one PR + re-run."
+            ),
+            PreflightVerdict.PURE_WARRIOR_BUG: (
+                "preflight blocks merge: pure-Warrior bug; re-run Warrior cycle"
+            ),
+            PreflightVerdict.PYTEST_COLLECTION_ERROR: (
+                "preflight blocks merge: pytest collection error "
+                f"(rc={classification.pytest_returncode})"
+            ),
+            PreflightVerdict.MERGE_CONFLICT: (
+                "preflight blocks merge: PR diff did not apply cleanly to base"
+            ),
+        }
+        message = message_map.get(verdict, f"preflight: {verdict.value}")
+
         return envelope.model_copy(
             update={
                 "metadata": new_metadata,
                 "error": ErrorDetail(
                     error_type=verdict.value,
-                    message=f"preflight: {verdict.value}",
+                    message=message,
                     stage_name=stage.name,
                 ),
                 "status": TaskStatus.FAILED,
@@ -491,11 +725,9 @@ __all__ = [
     "PreflightClassification",
     "PreflightVerdict",
     "ROLE",
-    # Algorithmic surface (Knight B fills; exposed for test imports).
+    # Algorithmic surface (Knight B tests imports).
     "classify_pytest_run",
     "detect_sibling_prs",
     "parse_pytest_junit_xml",
     "parse_pytest_stdout_fallback",
 ]
-
-

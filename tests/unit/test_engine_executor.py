@@ -1082,3 +1082,238 @@ class TestModelResolution:
         )
         assert backend.captured_options is not None
         assert backend.captured_options.model == "config-fallback-model"
+
+
+# ===========================================================================
+# BON-351 Knight B — gamified ↔ canonical role vocabulary parity.
+#
+# Sage memo D1 (KEYSTONE — role vocabulary keying) explicitly preserves
+# BOTH vocabularies: workflows emit GAMIFIED strings into stage.role
+# (scout/knight/warrior/...), the wizard handler emits CANONICAL strings
+# (AgentRole.REVIEWER.value == "reviewer"), and the resolver normalizes
+# both via GAMIFIED_TO_GENERIC -> AgentRole -> DEFAULT_ROLE_TIER.
+#
+# Sage D1 line 78: "Knight B innovation: assert that BOTH vocabularies
+# resolve to the same model for paired roles".  This is the parity
+# correctness guarantee that lets the executor pass `stage.role`
+# (gamified) and the wizard pass `ROLE.value` (canonical) at distinct
+# call sites with confidence that the two routes converge on the same
+# model when the underlying agent role is the same.
+#
+# Knight A spine asserts the executor passes `stage.role` to the resolver
+# (single-vocabulary). Knight B locks the END-TO-END parity: the executor's
+# resolver call returns the SAME model for warrior/implementer (FAST tier
+# pair), wizard/reviewer (REASONING tier pair), and falls through to
+# BALANCED for an unknown string (Sage D1 + BON-350 D7 fallback chain).
+#
+# These tests mock `resolve_model_for_role` at the executor's import site
+# and capture the role string the executor passed in.  We then call the
+# REAL resolver from `bonfire.agent.tiers` against a fixed BonfireSettings
+# instance with the captured strings -- if both vocabularies hit the same
+# tier table, the resolved model strings match.
+# ===========================================================================
+
+
+class TestVocabularyParity:
+    """BON-351 D1 — gamified and canonical role strings resolve identically."""
+
+    async def test_warrior_and_implementer_resolve_same(
+        self, bus: EventBus, config: PipelineConfig, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`warrior` (gamified) and `implementer` (canonical) both -> FAST tier.
+
+        Locks Sage D1 line 78: BOTH vocabularies resolve to the same
+        model for paired roles. Through the resolver, both route to
+        AgentRole.IMPLEMENTER -> ModelTier.FAST -> settings.models.fast.
+        """
+        from bonfire.agent.tiers import resolve_model_for_role
+        from bonfire.engine.executor import StageExecutor
+        from bonfire.models.config import BonfireSettings
+
+        settings = BonfireSettings()
+        captured_roles: list[str] = []
+
+        def fake_resolver(role: str, _settings: object) -> str:
+            captured_roles.append(role)
+            # Return a sentinel so the executor's precedence chain accepts it.
+            return "RESOLVED-FAKE"
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role",
+            fake_resolver,
+            raising=False,
+        )
+
+        # Two stages with paired roles.
+        warrior_stage = _stage(name="warrior_stage", agent_name="warrior-agent")
+        warrior_stage = warrior_stage.model_copy(update={"role": "warrior"})
+        implementer_stage = _stage(name="impl_stage", agent_name="impl-agent")
+        implementer_stage = implementer_stage.model_copy(update={"role": "implementer"})
+
+        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config)
+        await ex.execute_single(
+            stage=warrior_stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=_plan(warrior_stage),
+            session_id="s",
+        )
+        await ex.execute_single(
+            stage=implementer_stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=_plan(implementer_stage),
+            session_id="s",
+        )
+
+        # Executor passed BOTH strings into the resolver (no normalization at
+        # the call site -- per Sage D1 the call site is vocabulary-agnostic).
+        assert "warrior" in captured_roles
+        assert "implementer" in captured_roles
+
+        # Real resolver convergence: both roles -> FAST -> settings.models.fast.
+        assert resolve_model_for_role("warrior", settings) == settings.models.fast
+        assert resolve_model_for_role("implementer", settings) == settings.models.fast
+        assert resolve_model_for_role("warrior", settings) == resolve_model_for_role(
+            "implementer", settings
+        )
+
+    async def test_wizard_and_reviewer_resolve_same(
+        self, bus: EventBus, config: PipelineConfig, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`wizard` (gamified) and `reviewer` (canonical) both -> REASONING tier.
+
+        Locks Sage D1 line 55: ``AgentRole.REVIEWER.value == "reviewer"``,
+        the gamified alias ``"wizard"`` ALSO maps to AgentRole.REVIEWER.
+        Both routes resolve to ``DEFAULT_ROLE_TIER[REVIEWER] == REASONING``
+        -> ``settings.models.reasoning`` -> ``"claude-opus-4-7"`` by default.
+
+        This is the dispatch-side guarantee that the wizard handler can
+        safely pass the canonical string while workflow stages pass the
+        gamified one.
+        """
+        from bonfire.agent.tiers import resolve_model_for_role
+        from bonfire.engine.executor import StageExecutor
+        from bonfire.models.config import BonfireSettings
+
+        settings = BonfireSettings()
+        captured_roles: list[str] = []
+
+        def fake_resolver(role: str, _settings: object) -> str:
+            captured_roles.append(role)
+            return "RESOLVED-FAKE"
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role",
+            fake_resolver,
+            raising=False,
+        )
+
+        wizard_stage = _stage(name="wizard_stage", agent_name="wiz-agent")
+        wizard_stage = wizard_stage.model_copy(update={"role": "wizard"})
+        reviewer_stage = _stage(name="reviewer_stage", agent_name="rev-agent")
+        reviewer_stage = reviewer_stage.model_copy(update={"role": "reviewer"})
+
+        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config)
+        await ex.execute_single(
+            stage=wizard_stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=_plan(wizard_stage),
+            session_id="s",
+        )
+        await ex.execute_single(
+            stage=reviewer_stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=_plan(reviewer_stage),
+            session_id="s",
+        )
+
+        assert "wizard" in captured_roles
+        assert "reviewer" in captured_roles
+
+        # Convergence: both -> REASONING -> settings.models.reasoning.
+        assert resolve_model_for_role("wizard", settings) == settings.models.reasoning
+        assert resolve_model_for_role("reviewer", settings) == settings.models.reasoning
+        assert resolve_model_for_role("wizard", settings) == resolve_model_for_role(
+            "reviewer", settings
+        )
+
+    async def test_unknown_role_falls_through_to_balanced(
+        self, bus: EventBus, config: PipelineConfig, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unknown role string falls through to BALANCED tier, never raises.
+
+        Locks Sage D1 + BON-350 D7 fallback chain (memo lines 47-48):
+        ``AgentRole(normalized)`` -> ``GAMIFIED_TO_GENERIC[normalized]``
+        -> ``BALANCED`` fallback. Pure synchronous, never raises on string
+        input. Sage D-CL.7 calls this the graceful-degradation path for
+        pre-BON-337 plans or hand-constructed envelopes.
+
+        Three pathological role strings get exercised:
+            "" (empty) — no envelope role, pre-BON-337 plan.
+            "unknown_role_xyz" — a typo / future role not yet in the table.
+            "  WaRrIoR  " — whitespace + mixed case AROUND a known alias;
+                            BON-350 resolver normalizes via .strip().lower(),
+                            so this MUST resolve to FAST (warrior),
+                            not BALANCED.
+        """
+        from bonfire.agent.tiers import resolve_model_for_role
+        from bonfire.engine.executor import StageExecutor  # noqa: F401 — used below
+        from bonfire.models.config import BonfireSettings
+
+        settings = BonfireSettings()
+
+        # Empty role -> BALANCED.
+        assert resolve_model_for_role("", settings) == settings.models.balanced
+
+        # Unknown role string -> BALANCED (graceful degradation, not raise).
+        assert (
+            resolve_model_for_role("unknown_role_xyz", settings)
+            == settings.models.balanced
+        )
+
+        # Whitespace+case normalization: "  WaRrIoR  " -> "warrior" -> FAST.
+        # This is NOT BALANCED — the resolver strips/lowercases first.
+        # Asserting !=balanced ensures the test isn't trivially satisfied
+        # by a "raise on weird input" implementation drift.
+        assert (
+            resolve_model_for_role("  WaRrIoR  ", settings) == settings.models.fast
+        )
+        assert (
+            resolve_model_for_role("  WaRrIoR  ", settings) != settings.models.balanced
+        )
+
+        # And the executor itself never raises when given an unknown role —
+        # the never-raise discipline (C19) extends to the resolver path.
+        captured_roles: list[str] = []
+
+        def fake_resolver(role: str, _settings: object) -> str:
+            captured_roles.append(role)
+            # Mimic the real resolver's BALANCED fallback for unknown.
+            return settings.models.balanced
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_model_for_role",
+            fake_resolver,
+            raising=False,
+        )
+
+        unknown_stage = _stage(name="unk_stage", agent_name="unk-agent")
+        unknown_stage = unknown_stage.model_copy(
+            update={"role": "unknown_role_xyz"}
+        )
+
+        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config)
+        result = await ex.execute_single(
+            stage=unknown_stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=_plan(unknown_stage),
+            session_id="s",
+        )
+        assert isinstance(result, Envelope)
+        # The unknown role is passed verbatim to the resolver — no call-site
+        # normalization (Sage D1 invariant).
+        assert "unknown_role_xyz" in captured_roles

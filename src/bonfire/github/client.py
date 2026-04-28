@@ -29,6 +29,23 @@ class PRInfo(BaseModel, frozen=True, extra="forbid"):
     base_branch: str
 
 
+class PRSummary(BaseModel, frozen=True, extra="forbid"):
+    """Lightweight open-PR summary used by the merge-preflight stage.
+
+    Sage memo bon-519-sage-20260428T033101Z.md §D5 lines 498-504. Returned
+    by :py:meth:`GitHubClient.list_open_prs`. Frozen so the sibling-batch
+    detector can store instances inside ``frozenset`` keys without worry.
+
+    Fields map to ``gh pr list --json number,headRefName,title,files``:
+        ``headRefName -> head_branch`` and ``files[].path -> file_paths``.
+    """
+
+    number: int = Field(gt=0)
+    head_branch: str
+    title: str
+    file_paths: tuple[str, ...]
+
+
 # Map gh CLI state strings (uppercase) to normalized lowercase values.
 _STATE_MAP = {
     "OPEN": "open",
@@ -216,6 +233,64 @@ class GitHubClient:
         self._check(rc, stderr)
         data = json.loads(stdout)
         return data.get("files", [])
+
+    async def list_open_prs(
+        self,
+        base: str,
+        *,
+        exclude: int | None = None,
+    ) -> list[PRSummary]:
+        """List open PRs targeting *base*. Optionally exclude a PR number.
+
+        Sage memo bon-519-sage-20260428T033101Z.md §D5 lines 478-491.
+        Invokes ``gh pr list -R <repo> --base <base> --state open --json
+        number,headRefName,title,files``. Returns parsed
+        :class:`PRSummary` instances.
+
+        Parameters
+        ----------
+        base:
+            Base branch name to filter PRs against.
+        exclude:
+            Optional PR number to filter from the returned list (used to
+            drop the current PR from sibling-detection scans).
+        """
+        args = [
+            "pr",
+            "list",
+            "-R",
+            self._repo,
+            "--base",
+            base,
+            "--state",
+            "open",
+            "--json",
+            "number,headRefName,title,files",
+        ]
+        rc, stdout, stderr = await self._run_gh(args)
+        self._check(rc, stderr)
+        raw = json.loads(stdout) if stdout.strip() else []
+
+        summaries: list[PRSummary] = []
+        for entry in raw:
+            number = int(entry["number"])
+            if exclude is not None and number == exclude:
+                continue
+            files_raw = entry.get("files") or []
+            file_paths = tuple(
+                str(f.get("path", ""))
+                for f in files_raw
+                if f.get("path")
+            )
+            summaries.append(
+                PRSummary(
+                    number=number,
+                    head_branch=str(entry.get("headRefName", "")),
+                    title=str(entry.get("title", "")),
+                    file_paths=file_paths,
+                ),
+            )
+        return summaries
 
     async def post_review(
         self,

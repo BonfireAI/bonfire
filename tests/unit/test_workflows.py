@@ -299,16 +299,19 @@ class TestFactoryInvariants:
 
 
 # ---------------------------------------------------------------------------
-# 3. standard_build — reference 7-stage pipeline (per-stage assertions)
+# 3. standard_build — reference 8-stage pipeline (per-stage assertions)
 # ---------------------------------------------------------------------------
 
 
 class TestStandardBuild:
-    """standard_build() returns a valid 7-stage STANDARD WorkflowPlan.
+    """standard_build() returns a valid 8-stage STANDARD WorkflowPlan.
 
-    Flow: scout -> knight -> warrior -> prover -> bard -> wizard -> herald.
+    Flow: scout -> knight -> warrior -> prover -> bard -> wizard ->
+    merge_preflight -> herald (Sage memo
+    ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     Knight writes RED, Warrior makes GREEN (max 3 iterations, no self-bounce).
     Prover + Wizard each bounce back to Warrior on gate failure.
+    MergePreflight runs full-suite pytest against the simulated merged tip.
     """
 
     @pytest.fixture()
@@ -321,8 +324,8 @@ class TestStandardBuild:
     def test_workflow_type_is_standard(self, plan: WorkflowPlan) -> None:
         assert plan.workflow_type == WorkflowType.STANDARD
 
-    def test_has_seven_stages(self, plan: WorkflowPlan) -> None:
-        assert len(plan.stages) == 7
+    def test_has_eight_stages(self, plan: WorkflowPlan) -> None:
+        assert len(plan.stages) == 8
 
     def test_stage_names_in_order(self, plan: WorkflowPlan) -> None:
         names = [s.name for s in plan.stages]
@@ -333,6 +336,7 @@ class TestStandardBuild:
             "prover",
             "bard",
             "wizard",
+            "merge_preflight",
             "herald",
         ]
 
@@ -417,17 +421,31 @@ class TestStandardBuild:
         wizard = plan.stages[5]
         assert "bard" in wizard.depends_on
 
+    def test_merge_preflight_role(self, plan: WorkflowPlan) -> None:
+        preflight = plan.stages[6]
+        assert preflight.role == "verifier"
+
+    def test_merge_preflight_handler_name(self, plan: WorkflowPlan) -> None:
+        preflight = plan.stages[6]
+        assert preflight.handler_name == "merge_preflight"
+
+    def test_merge_preflight_depends_on_wizard(self, plan: WorkflowPlan) -> None:
+        preflight = plan.stages[6]
+        assert "wizard" in preflight.depends_on
+
     def test_herald_role(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[6]
+        herald = plan.stages[7]
         assert herald.role == "herald"
 
     def test_herald_handler_name(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[6]
+        herald = plan.stages[7]
         assert herald.handler_name == "herald"
 
-    def test_herald_depends_on_wizard(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[6]
-        assert "wizard" in herald.depends_on
+    def test_herald_depends_on_merge_preflight(self, plan: WorkflowPlan) -> None:
+        """Sage memo §D6 line 542: herald.depends_on rewired to
+        ['merge_preflight']."""
+        herald = plan.stages[7]
+        assert "merge_preflight" in herald.depends_on
 
     def test_plan_is_frozen(self, plan: WorkflowPlan) -> None:
         with pytest.raises(Exception):  # noqa: B017

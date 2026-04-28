@@ -36,6 +36,13 @@ from bonfire.engine.gates import (
 )
 from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 
+# ``MergePreflightGate`` is intentionally NOT exported in
+# ``__all__`` here; the canonical 14-symbol surface is locked by
+# ``tests/unit/test_engine_init.py``. The gate is importable from the
+# submodule (``from bonfire.engine.gates import MergePreflightGate``) which
+# is sufficient for v0.1 wiring. Promoting it to ``__all__`` is a follow-up
+# decision once the 14-surface lock is widened.
+
 __all__ = [
     "CheckpointData",
     "CheckpointManager",

@@ -35,13 +35,17 @@ def _stage(
 
 
 def standard_build() -> WorkflowPlan:
-    """The reference 7-stage build pipeline.
+    """The reference 8-stage build pipeline.
 
-    Flow: scout -> knight -> warrior -> prover -> bard -> wizard -> herald
+    Flow: scout -> knight -> warrior -> prover -> bard -> wizard ->
+    merge_preflight -> herald
 
     - Knight writes RED tests, Warrior makes them GREEN (up to 3 attempts).
     - Prover verifies; on failure, bounces back to Warrior.
     - Bard writes the PR, Wizard reviews it; on rejection, bounces to Warrior.
+    - MergePreflight runs full-suite pytest against the simulated merged
+      tip BEFORE the merge button (Sage memo
+      ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     - Herald announces the result.
     """
     return WorkflowPlan(
@@ -80,10 +84,17 @@ def standard_build() -> WorkflowPlan:
                 depends_on=["bard"],
             ),
             _stage(
+                "merge_preflight",
+                "verifier",
+                handler_name="merge_preflight",
+                gates=["merge_preflight_passed"],
+                depends_on=["wizard"],
+            ),
+            _stage(
                 "herald",
                 "herald",
                 handler_name="herald",
-                depends_on=["wizard"],
+                depends_on=["merge_preflight"],
             ),
         ],
     )

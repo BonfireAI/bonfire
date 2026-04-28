@@ -134,6 +134,10 @@ class DispatchCompleted(BonfireEvent):
     agent_name: str
     cost_usd: float
     duration_seconds: float
+    # Per-model cost attribution. Default keeps the existing _minimal_kwargs
+    # registry valid (test_events.py:608) and the runner emitter backward
+    # compatible.
+    model: str = ""
 
 
 class DispatchFailed(BonfireEvent):

@@ -30,7 +30,9 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
+from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
+from bonfire.models.config import BonfireSettings
 from bonfire.models.envelope import (
     META_PR_NUMBER,
     META_REVIEW_SEVERITY,
@@ -252,11 +254,14 @@ class WizardHandler:
         backend: Any,
         config: PipelineConfig,
         event_bus: EventBus | None = None,
+        settings: BonfireSettings | None = None,
     ) -> None:
         self._github_client = github_client
         self._backend = backend
         self._config = config
         self._bus = event_bus
+        # D-CL.1: settings flow through DI seam mirroring PipelineConfig.
+        self._settings = settings if settings is not None else BonfireSettings()
 
     async def _emit(self, event: Any) -> None:
         """Emit an event on the bus when the bus exists. No-op otherwise."""
@@ -300,10 +305,16 @@ class WizardHandler:
                 pr_number=pr_number,
             )
 
+            # Precedence: per-stage override -> per-role resolver -> config default.
+            # ROLE.value ("reviewer") routes to REASONING tier via the resolver.
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",
-                model=stage.model_override or self._config.model,
+                model=(
+                    stage.model_override
+                    or resolve_model_for_role(ROLE.value, self._settings)
+                    or self._config.model
+                ),
                 metadata={"role": ROLE.value},
             )
 
@@ -312,6 +323,11 @@ class WizardHandler:
             # ``max_budget_usd=0.0`` is the v0.1 non-nullable contract; the
             # v1 parity value is ``None`` (uncapped). Widening the protocol
             # is deferred to BON-W5.3-protocol-widen.
+            #
+            # Surface ROLE.value to the runner so DispatchStarted /
+            # DispatchCompleted observers can attribute the dispatch to the
+            # reviewer role (the metadata-level role on the envelope does not
+            # flow through to DispatchOptions).
             options = DispatchOptions(
                 model=review_envelope.model,
                 max_turns=5,
@@ -319,6 +335,7 @@ class WizardHandler:
                 thinking_depth=thinking_depth,
                 tools=["Read", "Grep", "Glob"],
                 permission_mode="dontAsk",
+                role=ROLE.value,
             )
 
             # Timeout routing is deferred to BON-W5.3-protocol-widen -- the

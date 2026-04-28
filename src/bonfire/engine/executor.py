@@ -23,8 +23,10 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine.context import ContextBuilder
+from bonfire.models.config import BonfireSettings
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import StageCompleted, StageFailed, StageStarted
 from bonfire.protocols import DispatchOptions
@@ -60,6 +62,7 @@ class StageExecutor:
         "_context_builder",
         "_handlers",
         "_project_root",
+        "_settings",
         "_tool_policy",
         "_vault_advisor",
     )
@@ -75,6 +78,7 @@ class StageExecutor:
         vault_advisor: VaultAdvisor | None = None,
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
+        settings: BonfireSettings | None = None,
     ) -> None:
         self._backend = backend
         self._bus = bus
@@ -84,6 +88,10 @@ class StageExecutor:
         self._vault_advisor = vault_advisor
         self._project_root = project_root
         self._tool_policy = tool_policy
+        # D-CL.1: settings flow through the dependency-injection seam mirroring
+        # the PipelineConfig pattern. ``None`` -> fresh BonfireSettings() which
+        # loads from bonfire.toml + env + defaults via Pydantic.
+        self._settings = settings if settings is not None else BonfireSettings()
 
     # -- Public API -----------------------------------------------------------
 
@@ -187,7 +195,11 @@ class StageExecutor:
                 task=task_prompt,
                 context=context,
                 agent_name=stage.agent_name,
-                model=stage.model_override or self._config.model,
+                # envelope.model carries ONLY the per-stage explicit
+                # override. The resolver+config precedence resolves
+                # downstream in _dispatch_backend so the per-role resolver
+                # fires whenever no operator override exists.
+                model=stage.model_override or "",
                 metadata={"role": stage.role} if stage.role else {},
             )
 
@@ -262,8 +274,13 @@ class StageExecutor:
             role_tools: list[str] = []
         else:
             role_tools = self._tool_policy.tools_for(stage.role)
+        # Precedence: per-stage override -> per-role resolver -> config default.
         options = DispatchOptions(
-            model=envelope.model or self._config.model,
+            model=(
+                envelope.model
+                or resolve_model_for_role(stage.role, self._settings)
+                or self._config.model
+            ),
             max_turns=self._config.max_turns,
             max_budget_usd=self._config.max_budget_usd,
             cwd=str(self._project_root) if self._project_root else "",

@@ -20,6 +20,9 @@ class DispatchRecord(BaseModel):
     agent_name: str
     cost_usd: float
     duration_seconds: float
+    # Per-model attribution. Default keeps legacy JSONL rows parseable;
+    # the empty-string bucket is preserved (visible) by ``model_costs()``.
+    model: str = ""
 
 
 class PipelineRecord(BaseModel):
@@ -56,3 +59,18 @@ class AgentCost(BaseModel):
     total_cost_usd: float
     dispatch_count: int
     avg_cost_usd: float
+
+
+class ModelCost(BaseModel):
+    """Cumulative cost for one model across all sessions.
+
+    Mirrors ``AgentCost`` shape (name-key + total + count + secondary).
+    The secondary metric is total burn-time, not average -- average is
+    derivable as ``total_cost_usd / dispatch_count`` while burn-time per
+    model is operationally interesting in its own right.
+    """
+
+    model: str
+    total_cost_usd: float
+    dispatch_count: int
+    total_duration_seconds: float

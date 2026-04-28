@@ -33,6 +33,7 @@ class CostLedgerConsumer:
             agent_name=event.agent_name,
             cost_usd=event.cost_usd,
             duration_seconds=event.duration_seconds,
+            model=event.model,
         )
         self._append(record)
 

@@ -257,7 +257,7 @@ The full vault knowledge-graph implementation lands in a later 0.1.x
 release. The protocol is stable today; the default backend ships
 once the schema is locked.
 
-## Built by The Forge
+## Project
 
 Bonfire is developed at [github.com/BonfireAI](https://github.com/BonfireAI).
 Issues, PRs, and discussion welcome.

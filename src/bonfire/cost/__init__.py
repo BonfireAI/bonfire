@@ -2,13 +2,14 @@
 
 from bonfire.cost.analyzer import CostAnalyzer
 from bonfire.cost.consumer import CostLedgerConsumer
-from bonfire.cost.models import AgentCost, DispatchRecord, PipelineRecord, SessionCost
+from bonfire.cost.models import AgentCost, DispatchRecord, ModelCost, PipelineRecord, SessionCost
 
 __all__ = [
     "AgentCost",
     "CostAnalyzer",
     "CostLedgerConsumer",
     "DispatchRecord",
+    "ModelCost",
     "PipelineRecord",
     "SessionCost",
 ]

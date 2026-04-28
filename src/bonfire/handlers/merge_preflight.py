@@ -534,7 +534,7 @@ class MergePreflightHandler:
         github_client: Any,
         scratch_worktree_factory: ScratchWorktreeFactory | Any,
         repo_path: Path,
-        base_branch: str = "master",
+        base_branch: str = "main",
         pytest_command: tuple[str, ...] = ("pytest", "tests/"),
         pytest_timeout_seconds: int | None = 600,
         sibling_detection: bool = True,

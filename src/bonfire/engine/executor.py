@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine.context import ContextBuilder
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from bonfire.dispatch.tool_policy import ToolPolicy
     from bonfire.engine.advisor import VaultAdvisor
     from bonfire.events.bus import EventBus
-    from bonfire.models.config import PipelineConfig
+    from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.models.plan import StageSpec, WorkflowPlan
     from bonfire.protocols import StageHandler
 
@@ -60,6 +61,7 @@ class StageExecutor:
         "_context_builder",
         "_handlers",
         "_project_root",
+        "_settings",
         "_tool_policy",
         "_vault_advisor",
     )
@@ -75,7 +77,10 @@ class StageExecutor:
         vault_advisor: VaultAdvisor | None = None,
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
+        settings: BonfireSettings | None = None,
     ) -> None:
+        from bonfire.models.config import BonfireSettings as _BonfireSettings
+
         self._backend = backend
         self._bus = bus
         self._config = config
@@ -84,6 +89,7 @@ class StageExecutor:
         self._vault_advisor = vault_advisor
         self._project_root = project_root
         self._tool_policy = tool_policy
+        self._settings = settings if settings is not None else _BonfireSettings()
 
     # -- Public API -----------------------------------------------------------
 
@@ -187,7 +193,7 @@ class StageExecutor:
                 task=task_prompt,
                 context=context,
                 agent_name=stage.agent_name,
-                model=stage.model_override or self._config.model,
+                model=stage.model_override or "",
                 metadata={"role": stage.role} if stage.role else {},
             )
 
@@ -263,7 +269,11 @@ class StageExecutor:
         else:
             role_tools = self._tool_policy.tools_for(stage.role)
         options = DispatchOptions(
-            model=envelope.model or self._config.model,
+            model=(
+                envelope.model
+                or resolve_model_for_role(stage.role, self._settings)
+                or self._config.model
+            ),
             max_turns=self._config.max_turns,
             max_budget_usd=self._config.max_budget_usd,
             cwd=str(self._project_root) if self._project_root else "",

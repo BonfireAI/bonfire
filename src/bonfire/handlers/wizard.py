@@ -30,6 +30,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
+from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.models.envelope import (
     META_PR_NUMBER,
@@ -43,7 +44,7 @@ from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
     from bonfire.events.bus import EventBus  # noqa: TC004 -- only for type hints
-    from bonfire.models.config import PipelineConfig
+    from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.models.plan import StageSpec
 
 logger = logging.getLogger(__name__)
@@ -252,11 +253,15 @@ class WizardHandler:
         backend: Any,
         config: PipelineConfig,
         event_bus: EventBus | None = None,
+        settings: BonfireSettings | None = None,
     ) -> None:
+        from bonfire.models.config import BonfireSettings as _BonfireSettings
+
         self._github_client = github_client
         self._backend = backend
         self._config = config
         self._bus = event_bus
+        self._settings = settings if settings is not None else _BonfireSettings()
 
     async def _emit(self, event: Any) -> None:
         """Emit an event on the bus when the bus exists. No-op otherwise."""
@@ -303,7 +308,11 @@ class WizardHandler:
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",
-                model=stage.model_override or self._config.model,
+                model=(
+                    stage.model_override
+                    or resolve_model_for_role(ROLE.value, self._settings)
+                    or self._config.model
+                ),
                 metadata={"role": ROLE.value},
             )
 
@@ -319,6 +328,7 @@ class WizardHandler:
                 thinking_depth=thinking_depth,
                 tools=["Read", "Grep", "Glob"],
                 permission_mode="dontAsk",
+                role=ROLE.value,
             )
 
             # Timeout routing is deferred to BON-W5.3-protocol-widen -- the

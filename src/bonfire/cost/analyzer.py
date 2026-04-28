@@ -11,6 +11,7 @@ from bonfire.cost.models import (
     DEFAULT_LEDGER_PATH,
     AgentCost,
     DispatchRecord,
+    ModelCost,
     PipelineRecord,
     SessionCost,
 )
@@ -133,6 +134,36 @@ class CostAnalyzer:
             )
 
         results.sort(key=lambda a: a.total_cost_usd, reverse=True)
+        return results
+
+    def model_costs(self) -> list[ModelCost]:
+        """Cumulative cost per model, sorted by spend descending.
+
+        Records lacking a model string (legacy or unattributed) are grouped
+        under model="". Empty-string is preserved as a visible bucket --
+        operators want to see how much spend predates per-model attribution.
+        """
+        dispatches, _ = self._read_records()
+
+        by_model: dict[str, list[DispatchRecord]] = defaultdict(list)
+        for d in dispatches:
+            by_model[d.model].append(d)
+
+        results: list[ModelCost] = []
+        for model_name, records in by_model.items():
+            total = sum(r.cost_usd for r in records)
+            count = len(records)
+            duration = sum(r.duration_seconds for r in records)
+            results.append(
+                ModelCost(
+                    model=model_name,
+                    total_cost_usd=total,
+                    dispatch_count=count,
+                    total_duration_seconds=duration,
+                )
+            )
+
+        results.sort(key=lambda m: m.total_cost_usd, reverse=True)
         return results
 
     def all_sessions(self) -> list[SessionCost]:

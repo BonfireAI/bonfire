@@ -189,6 +189,7 @@ async def execute_with_retry(
                     agent_name=agent_name,
                     cost_usd=cumulative_cost,
                     duration_seconds=duration,
+                    model=options.model,
                 ),
             )
             return DispatchResult(

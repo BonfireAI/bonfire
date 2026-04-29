@@ -12,9 +12,9 @@ All factories return frozen, DAG-validated WorkflowPlan instances.
 Depends only on bonfire.models — no engine, dispatch, or handler imports.
 """
 
-from bonfire.workflows.registry import WorkflowRegistry, get_default_registry
-from bonfire.workflows.research import dual_scout, spike, triple_scout
-from bonfire.workflows.standard import debug, standard_build
+from bonfire.workflow.registry import WorkflowRegistry, get_default_registry
+from bonfire.workflow.research import dual_scout, spike, triple_scout
+from bonfire.workflow.standard import debug, standard_build
 
 __all__ = [
     "WorkflowRegistry",

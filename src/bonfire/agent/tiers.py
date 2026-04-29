@@ -40,7 +40,7 @@ class ModelTier(StrEnum):
 
 
 # Map of gamified workflow-emitted role strings -> canonical AgentRole.
-# Workflows in bonfire.workflows.{standard, research} emit lowercase
+# Workflows in bonfire.workflow.{standard, research} emit lowercase
 # gamified names (scout, knight, ...) into StageSpec.role; the resolver
 # normalizes them through this table before tier lookup.
 GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType({

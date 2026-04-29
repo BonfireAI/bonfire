@@ -365,7 +365,7 @@ class TestStandardWorkflowRegistersPreflight:
         """Sage §D-CL.2 line 915: stage with name='merge_preflight',
         handler_name='merge_preflight', role='verifier',
         depends_on=['wizard']."""
-        from bonfire.workflows.standard import standard_build
+        from bonfire.workflow.standard import standard_build
 
         plan = standard_build()
         names = [s.name for s in plan.stages]
@@ -379,7 +379,7 @@ class TestStandardWorkflowRegistersPreflight:
     def test_herald_depends_on_preflight(self) -> None:
         """Sage §D-CL.2 line 916 + §D6 line 542: herald.depends_on ==
         ['merge_preflight'] (NOT ['wizard'])."""
-        from bonfire.workflows.standard import standard_build
+        from bonfire.workflow.standard import standard_build
 
         plan = standard_build()
         herald_stage = next(s for s in plan.stages if s.name == "herald")
@@ -388,7 +388,7 @@ class TestStandardWorkflowRegistersPreflight:
     def test_preflight_inserted_between_wizard_and_herald(self) -> None:
         """Order discipline: in the stage list, merge_preflight appears
         AFTER wizard and BEFORE herald."""
-        from bonfire.workflows.standard import standard_build
+        from bonfire.workflow.standard import standard_build
 
         plan = standard_build()
         names = [s.name for s in plan.stages]

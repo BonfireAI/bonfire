@@ -1,6 +1,6 @@
-"""RED tests for bonfire.workflows — factories, registry, dependency constraints.
+"""Tests for bonfire.workflow — factories, registry, dependency constraints.
 
-Contract mirrored from the hardened v1 workflows package. Public v0.1 ships
+Contract mirrored from the hardened v1 workflow package. Public v0.1 ships
 FIVE built-in factories (standard_build, debug, dual_scout, triple_scout,
 spike) plus a named WorkflowRegistry. The private ``project_strategist``
 factory is deferred — it depends on the Strategist handler, which is not
@@ -10,9 +10,7 @@ Every factory returns a frozen, DAG-validated WorkflowPlan. The package
 depends on ``bonfire.models`` alone — no engine, dispatch, handler, event,
 or CLI imports (constraint C9).
 
-The target is ``bonfire.workflows`` (PLURAL). A leftover empty stub lives
-at ``src/bonfire/workflow/`` (singular); the Warrior deletes it and creates
-the plural package.
+The target is ``bonfire.workflow`` (singular per ADR-001 line 50).
 """
 
 from __future__ import annotations
@@ -35,7 +33,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 try:
-    from bonfire.workflows import (
+    from bonfire.workflow import (
         WorkflowRegistry,
         debug,
         dual_scout,
@@ -55,9 +53,9 @@ else:
 
 @pytest.fixture(autouse=True)
 def _require_module() -> None:
-    """Fail every test with the import error while bonfire.workflows is missing."""
+    """Fail every test with the import error while bonfire.workflow is missing."""
     if _IMPORT_ERROR is not None:
-        pytest.fail(f"bonfire.workflows not importable: {_IMPORT_ERROR}")
+        pytest.fail(f"bonfire.workflow not importable: {_IMPORT_ERROR}")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +74,7 @@ _PUBLIC_FACTORIES: list[tuple[str, str]] = [
 
 def _call(factory_name: str) -> WorkflowPlan:
     """Resolve and call a public factory by name through the package surface."""
-    import bonfire.workflows as pkg
+    import bonfire.workflow as pkg
 
     factory: Callable[..., WorkflowPlan] = getattr(pkg, factory_name)
     return factory()
@@ -100,60 +98,36 @@ def _dummy_factory() -> WorkflowPlan:
 
 
 class TestPackageSurface:
-    """Public surface of bonfire.workflows — names, callability, plurality."""
+    """Public surface of bonfire.workflow — names, callability, identity."""
 
-    def test_target_is_plural_workflows(self) -> None:
-        """Contract: the transfer target is ``bonfire.workflows`` (plural)."""
-        mod = importlib.import_module("bonfire.workflows")
-        assert mod.__name__ == "bonfire.workflows"
-
-    def test_singular_stub_does_not_reexport_factories(self) -> None:
-        """``bonfire.workflow`` (singular) must not re-export the factory API.
-
-        The singular module is a leftover scaffold slated for deletion.
-        It MUST NOT expose the factory API that lives in the plural
-        package — doing so would entrench the typo.
-        """
-        try:
-            singular = importlib.import_module("bonfire.workflow")
-        except ImportError:
-            return  # already deleted — even better
-        for name in (
-            "standard_build",
-            "debug",
-            "dual_scout",
-            "triple_scout",
-            "spike",
-            "WorkflowRegistry",
-            "get_default_registry",
-        ):
-            assert not hasattr(singular, name), (
-                f"bonfire.workflow (singular) must not re-export '{name}'"
-            )
+    def test_target_is_singular_workflow(self) -> None:
+        """Contract: the package is ``bonfire.workflow`` (singular per ADR-001)."""
+        mod = importlib.import_module("bonfire.workflow")
+        assert mod.__name__ == "bonfire.workflow"
 
     def test_import_standard_build(self) -> None:
-        from bonfire.workflows import standard_build  # noqa: F401
+        from bonfire.workflow import standard_build  # noqa: F401
 
     def test_import_debug(self) -> None:
-        from bonfire.workflows import debug  # noqa: F401
+        from bonfire.workflow import debug  # noqa: F401
 
     def test_import_dual_scout(self) -> None:
-        from bonfire.workflows import dual_scout  # noqa: F401
+        from bonfire.workflow import dual_scout  # noqa: F401
 
     def test_import_triple_scout(self) -> None:
-        from bonfire.workflows import triple_scout  # noqa: F401
+        from bonfire.workflow import triple_scout  # noqa: F401
 
     def test_import_spike(self) -> None:
-        from bonfire.workflows import spike  # noqa: F401
+        from bonfire.workflow import spike  # noqa: F401
 
     def test_import_get_default_registry(self) -> None:
-        from bonfire.workflows import get_default_registry  # noqa: F401
+        from bonfire.workflow import get_default_registry  # noqa: F401
 
     def test_import_workflow_registry(self) -> None:
-        from bonfire.workflows import WorkflowRegistry  # noqa: F401
+        from bonfire.workflow import WorkflowRegistry  # noqa: F401
 
     def test_all_exports_present_in_dir(self) -> None:
-        import bonfire.workflows as pkg
+        import bonfire.workflow as pkg
 
         expected = {
             "WorkflowRegistry",
@@ -167,7 +141,7 @@ class TestPackageSurface:
         assert expected.issubset(set(dir(pkg)))
 
     def test_dunder_all_is_complete(self) -> None:
-        import bonfire.workflows as pkg
+        import bonfire.workflow as pkg
 
         assert hasattr(pkg, "__all__")
         assert set(pkg.__all__) >= {
@@ -181,10 +155,10 @@ class TestPackageSurface:
         }
 
     def test_all_public_factories_are_callable(self) -> None:
-        import bonfire.workflows as pkg
+        import bonfire.workflow as pkg
 
         for name in ("standard_build", "debug", "dual_scout", "triple_scout", "spike"):
-            assert callable(getattr(pkg, name)), f"bonfire.workflows.{name} is not callable"
+            assert callable(getattr(pkg, name)), f"bonfire.workflow.{name} is not callable"
 
 
 # ---------------------------------------------------------------------------
@@ -841,12 +815,12 @@ class TestRegistryEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# 12. Dependency constraints — C9: workflows/ depends ONLY on bonfire.models
+# 12. Dependency constraints — C9: workflow/ depends ONLY on bonfire.models
 # ---------------------------------------------------------------------------
 
 
 class TestDependencyConstraints:
-    """Verify workflows/ depends ONLY on bonfire.models.
+    """Verify workflow/ depends ONLY on bonfire.models.
 
     Mirrors the private-side C9 constraint: workflow factories are pure
     data producers. They must never pull in engine, dispatch, handlers,
@@ -862,25 +836,25 @@ class TestDependencyConstraints:
     ]
 
     @pytest.fixture(autouse=True)
-    def _load_workflows_package(self) -> None:
-        """Force-load workflows and its submodules so imports are resolved."""
+    def _load_workflow_package(self) -> None:
+        """Force-load workflow and its submodules so imports are resolved."""
         import contextlib
 
-        import bonfire.workflows  # noqa: F401
+        import bonfire.workflow  # noqa: F401
 
         for submod in ("registry", "standard", "research"):
             with contextlib.suppress(ImportError):
-                importlib.import_module(f"bonfire.workflows.{submod}")
+                importlib.import_module(f"bonfire.workflow.{submod}")
 
     @pytest.mark.parametrize("forbidden", FORBIDDEN_IMPORTS)
-    def test_workflows_does_not_import_forbidden(self, forbidden: str) -> None:
-        """workflows/ must not depend on engine, dispatch, handlers, events, cli."""
-        workflows_modules = {
+    def test_workflow_does_not_import_forbidden(self, forbidden: str) -> None:
+        """workflow/ must not depend on engine, dispatch, handlers, events, cli."""
+        workflow_modules = {
             name: mod
             for name, mod in sys.modules.items()
-            if name.startswith("bonfire.workflows") and mod is not None
+            if name.startswith("bonfire.workflow") and mod is not None
         }
-        for mod_name, mod in workflows_modules.items():
+        for mod_name, mod in workflow_modules.items():
             for attr_val in vars(mod).values():
                 origin = getattr(attr_val, "__module__", None)
                 if origin and origin.startswith(forbidden):

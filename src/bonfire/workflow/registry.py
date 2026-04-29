@@ -66,8 +66,8 @@ class WorkflowRegistry:
 
 def get_default_registry() -> WorkflowRegistry:
     """Build a registry pre-loaded with the five built-in workflow factories."""
-    from bonfire.workflows.research import dual_scout, spike, triple_scout
-    from bonfire.workflows.standard import debug, standard_build
+    from bonfire.workflow.research import dual_scout, spike, triple_scout
+    from bonfire.workflow.standard import debug, standard_build
 
     registry = WorkflowRegistry()
     registry.register("standard_build", standard_build)

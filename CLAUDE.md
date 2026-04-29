@@ -108,10 +108,6 @@ lines 44–51. Inline summary:
 | `onboard/` | `front_door/` | Browser-based onboarding |
 | `scan/` | `scanners/` | Project-state scanners |
 
-> Note: filesystem rename `workflows/` → `workflow/` tracked in BON-637; this
-> CLAUDE.md describes intended ADR-001 state. Code on disk currently shows the
-> plural; importers will update under that ticket.
-
 Selective class renames (full table in ADR-001 lines 53–61): `IdentityBlock` (was
 `AxiomMeta`), `ProjectAnalysis` (was `ProjectStudy`), `WorkflowSpec` (was
 `WorkflowPlan`), `PhraseBank` (was `PhrasePool`), `TechScanner` (was

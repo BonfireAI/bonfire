@@ -1226,7 +1226,7 @@ class TestDependencyConstraints:
         "bonfire.dispatch",
         "bonfire.engine",
         "bonfire.cli",
-        "bonfire.workflows",
+        "bonfire.workflow",
         "bonfire.session",
         "bonfire.vault",
         "bonfire.knowledge",

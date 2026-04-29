@@ -43,18 +43,20 @@ class ModelTier(StrEnum):
 # Workflows in bonfire.workflow.{standard, research} emit lowercase
 # gamified names (scout, knight, ...) into StageSpec.role; the resolver
 # normalizes them through this table before tier lookup.
-GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType({
-    "scout":     AgentRole.RESEARCHER,
-    "knight":    AgentRole.TESTER,
-    "warrior":   AgentRole.IMPLEMENTER,
-    "assayer":   AgentRole.VERIFIER,
-    "prover":    AgentRole.VERIFIER,   # workflow alias -- see Sage memo D-CL.1
-    "bard":      AgentRole.PUBLISHER,
-    "wizard":    AgentRole.REVIEWER,
-    "herald":    AgentRole.CLOSER,
-    "sage":      AgentRole.SYNTHESIZER,
-    "architect": AgentRole.ANALYST,
-})
+GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType(
+    {
+        "scout": AgentRole.RESEARCHER,
+        "knight": AgentRole.TESTER,
+        "warrior": AgentRole.IMPLEMENTER,
+        "assayer": AgentRole.VERIFIER,
+        "prover": AgentRole.VERIFIER,  # workflow alias -- see Sage memo D-CL.1
+        "bard": AgentRole.PUBLISHER,
+        "wizard": AgentRole.REVIEWER,
+        "herald": AgentRole.CLOSER,
+        "sage": AgentRole.SYNTHESIZER,
+        "architect": AgentRole.ANALYST,
+    }
+)
 
 
 # Default role -> tier mapping. The four roles cited in the ticket
@@ -65,17 +67,19 @@ GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType({
 #   - closer      -> fast      (merge/announce, mechanical)
 #   - synthesizer -> reasoning (multi-source synthesis is the reasoning case)
 #   - analyst     -> reasoning (architectural analysis is reasoning)
-DEFAULT_ROLE_TIER: Mapping[AgentRole, ModelTier] = MappingProxyType({
-    AgentRole.RESEARCHER:  ModelTier.REASONING,
-    AgentRole.TESTER:      ModelTier.FAST,
-    AgentRole.IMPLEMENTER: ModelTier.FAST,
-    AgentRole.VERIFIER:    ModelTier.FAST,
-    AgentRole.PUBLISHER:   ModelTier.FAST,
-    AgentRole.REVIEWER:    ModelTier.REASONING,
-    AgentRole.CLOSER:      ModelTier.FAST,
-    AgentRole.SYNTHESIZER: ModelTier.REASONING,
-    AgentRole.ANALYST:     ModelTier.REASONING,
-})
+DEFAULT_ROLE_TIER: Mapping[AgentRole, ModelTier] = MappingProxyType(
+    {
+        AgentRole.RESEARCHER: ModelTier.REASONING,
+        AgentRole.TESTER: ModelTier.FAST,
+        AgentRole.IMPLEMENTER: ModelTier.FAST,
+        AgentRole.VERIFIER: ModelTier.FAST,
+        AgentRole.PUBLISHER: ModelTier.FAST,
+        AgentRole.REVIEWER: ModelTier.REASONING,
+        AgentRole.CLOSER: ModelTier.FAST,
+        AgentRole.SYNTHESIZER: ModelTier.REASONING,
+        AgentRole.ANALYST: ModelTier.REASONING,
+    }
+)
 
 
 def resolve_model_for_role(role: str, settings: BonfireSettings) -> str:

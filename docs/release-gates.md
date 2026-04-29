@@ -122,7 +122,7 @@ If strategy shifts — a demo window, a security researcher reach-out, unforesee
 ## Release train lifecycle
 
 ```
-main (tagged 0.0.0a1)
+main (tagged 0.1.0)
   └── v0.1 integration branch
         └── antawari/bon-<n>-* feature branches → PR into v0.1
 v0.1 fully green → merge v0.1 to main → tag v0.1.0 → delete v0.1 → cut v0.2

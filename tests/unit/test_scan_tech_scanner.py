@@ -33,9 +33,7 @@ class TestTechScannerClassRename:
 
 
 class TestScanEntryType:
-    async def test_scan_returns_vault_entries_with_tech_fingerprint_type(
-        self, tmp_path
-    ) -> None:
+    async def test_scan_returns_vault_entries_with_tech_fingerprint_type(self, tmp_path) -> None:
         """entry_type lock: ``tech_fingerprint`` (D9.8 #9 — taxonomy unchanged)."""
         (tmp_path / "pyproject.toml").write_text(
             "[project]\nname = 'demo'\n[project.dependencies]\n"
@@ -49,9 +47,7 @@ class TestScanEntryType:
 
 class TestLanguageDetection:
     async def test_detects_python_from_pyproject_toml(self, tmp_path) -> None:
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'x'\n[project.dependencies]\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n[project.dependencies]\n")
         (tmp_path / "a.py").write_text("x = 1\n")
         scanner = TechScanner(tmp_path, project_name="x")
         entries = await scanner.scan()
@@ -59,9 +55,7 @@ class TestLanguageDetection:
         assert "Python" in techs
 
     async def test_detects_javascript_from_package_json(self, tmp_path) -> None:
-        (tmp_path / "package.json").write_text(
-            json.dumps({"name": "x", "dependencies": {}})
-        )
+        (tmp_path / "package.json").write_text(json.dumps({"name": "x", "dependencies": {}}))
         scanner = TechScanner(tmp_path, project_name="x")
         entries = await scanner.scan()
         techs = {e.metadata["technology"] for e in entries}
@@ -77,9 +71,7 @@ class TestLanguageDetection:
             ("go.mod", "Go"),
         ],
     )
-    async def test_detects_language_from_manifest(
-        self, tmp_path, manifest: str, tech: str
-    ) -> None:
+    async def test_detects_language_from_manifest(self, tmp_path, manifest: str, tech: str) -> None:
         content = "{}" if manifest == "package.json" else "[project]\nname='x'\n"
         (tmp_path / manifest).write_text(content)
         scanner = TechScanner(tmp_path, project_name="x")
@@ -91,15 +83,81 @@ class TestLanguageDetection:
 class TestFrameworkDetection:
     async def test_extracts_pyproject_deps(self, tmp_path) -> None:
         (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname = 'x'\n"
-            "[project.dependencies]\n"
-            'django = ">=5.0"\n'
+            "[project]\nname = 'x'\n[project.dependencies]\ndjango = \">=5.0\"\n"
         )
         scanner = TechScanner(tmp_path, project_name="x")
         entries = await scanner.scan()
         techs = {e.metadata["technology"] for e in entries}
         # Framework detection from pyproject.toml deps.
         assert "Django" in techs or any("django" in t.lower() for t in techs)
+
+    async def test_detects_pytest_in_project_dependencies(self, tmp_path) -> None:
+        """pytest declared in [project.dependencies] is detected as test_framework.
+
+        Locks the contract for the simplest PEP 621 form.
+        """
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\nname = 'x'\n[project.dependencies]\npytest = \">=8.0\"\n"
+        )
+        scanner = TechScanner(tmp_path, project_name="x")
+        entries = await scanner.scan()
+        pytest_entries = [e for e in entries if e.metadata.get("technology") == "pytest"]
+        assert pytest_entries, f"pytest not detected; got {[e.metadata for e in entries]}"
+        assert pytest_entries[0].metadata["category"] == "test_framework"
+
+    async def test_detects_pytest_in_subsection_table_optional_dependencies(self, tmp_path) -> None:
+        """Form A: [project.optional-dependencies.dev] with bare keys.
+
+        Subsection-style optional-dependencies. The header matches the existing
+        regex; bare ``pytest = ">=8.0"`` is captured by the key match.
+        """
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\nname = 'x'\n"
+            "[project.optional-dependencies.dev]\n"
+            'pytest = ">=8.0"\n'
+            'mypy = ">=1.0"\n'
+        )
+        scanner = TechScanner(tmp_path, project_name="x")
+        entries = await scanner.scan()
+        pytest_entries = [e for e in entries if e.metadata.get("technology") == "pytest"]
+        assert pytest_entries, f"pytest not detected; got {[e.metadata for e in entries]}"
+        assert pytest_entries[0].metadata["category"] == "test_framework"
+
+    async def test_detects_pytest_in_optional_dependencies_inline_array(self, tmp_path) -> None:
+        """Form B: [project.optional-dependencies] header + inline-array values.
+
+        ``dev = ["pytest>=8.0", "mypy>=1.0"]`` — quoted-string scan picks up
+        the package specs.
+        """
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\nname = 'x'\n"
+            "[project.optional-dependencies]\n"
+            'dev = ["pytest>=8.0", "mypy>=1.0"]\n'
+            'test = ["pytest-asyncio"]\n'
+        )
+        scanner = TechScanner(tmp_path, project_name="x")
+        entries = await scanner.scan()
+        pytest_entries = [e for e in entries if e.metadata.get("technology") == "pytest"]
+        assert pytest_entries, f"pytest not detected; got {[e.metadata for e in entries]}"
+        assert pytest_entries[0].metadata["category"] == "test_framework"
+
+    async def test_detects_pytest_in_inline_table_optional_dependencies(self, tmp_path) -> None:
+        """Form C: [project] section + inline-table optional-dependencies.
+
+        ``optional-dependencies = {dev = ["pytest>=8.0"]}`` — the inline-table
+        form lives under [project] and never produces a section header that
+        matches the existing regex. Must still extract pytest.
+        """
+        (tmp_path / "pyproject.toml").write_text(
+            "[project]\n"
+            "name = 'x'\n"
+            'optional-dependencies = {dev = ["pytest>=8.0", "mypy>=1.0"]}\n'
+        )
+        scanner = TechScanner(tmp_path, project_name="x")
+        entries = await scanner.scan()
+        pytest_entries = [e for e in entries if e.metadata.get("technology") == "pytest"]
+        assert pytest_entries, f"pytest not detected; got {[e.metadata for e in entries]}"
+        assert pytest_entries[0].metadata["category"] == "test_framework"
 
 
 class TestEdgeCases:
@@ -124,9 +182,7 @@ class TestEdgeCases:
 class TestStoreSemantics:
     # knight-a(innovative): scan_and_store dedups via content_hash.
     async def test_scan_and_store_dedups_on_rescan(self, tmp_path) -> None:
-        (tmp_path / "pyproject.toml").write_text(
-            "[project]\nname='x'\n[project.dependencies]\n"
-        )
+        (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n[project.dependencies]\n")
 
         stored: list = []
         hashes: set[str] = set()

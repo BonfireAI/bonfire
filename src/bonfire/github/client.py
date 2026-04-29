@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import subprocess
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -73,21 +75,21 @@ def detect_github_repo(repo_path: str | Path = ".") -> str:
 
     Returns an empty string if detection fails (no remote, not GitHub, etc.).
     """
-    import re
-    import subprocess
-
     try:
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
             cwd=str(repo_path),
+            timeout=5,
         )
         if result.returncode != 0:
             return ""
         match = re.search(r"github\.com[:/](.+?)(?:\.git)?$", result.stdout.strip())
         return match.group(1) if match else ""
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # Timeout treated as detection failure per the docstring contract:
+        # slow NFS or non-git pinfs that walk the filesystem hang here.
         return ""
 
 
@@ -277,11 +279,7 @@ class GitHubClient:
             if exclude is not None and number == exclude:
                 continue
             files_raw = entry.get("files") or []
-            file_paths = tuple(
-                str(f.get("path", ""))
-                for f in files_raw
-                if f.get("path")
-            )
+            file_paths = tuple(str(f.get("path", "")) for f in files_raw if f.get("path"))
             summaries.append(
                 PRSummary(
                     number=number,

@@ -9,9 +9,10 @@ integration. Pure synchronous function -- no I/O, no async, no cache.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Mapping
+from typing import TYPE_CHECKING
 
 from bonfire.agent.roles import AgentRole
 

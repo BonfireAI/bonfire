@@ -10,4 +10,11 @@ TDD built in. Code review built in. Your repo, your rules.
 Apache-2.0. https://github.com/BonfireAI/bonfire
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
+try:
+    __version__ = _pkg_version("bonfire-ai")
+except PackageNotFoundError:
+    # Editable / unbuilt fallback — keep in lockstep with pyproject.toml
+    __version__ = "0.1.0"

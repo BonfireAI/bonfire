@@ -6,17 +6,18 @@ through typed stages with quality gates between them. This document
 is for developers who want to contribute code, tests, or documentation
 to the project.
 
-## Pre-Release Notice
+## Release Status
 
-`bonfire-ai` is currently published at version `0.0.0a1` as a
-pre-release name reservation. Most of the behavior described in the
-README is planned but not yet implemented — the installed `bonfire`
-command prints a placeholder and nothing more. Contributions are
-welcome for planned work, but expect the surface area to churn until
-the first functional release at `v0.1.0`. See
+`bonfire-ai` ships a public functional release line at `v0.1.x`. The
+PyPI classifier is `Development Status :: 4 - Beta`. Pipeline
+primitives, BYOK model routing, and the browser-based onboarding scan
+are wired and exercised by the test suite. Knowledge-graph storage
+("the vault") and the end-to-end project workflow remain in progress
+and ship in subsequent 0.1.x releases. The vocabulary, the protocols,
+and the config schema are stable for 0.1.x. See
 [`docs/release-policy.md`](docs/release-policy.md) for the full
-pre-release policy, including versioning rules and what counts as a
-breaking change.
+versioning policy and what counts as a breaking change, and
+[`CHANGELOG.md`](CHANGELOG.md) for per-release notes.
 
 ## Development Setup
 

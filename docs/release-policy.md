@@ -11,7 +11,7 @@ to PyPI during the pre-release and v0.1 development periods.
 
 During this period:
 
-- **Versions follow PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ...
+- **Versions followed PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ... (the pre-release period ended at the `0.1.0` bump.)
 - **PyPI publications are name-reservation only.** Each published wheel
   is a stub whose `bonfire` command prints a pre-release notice and
   exits. No functional features ship to PyPI.
@@ -30,7 +30,8 @@ is in flight:
 - The pre-release banner is reworded to a release-candidate notice with
   a known-issues list.
 - PyPI publications remain alpha-classified; `pip install bonfire-ai`
-  without `--pre` still yields `0.0.0a1`.
+  without `--pre` resolves to the most recent stable release (currently
+  `0.1.0`), not the in-flight rc.
 
 ## v0.1.0 Release
 

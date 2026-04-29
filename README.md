@@ -2,7 +2,11 @@
 
 **AI Build Pipelines for Real Code.** Define agents. Wire stages. Ship quality.
 
-> ### Alpha — `v0.1.0`
+[![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
+[![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
+[![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
+
+> ### Beta — `v0.1.0`
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
 > primitives, BYOK model routing, and `bonfire scan` onboarding are

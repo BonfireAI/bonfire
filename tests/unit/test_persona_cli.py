@@ -276,9 +276,6 @@ class TestPersonaTomlFallbackWarning:
     wrong. The fix: emit a stderr warning before fallback.
     """
 
-    @pytest.mark.xfail(
-        reason="contract gap: TOML parse failure currently silent; needs typer.echo on stderr"
-    )
     def test_get_active_persona_emits_warning_on_toml_decode_error(
         self, tmp_path, monkeypatch, capsys
     ) -> None:

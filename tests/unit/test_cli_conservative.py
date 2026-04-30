@@ -25,7 +25,6 @@ PyPI-name-reservation stub that does NOT export `app` from a package path.
 
 from __future__ import annotations
 
-import pytest
 import typer
 from typer.testing import CliRunner
 
@@ -158,9 +157,6 @@ class TestInitCommand:
         assert marker.exists(), "agents/user-marker.md must survive init re-run"
         assert marker.read_text() == "# user agent content"
 
-    @pytest.mark.xfail(
-        reason="re-init must preserve non-empty agents/ tree recursively",
-    )
     def test_init_preserves_nonempty_agents_tree(self, tmp_path, monkeypatch) -> None:
         """A multi-level agents/ tree survives re-init byte-for-byte.
 

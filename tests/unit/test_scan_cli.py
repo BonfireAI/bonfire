@@ -107,8 +107,7 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan", "--port", str(port_value), "--no-browser"])
         assert result.exit_code == 0, (
-            f"scan with port={port_value} exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"scan with port={port_value} exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=port_value, no_browser=True)
 
@@ -136,7 +135,37 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan"])
         assert result.exit_code == 0, (
-            f"default scan invocation exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"default scan invocation exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=0, no_browser=False)
+
+    @pytest.mark.xfail(
+        reason="contract gap: KeyboardInterrupt mid server.stop() may skip closed-message echo"
+    )
+    @patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock)
+    def test_scan_prints_closed_on_interrupt_during_stop(self, mock_run: AsyncMock) -> None:
+        """`Front Door closed.` must print even when Ctrl-C lands mid-server.stop().
+
+        Today scan() catches KeyboardInterrupt only at the asyncio.run
+        boundary (line 54). If the interrupt arrives while server.stop() is
+        running inside the finally block (line 41-42 in scan.py), the
+        outer-level catch never fires — the closed-message is silently
+        skipped.
+
+        The fix: ensure the closed-message echo runs in a finally that
+        survives any interrupt path inside _run_scan, or wrap the inner
+        _run_scan call so KeyboardInterrupt propagates through and the
+        outer message always prints.
+        """
+        # Simulate Ctrl-C arriving mid-stop: _run_scan raises KeyboardInterrupt
+        # AFTER the user-visible work but BEFORE clean teardown completes.
+        mock_run.side_effect = KeyboardInterrupt()
+
+        result = runner.invoke(app, ["scan", "--no-browser"])
+
+        # The closed-message MUST be in output regardless of where the
+        # interrupt arrived inside the scan flow.
+        assert "Front Door closed." in result.output, (
+            f"`Front Door closed.` missing from output even though "
+            f"KeyboardInterrupt was raised; got output={result.output!r}"
+        )

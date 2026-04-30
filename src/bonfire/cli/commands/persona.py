@@ -36,7 +36,10 @@ def _get_active_persona() -> str:
                 data = tomllib.load(f)
             return data.get("bonfire", {}).get("persona", _DEFAULT_PERSONA)
         except (tomllib.TOMLDecodeError, OSError):
-            pass
+            typer.echo(
+                "Warning: bonfire.toml failed to parse; falling back to default persona.",
+                err=True,
+            )
     return _DEFAULT_PERSONA
 
 

@@ -9,7 +9,7 @@ This file pins the *shape* of ``bonfire.verify``:
     - the package is importable;
     - the public exports listed in Sage §A §B File 1 (lines 319, 45) AND
       Sage §D §D1 line 53-63 are present;
-    - ``BounceVerdict`` is a ``StrEnum`` carrying the three Anta-ratified
+    - ``ClassifierVerdict`` is a ``StrEnum`` carrying the three Anta-ratified
       members (``SAGE_UNDER_MARKED``, ``WARRIOR_BUG``, ``AMBIGUOUS``)
       pinned by §A Q1a (lines 51-52);
     - ``BounceClassification`` and ``DeferRecord`` are frozen dataclasses;
@@ -106,10 +106,10 @@ class TestVerifyPublicSurface:
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_verdict_exported(self) -> None:
-        """``BounceVerdict`` is re-exported from the package."""
-        from bonfire.verify import BounceVerdict
+        """``ClassifierVerdict`` is re-exported from the package."""
+        from bonfire.verify import ClassifierVerdict
 
-        assert BounceVerdict is not None
+        assert ClassifierVerdict is not None
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_defer_record_exported(self) -> None:
@@ -135,7 +135,7 @@ class TestVerifyPublicSurface:
         expected_minimum = {
             "classify_warrior_failure",
             "BounceClassification",
-            "BounceVerdict",
+            "ClassifierVerdict",
         }
         assert expected_minimum.issubset(all_names), (
             f"bonfire.verify.__all__ must include {expected_minimum}; got {all_names}."
@@ -143,12 +143,12 @@ class TestVerifyPublicSurface:
 
 
 # ---------------------------------------------------------------------------
-# TestBounceVerdictEnum (Sage §A Q1a line 51, §D2 line 83)
+# TestClassifierVerdictEnum (Sage §A Q1a line 51, §D2 line 83)
 # ---------------------------------------------------------------------------
 
 
-class TestBounceVerdictEnum:
-    """``BounceVerdict`` is a StrEnum with the three Anta-ratified members.
+class TestClassifierVerdictEnum:
+    """``ClassifierVerdict`` is a StrEnum with the three Anta-ratified members.
 
     Sage §A Q1a (lines 51-52) ratified by Anta on 2026-04-28: 3-verdict
     classifier (``SAGE_UNDER_MARKED``, ``WARRIOR_BUG``, ``AMBIGUOUS``).
@@ -158,54 +158,54 @@ class TestBounceVerdictEnum:
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_verdict_is_str_enum(self) -> None:
-        """``BounceVerdict`` is a ``StrEnum`` (one-string-everywhere
+        """``ClassifierVerdict`` is a ``StrEnum`` (one-string-everywhere
         discipline per ``bonfire.agent.roles`` AgentRole convention)."""
-        from bonfire.verify import BounceVerdict
+        from bonfire.verify import ClassifierVerdict
 
-        assert issubclass(BounceVerdict, StrEnum)
+        assert issubclass(ClassifierVerdict, StrEnum)
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_sage_under_marked_member_present(self) -> None:
-        """``BounceVerdict.SAGE_UNDER_MARKED`` member exists. Sage §A Q1a."""
-        from bonfire.verify import BounceVerdict
+        """``ClassifierVerdict.SAGE_UNDER_MARKED`` member exists. Sage §A Q1a."""
+        from bonfire.verify import ClassifierVerdict
 
-        assert hasattr(BounceVerdict, "SAGE_UNDER_MARKED")
+        assert hasattr(ClassifierVerdict, "SAGE_UNDER_MARKED")
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_warrior_bug_member_present(self) -> None:
-        """``BounceVerdict.WARRIOR_BUG`` member exists. Sage §A Q1a."""
-        from bonfire.verify import BounceVerdict
+        """``ClassifierVerdict.WARRIOR_BUG`` member exists. Sage §A Q1a."""
+        from bonfire.verify import ClassifierVerdict
 
-        assert hasattr(BounceVerdict, "WARRIOR_BUG")
+        assert hasattr(ClassifierVerdict, "WARRIOR_BUG")
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_ambiguous_member_present(self) -> None:
-        """``BounceVerdict.AMBIGUOUS`` member exists. Sage §A Q1a Anta-ratified
+        """``ClassifierVerdict.AMBIGUOUS`` member exists. Sage §A Q1a Anta-ratified
         as the third verdict (NOT folded into WARRIOR_BUG)."""
-        from bonfire.verify import BounceVerdict
+        from bonfire.verify import ClassifierVerdict
 
-        assert hasattr(BounceVerdict, "AMBIGUOUS")
+        assert hasattr(ClassifierVerdict, "AMBIGUOUS")
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_sage_under_marked_value_is_canonical_string(self) -> None:
         """Verdict value is the snake_case string (StrEnum convention)."""
-        from bonfire.verify import BounceVerdict
+        from bonfire.verify import ClassifierVerdict
 
-        assert BounceVerdict.SAGE_UNDER_MARKED.value == "sage_under_marked"
+        assert ClassifierVerdict.SAGE_UNDER_MARKED.value == "sage_under_marked"
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_warrior_bug_value_is_canonical_string(self) -> None:
-        """``BounceVerdict.WARRIOR_BUG`` value is ``'warrior_bug'``."""
-        from bonfire.verify import BounceVerdict
+        """``ClassifierVerdict.WARRIOR_BUG`` value is ``'warrior_bug'``."""
+        from bonfire.verify import ClassifierVerdict
 
-        assert BounceVerdict.WARRIOR_BUG.value == "warrior_bug"
+        assert ClassifierVerdict.WARRIOR_BUG.value == "warrior_bug"
 
     @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_ambiguous_value_is_canonical_string(self) -> None:
-        """``BounceVerdict.AMBIGUOUS`` value is ``'ambiguous'``."""
-        from bonfire.verify import BounceVerdict
+        """``ClassifierVerdict.AMBIGUOUS`` value is ``'ambiguous'``."""
+        from bonfire.verify import ClassifierVerdict
 
-        assert BounceVerdict.AMBIGUOUS.value == "ambiguous"
+        assert ClassifierVerdict.AMBIGUOUS.value == "ambiguous"
 
 
 # ---------------------------------------------------------------------------

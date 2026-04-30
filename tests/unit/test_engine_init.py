@@ -1,14 +1,16 @@
-"""Canonical RED — public export surface of ``bonfire.engine`` (BON-334).
+"""Canonical RED — public export surface of ``bonfire.engine``.
 
 Synthesized from Knight-A orchestration lens + Knight-B contract-fidelity lens.
 
-Locks the 14-symbol ``__all__`` surface against V1 (see ``bonfire/engine/__init__.py``
-in the v1 reference). The compiler interface (V1 ``compiler`` kwarg, V1
-``test_executor_compiler.py``) is intentionally omitted for v0.1 (Sage D3).
+Locks the 15-symbol ``__all__`` surface. The 15th symbol —
+``SageCorrectionResolvedGate`` — is promoted into ``__all__`` once the
+sage-correction-bounce stage is wired into the standard build pipeline.
+The compiler interface (V1 ``compiler`` kwarg, V1
+``test_executor_compiler.py``) is intentionally omitted for v0.1.
 
-Shim pattern (Sage D1): per-test lazy ``import`` inside each test body. This
+Shim pattern: per-test lazy ``import`` inside each test body. This
 produces granular per-test RED rather than one collection ERROR, so the
-Warrior sees ticket progress move test-by-test as implementation lands.
+implementer sees ticket progress move test-by-test as implementation lands.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 # ---------------------------------------------------------------------------
-# Canonical 14-symbol public surface — matches V1 ``bonfire/engine/__init__.py``.
+# Canonical 15-symbol public surface.
 # ---------------------------------------------------------------------------
 
 _EXPECTED_PUBLIC: tuple[str, ...] = (
@@ -31,6 +33,7 @@ _EXPECTED_PUBLIC: tuple[str, ...] = (
     "PipelineResult",
     "RedPhaseGate",
     "ReviewApprovalGate",
+    "SageCorrectionResolvedGate",
     "StageExecutor",
     "TestPassGate",
     "VerificationGate",
@@ -53,16 +56,23 @@ class TestAllList:
         assert all(isinstance(name, str) for name in _e.__all__)
 
     def test_all_list_matches_expected_set(self) -> None:
-        """``__all__`` equals the 14-symbol canonical set (order-free)."""
+        """``__all__`` equals the 15-symbol canonical set (order-free)."""
         from bonfire import engine as _e
 
         assert set(_e.__all__) == set(_EXPECTED_PUBLIC)
 
-    def test_all_list_contains_exactly_14_symbols(self) -> None:
-        """The v0.1 engine exports exactly 14 names — no compiler symbols (Sage D3)."""
+    def test_all_list_contains_exactly_15_symbols(self) -> None:
+        """The v0.1 engine exports exactly 15 names — no compiler symbols."""
         from bonfire import engine as _e
 
-        assert len(set(_e.__all__)) == 14
+        assert len(set(_e.__all__)) == 15
+
+    def test_sage_correction_resolved_gate_in_all(self) -> None:
+        """``SageCorrectionResolvedGate`` is the 15th symbol — promoted into
+        ``__all__`` once the sage-correction-bounce stage is wired."""
+        from bonfire import engine as _e
+
+        assert "SageCorrectionResolvedGate" in _e.__all__
 
     def test_all_list_is_sorted(self) -> None:
         """``__all__`` is sorted — mirrors V1 style."""

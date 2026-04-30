@@ -9,9 +9,9 @@ and §D10 surface map (lines 725-801).
 
 Decisions ratified by Anta:
 - Q1 PATH β: handler at bonfire.handlers.merge_preflight with module-level
-  ROLE = AgentRole.VERIFIER. NOT in HANDLER_ROLE_MAP. The 4-entry
-  assertion at test_handlers_package.py:118 stays exactly at
-  {bard, wizard, herald, architect}.
+  ROLE = AgentRole.VERIFIER. NOT in HANDLER_ROLE_MAP. The map currently
+  binds {bard, wizard, herald, architect, sage_correction_bounce}; the
+  merge_preflight verifier remains absent regardless of map growth.
 - Q6 ALLOW-WITH-ANNOTATION for pre_existing_debt (gate test file).
 """
 
@@ -113,15 +113,27 @@ class _MockScratchFactory:
         self._raise_on_enter = raise_on_enter
         self.acquire_calls: list[dict[str, Any]] = []
 
-    def acquire(self, base_ref: str, *, pr_number: int | None = None, prefix: str = "preflight") -> _MockScratchContext:
+    def acquire(
+        self, base_ref: str, *, pr_number: int | None = None, prefix: str = "preflight"
+    ) -> _MockScratchContext:
         self.acquire_calls.append({"base_ref": base_ref, "pr_number": pr_number, "prefix": prefix})
         if self._raise_on_acquire is not None:
             raise self._raise_on_acquire
         return _MockScratchContext(self._info, raise_on_enter=self._raise_on_enter)
 
 
-def _make_handler(*, github_client: Any = None, scratch_factory: Any = None, repo_path: Path | None = None, base_branch: str = "master") -> Any:
-    gh = github_client if github_client is not None else (MockGitHubClient() if MockGitHubClient else AsyncMock())
+def _make_handler(
+    *,
+    github_client: Any = None,
+    scratch_factory: Any = None,
+    repo_path: Path | None = None,
+    base_branch: str = "master",
+) -> Any:
+    gh = (
+        github_client
+        if github_client is not None
+        else (MockGitHubClient() if MockGitHubClient else AsyncMock())
+    )
     factory = scratch_factory if scratch_factory is not None else _MockScratchFactory()
     return MergePreflightHandler(
         github_client=gh,
@@ -186,7 +198,9 @@ class TestPRNumberExtraction:
         assert isinstance(result, Envelope)
 
     @pytest.mark.asyncio
-    async def test_reads_pr_from_envelope_metadata_final_fallback(self, preflight_stage: StageSpec) -> None:
+    async def test_reads_pr_from_envelope_metadata_final_fallback(
+        self, preflight_stage: StageSpec
+    ) -> None:
         """envelope.metadata[META_PR_NUMBER] final fallback when prior_results lacks it."""
         envelope = Envelope(task="t", metadata={META_PR_NUMBER: "55"})
         prior = {META_REVIEW_VERDICT: "approve"}
@@ -363,20 +377,29 @@ class TestModuleRoleConstant:
 
         assert merge_preflight.ROLE == "verifier"
 
-    def test_handler_role_map_stays_at_four_entries(self) -> None:
-        """Path β contract anchor: HANDLER_ROLE_MAP NOT extended to 5 entries.
+    def test_handler_role_map_excludes_merge_preflight(self) -> None:
+        """Path β contract anchor: the deterministic merge_preflight verifier
+        bypasses the gamified-display map regardless of how many other
+        handlers are registered.
 
         Sage §A Q1 line 37 + §D10 line 767: deterministic handler bypasses
-        gamified-display map. The 4-entry assertion at
-        test_handlers_package.py:118 must keep holding.
+        gamified-display map. The synthesizer-correction stage IS in the
+        map (binds to ``AgentRole.SYNTHESIZER``); the merge_preflight
+        verifier is not.
         """
         import bonfire.handlers as handlers_pkg
 
-        assert set(handlers_pkg.HANDLER_ROLE_MAP.keys()) == {
+        keys = set(handlers_pkg.HANDLER_ROLE_MAP.keys())
+        assert "merge_preflight" not in keys, (
+            f"merge_preflight must NOT be in HANDLER_ROLE_MAP; got {sorted(keys)}"
+        )
+        # Lock the canonical 5-entry shape so any stem drift is caught here.
+        assert keys == {
             "bard",
             "wizard",
             "herald",
             "architect",
+            "sage_correction_bounce",
         }
 
     def test_merge_preflight_not_in_handler_role_map(self) -> None:
@@ -405,6 +428,7 @@ class TestModuleRoleConstant:
         assert "verifier" in ROLE_DISPLAY
         assert ROLE_DISPLAY["verifier"].gamified == "Assayer"
         assert ROLE_DISPLAY["verifier"].professional == "Verify Agent"
+
 
 # === Knight B INNOVATION (lines 201+) ===
 """RED tests for MergePreflightHandler — classifier/integration innovation surface.
@@ -555,9 +579,7 @@ class TestClassifierPreExistingDebt:
             pytest_stdout="",
             failing_tests=(ft1, ft2),
             sibling_files={},
-            baseline_failures=frozenset(
-                {"tests/unit/test_a.py", "tests/unit/test_b.py"}
-            ),
+            baseline_failures=frozenset({"tests/unit/test_a.py", "tests/unit/test_b.py"}),
             sibling_detection_status="ok",
         )
         assert result.verdict == PreflightVerdict.PRE_EXISTING_DEBT
@@ -992,9 +1014,7 @@ class TestSiblingDetection:
         from bonfire.handlers.merge_preflight import detect_sibling_prs
 
         mock = MockGitHubClient()
-        files_by_pr, status = await detect_sibling_prs(
-            mock, "master", current_pr_number=42
-        )
+        files_by_pr, status = await detect_sibling_prs(mock, "master", current_pr_number=42)
         assert files_by_pr == {}
         assert status == "ok"
 
@@ -1020,9 +1040,7 @@ class TestSiblingDetection:
                 },
             ],
         )
-        files_by_pr, status = await detect_sibling_prs(
-            mock, "master", current_pr_number=42
-        )
+        files_by_pr, status = await detect_sibling_prs(mock, "master", current_pr_number=42)
         assert status == "ok"
         assert 17 in files_by_pr
         assert "src/bonfire/persona.py" in files_by_pr[17]
@@ -1051,9 +1069,7 @@ class TestSiblingDetection:
                 },
             ],
         )
-        files_by_pr, status = await detect_sibling_prs(
-            mock, "master", current_pr_number=42
-        )
+        files_by_pr, status = await detect_sibling_prs(mock, "master", current_pr_number=42)
         assert 42 not in files_by_pr
         assert 17 in files_by_pr
 

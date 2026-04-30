@@ -1496,3 +1496,46 @@ class TestExecutorUsesLoadSettingsOrDefaultFactory:
             "settings=None is passed; the constructor must call "
             "load_settings_or_default() and assign the result."
         )
+
+
+# ===========================================================================
+# KT-002 — Last-resort _fail_envelope hardening (BON-664, CR-02 from PR #13)
+# ===========================================================================
+
+
+class TestExecutorFailEnvelopeUnnamedTask:
+    """Pin the contract that ``StageExecutor._fail_envelope`` never produces
+    an Envelope with an empty ``task`` field — when ``stage.name`` is empty
+    or ``None``, the resulting Envelope's ``task`` MUST be the literal
+    ``"<unnamed>"``.
+
+    Origin: BON-334 PR #13 pre-merge dual-lens gate finding CR-02 (Important).
+    Source memo:
+        ``docs/audit/retrospective/code-reviewer-2026-04-18T20-30-50Z.md``
+
+    Production site: ``src/bonfire/engine/executor.py:299-305``. Today it
+    sets ``task=stage.name``; after the Warrior change it becomes
+    ``task=stage.name or "<unnamed>"``.
+    """
+
+    def test_executor_fail_envelope_uses_unnamed_when_stage_name_empty(self) -> None:
+        """Empty stage.name -> _fail_envelope().task == "<unnamed>"."""
+        from bonfire.engine.executor import StageExecutor
+
+        stage = StageSpec(name="", agent_name="some-agent")
+        env = StageExecutor._fail_envelope(stage=stage, message="boom")
+
+        assert env.task == "<unnamed>", (
+            "StageExecutor._fail_envelope must set task='<unnamed>' when "
+            "stage.name is empty (BON-664 / CR-02). Got task="
+            f"{env.task!r}. Site: executor.py:299-305. The Warrior changes "
+            "``task=stage.name`` -> ``task=stage.name or '<unnamed>'``."
+        )
+        # The error and agent_name remain untouched -- the contract is
+        # narrowly scoped to the task field.
+        assert env.agent_name == "some-agent", (
+            "agent_name must pass through unchanged from stage.agent_name."
+        )
+        assert env.error is not None and env.error.message == "boom", (
+            "Error detail must still be propagated into the failed envelope."
+        )

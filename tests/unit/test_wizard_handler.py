@@ -555,9 +555,7 @@ class TestResolverWiring:
     """RED tests for BON-351 D1/D2(c) — wizard handler resolver wiring."""
 
     @pytest.mark.asyncio
-    async def test_resolver_called_for_review_model(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_resolver_called_for_review_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Sage memo D1 + D2(c) — the wizard handler MUST call
         resolve_model_for_role with the canonical role string
         ``ROLE.value`` ("reviewer"). The resolved model lands on the
@@ -570,9 +568,7 @@ class TestResolverWiring:
             captured["role"] = role
             return "RESOLVED-FOR-REVIEWER"
 
-        monkeypatch.setattr(
-            "bonfire.handlers.wizard.resolve_model_for_role", fake_resolver
-        )
+        monkeypatch.setattr("bonfire.engine.model_resolver.resolve_model_for_role", fake_resolver)
 
         # Stage with NO model_override -> resolver result must win over
         # config.model per the documented precedence (D2).

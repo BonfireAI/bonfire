@@ -30,8 +30,9 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
-from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
+from bonfire.engine import factory
+from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import (
     META_PR_NUMBER,
     META_REVIEW_SEVERITY,
@@ -255,13 +256,11 @@ class WizardHandler:
         event_bus: EventBus | None = None,
         settings: BonfireSettings | None = None,
     ) -> None:
-        from bonfire.models.config import BonfireSettings as _BonfireSettings
-
         self._github_client = github_client
         self._backend = backend
         self._config = config
         self._bus = event_bus
-        self._settings = settings if settings is not None else _BonfireSettings()
+        self._settings = settings if settings is not None else factory.load_settings_or_default()
 
     async def _emit(self, event: Any) -> None:
         """Emit an event on the bus when the bus exists. No-op otherwise."""
@@ -305,13 +304,19 @@ class WizardHandler:
                 pr_number=pr_number,
             )
 
+            # Wizard call site preserves the canonical ``ROLE.value``
+            # ("reviewer") -- gamified passthrough at executor + pipeline
+            # uses ``stage.role``, but the reviewer handler is locked to
+            # the canonical string per Sage memo §K and the existing
+            # ``tests/unit/test_wizard_handler.py:586`` assertion contract.
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",
-                model=(
-                    stage.model_override
-                    or resolve_model_for_role(ROLE.value, self._settings)
-                    or self._config.model
+                model=resolve_dispatch_model(
+                    explicit_override=stage.model_override or "",
+                    role=ROLE.value,
+                    settings=self._settings,
+                    config=self._config,
                 ),
                 metadata={"role": ROLE.value},
             )

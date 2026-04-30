@@ -987,9 +987,7 @@ class TestModelResolution:
             captured["role"] = role
             return "claude-haiku-4-5"
 
-        monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role", fake_resolver
-        )
+        monkeypatch.setattr("bonfire.engine.model_resolver.resolve_model_for_role", fake_resolver)
 
         backend = _MockBackend()
         ex = StageExecutor(backend=backend, bus=bus, config=config)
@@ -1010,7 +1008,7 @@ class TestModelResolution:
         from bonfire.engine.executor import StageExecutor
 
         monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role",
+            "bonfire.engine.model_resolver.resolve_model_for_role",
             lambda role, settings: "RESOLVER-MODEL",
         )
 
@@ -1019,9 +1017,7 @@ class TestModelResolution:
             def __init__(self) -> None:
                 self.captured_options: DispatchOptions | None = None
 
-            async def execute(
-                self, envelope: Envelope, *, options: DispatchOptions
-            ) -> Envelope:
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
                 self.captured_options = options
                 return envelope.with_result("ok", cost_usd=0.01)
 
@@ -1054,7 +1050,7 @@ class TestModelResolution:
         from bonfire.engine.executor import StageExecutor
 
         monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role",
+            "bonfire.engine.model_resolver.resolve_model_for_role",
             lambda role, settings: "",
         )
 
@@ -1064,9 +1060,7 @@ class TestModelResolution:
             def __init__(self) -> None:
                 self.captured_options: DispatchOptions | None = None
 
-            async def execute(
-                self, envelope: Envelope, *, options: DispatchOptions
-            ) -> Envelope:
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
                 self.captured_options = options
                 return envelope.with_result("ok", cost_usd=0.01)
 
@@ -1139,7 +1133,7 @@ class TestVocabularyParity:
             return "RESOLVED-FAKE"
 
         monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role",
+            "bonfire.engine.model_resolver.resolve_model_for_role",
             fake_resolver,
             raising=False,
         )
@@ -1204,7 +1198,7 @@ class TestVocabularyParity:
             return "RESOLVED-FAKE"
 
         monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role",
+            "bonfire.engine.model_resolver.resolve_model_for_role",
             fake_resolver,
             raising=False,
         )
@@ -1269,21 +1263,14 @@ class TestVocabularyParity:
         assert resolve_model_for_role("", settings) == settings.models.balanced
 
         # Unknown role string -> BALANCED (graceful degradation, not raise).
-        assert (
-            resolve_model_for_role("unknown_role_xyz", settings)
-            == settings.models.balanced
-        )
+        assert resolve_model_for_role("unknown_role_xyz", settings) == settings.models.balanced
 
         # Whitespace+case normalization: "  WaRrIoR  " -> "warrior" -> FAST.
         # This is NOT BALANCED — the resolver strips/lowercases first.
         # Asserting !=balanced ensures the test isn't trivially satisfied
         # by a "raise on weird input" implementation drift.
-        assert (
-            resolve_model_for_role("  WaRrIoR  ", settings) == settings.models.fast
-        )
-        assert (
-            resolve_model_for_role("  WaRrIoR  ", settings) != settings.models.balanced
-        )
+        assert resolve_model_for_role("  WaRrIoR  ", settings) == settings.models.fast
+        assert resolve_model_for_role("  WaRrIoR  ", settings) != settings.models.balanced
 
         # And the executor itself never raises when given an unknown role —
         # the never-raise discipline (C19) extends to the resolver path.
@@ -1295,15 +1282,13 @@ class TestVocabularyParity:
             return settings.models.balanced
 
         monkeypatch.setattr(
-            "bonfire.engine.executor.resolve_model_for_role",
+            "bonfire.engine.model_resolver.resolve_model_for_role",
             fake_resolver,
             raising=False,
         )
 
         unknown_stage = _stage(name="unk_stage", agent_name="unk-agent")
-        unknown_stage = unknown_stage.model_copy(
-            update={"role": "unknown_role_xyz"}
-        )
+        unknown_stage = unknown_stage.model_copy(update={"role": "unknown_role_xyz"})
 
         ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config)
         result = await ex.execute_single(
@@ -1317,3 +1302,197 @@ class TestVocabularyParity:
         # The unknown role is passed verbatim to the resolver — no call-site
         # normalization (Sage D1 invariant).
         assert "unknown_role_xyz" in captured_roles
+
+
+# ===========================================================================
+# Cluster 351 — executor call-site integration: model_resolver + factory
+# ===========================================================================
+#
+# Sage memo: docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md
+# Sections F (Axis 1) + G (Axis 2) + H.4 (Knight B test contract).
+#
+# After Axis 1 lands, ``executor.py`` no longer holds an inline 3-tier
+# ``or`` chain when building DispatchOptions; it routes through
+# ``bonfire.engine.model_resolver.resolve_dispatch_model``.
+#
+# After Axis 2 lands, ``executor.py``'s ``settings=None`` default branch
+# no longer calls ``BonfireSettings()`` directly; it routes through
+# ``bonfire.engine.factory.load_settings_or_default``, which warns on
+# load failure and never raises.
+#
+# These RED tests assert both wirings via patch-and-spy.
+
+
+class _EnvelopeAndOptionsRecordingExecutorBackend:
+    """Captures both Envelope and DispatchOptions for assertion."""
+
+    def __init__(self) -> None:
+        self.captured_envelopes: list[Envelope] = []
+        self.captured_options: list[DispatchOptions] = []
+
+    async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+        self.captured_envelopes.append(envelope)
+        self.captured_options.append(options)
+        return envelope.with_result(f"{envelope.agent_name} done", cost_usd=0.01)
+
+    async def health_check(self) -> bool:
+        return True
+
+
+class TestExecutorUsesResolveDispatchModel:
+    """Sage memo cluster-351 §H.4.1 — executor calls resolve_dispatch_model.
+
+    Per Sage memo §F.2 item 1, the inline 3-tier ``or`` chain in
+    ``executor.py``'s ``_dispatch_backend`` is replaced with a call to
+    ``bonfire.engine.model_resolver.resolve_dispatch_model``. The
+    envelope.model carries the per-stage override (still empty-string
+    sentinel when no override; per ``executor.py:196``), and the helper
+    receives it as ``explicit_override`` along with stage.role, settings,
+    and config.
+
+    Sage memo: ``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md``
+    """
+
+    async def test_executor_uses_resolve_dispatch_model_helper(
+        self,
+        bus: EventBus,
+        config: PipelineConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Executor calls resolve_dispatch_model with documented kwargs.
+
+        Patches ``bonfire.engine.executor.resolve_dispatch_model`` and
+        asserts the helper is invoked at the dispatch site (mirrors the
+        pipeline test in ``test_engine_pipeline.py``).
+        """
+        from bonfire.engine.executor import StageExecutor
+
+        captured_kwargs: list[dict[str, Any]] = []
+
+        def fake_helper(
+            *,
+            explicit_override: str,
+            role: str,
+            settings: object,
+            config: object,
+        ) -> str:
+            captured_kwargs.append(
+                {
+                    "explicit_override": explicit_override,
+                    "role": role,
+                    "settings": settings,
+                    "config": config,
+                }
+            )
+            return "RESOLVED-VIA-HELPER"
+
+        monkeypatch.setattr(
+            "bonfire.engine.executor.resolve_dispatch_model",
+            fake_helper,
+            raising=False,
+        )
+
+        backend = _EnvelopeAndOptionsRecordingExecutorBackend()
+        ex = StageExecutor(backend=backend, bus=bus, config=config)
+        stage = StageSpec(
+            name="warrior-stage",
+            agent_name="warrior",
+            role="warrior",
+            model_override="ENVELOPE-OVERRIDE",
+        )
+        plan = _plan(stage)
+        await ex.execute_single(
+            stage=stage,
+            prior_results={},
+            total_cost=0.0,
+            plan=plan,
+            session_id="s",
+        )
+
+        # Helper called exactly once at the dispatch site.
+        assert len(captured_kwargs) == 1, (
+            "resolve_dispatch_model should be called exactly once per "
+            f"backend-mode dispatch; got {len(captured_kwargs)} calls."
+        )
+        kwargs = captured_kwargs[0]
+        # The executor passes envelope.model as explicit_override
+        # (envelope built at executor.py:196 with stage.model_override or "").
+        assert kwargs["explicit_override"] == "ENVELOPE-OVERRIDE"
+        assert kwargs["role"] == "warrior"
+        # settings + config come from the executor instance (identity check).
+        assert kwargs["settings"] is ex._settings
+        assert kwargs["config"] is ex._config
+
+        # Helper return value flows into DispatchOptions.model.
+        assert len(backend.captured_options) == 1
+        assert backend.captured_options[0].model == "RESOLVED-VIA-HELPER"
+
+
+class TestExecutorUsesLoadSettingsOrDefaultFactory:
+    """Sage memo cluster-351 §H.4.2 — executor calls factory on
+    ``settings=None``.
+
+    Per Sage memo §G.2 item 2, the executor's existing silent
+    ``BonfireSettings()`` fallback at ``executor.py:92`` is replaced with
+    a call to ``bonfire.engine.factory.load_settings_or_default``. The
+    factory warns on load failure (``ValidationError, TOMLDecodeError,
+    OSError``) and falls back to a defaults-only ``BonfireSettings`` via
+    ``model_construct``.
+
+    Sage memo: ``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md``
+    """
+
+    def test_executor_uses_load_settings_or_default_factory(
+        self,
+        bus: EventBus,
+        config: PipelineConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Executor constructor invokes factory on settings=None.
+
+        Patches ``bonfire.engine.factory.load_settings_or_default`` with
+        a sentinel-returning mock and asserts (a) the mock is called once
+        with no args, (b) the executor's ``_settings`` attribute equals
+        the mock's return value.
+
+        This isolates the factory wiring from the underlying
+        BonfireSettings construction; whether or not a bonfire.toml exists
+        on cwd is irrelevant once the factory is the seam.
+        """
+        from bonfire.engine.executor import StageExecutor
+
+        # Sentinel object the factory returns; the executor must adopt it.
+        sentinel_settings = object()
+
+        call_count = {"n": 0}
+
+        def fake_factory() -> object:
+            call_count["n"] += 1
+            return sentinel_settings
+
+        monkeypatch.setattr(
+            "bonfire.engine.factory.load_settings_or_default",
+            fake_factory,
+            raising=False,
+        )
+
+        ex = StageExecutor(
+            backend=_MockBackend(),
+            bus=bus,
+            config=config,
+            settings=None,
+        )
+
+        # Factory invoked exactly once on the settings=None branch.
+        assert call_count["n"] == 1, (
+            "load_settings_or_default should be called exactly once when "
+            f"settings=None is passed; got {call_count['n']} calls. The "
+            "executor's __init__ must route the None branch through "
+            "bonfire.engine.factory.load_settings_or_default per Sage memo §G.2."
+        )
+        # Executor adopted the factory's return value.
+        assert ex._settings is sentinel_settings, (
+            "Executor._settings should be the factory's return value when "
+            "settings=None is passed; the constructor must call "
+            "load_settings_or_default() and assign the result."
+        )

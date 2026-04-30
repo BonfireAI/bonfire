@@ -14,6 +14,9 @@ from __future__ import annotations
 import re
 
 from bonfire.models.envelope import (
+    META_CLASSIFIER_VERDICT,
+    META_CORRECTION_ESCALATED,
+    META_CORRECTION_VERDICT,
     META_PREFLIGHT_TEST_DEBT_NOTED,
     Envelope,
     TaskStatus,
@@ -26,6 +29,11 @@ _NONZERO_FAILED_RE = re.compile(r"[1-9]\d*\s+failed", re.IGNORECASE)
 # Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.
 _MERGE_PREFLIGHT_GATE_NAME: str = "merge_preflight_passed"
 
+# Gate name string -- locked per Sage §A Q3 line 124 + §D-CL.6 #5 for the
+# sage-correction gate. Mirrors the ``merge_preflight_passed`` precedent
+# above (gate name pinned for stage spec lookups).
+_SAGE_CORRECTION_GATE_NAME: str = "sage_correction_resolved"
+
 __all__ = [
     "CompletionGate",
     "CostLimitGate",
@@ -33,6 +41,7 @@ __all__ = [
     "MergePreflightGate",
     "RedPhaseGate",
     "ReviewApprovalGate",
+    "SageCorrectionResolvedGate",
     "TestPassGate",
     "VerificationGate",
 ]
@@ -173,17 +182,121 @@ class MergePreflightGate:
             )
 
         # FAILED (or any non-COMPLETED) -> blocking gate.
-        error_type = (
-            envelope.error.error_type if envelope.error is not None else "unknown"
-        )
-        message = (
-            envelope.error.message if envelope.error is not None else "preflight blocked"
-        )
+        error_type = envelope.error.error_type if envelope.error is not None else "unknown"
+        message = envelope.error.message if envelope.error is not None else "preflight blocked"
         return GateResult(
             gate_name=_MERGE_PREFLIGHT_GATE_NAME,
             passed=False,
             severity="error",
             message=f"Preflight blocked merge: {error_type} -- {message}",
+        )
+
+
+class SageCorrectionResolvedGate:
+    """Gate adapter for :class:`SageCorrectionBounceHandler` envelopes.
+
+    Per Sage §A Q9 (line 296) + §D-CL.1 lines 93-97 + user-prompt Q9a.
+
+    Severity table:
+        - COMPLETED + ``META_CORRECTION_VERDICT="corrected"``
+              -> ``passed=True, severity="info"``
+        - COMPLETED + ``META_CORRECTION_VERDICT="not_needed_*"``
+              -> ``passed=True, severity="info"``
+        - COMPLETED + ``META_CORRECTION_VERDICT="warrior_bug"``
+              -> ``passed=True, severity="warning"`` (Sage §A Q9 line 306;
+                pipeline proceeds to Bard so Wizard sees the bounce)
+        - COMPLETED + ``META_CORRECTION_VERDICT="escalated"``
+              -> ``passed=True, severity="warning"``
+        - COMPLETED + ``META_CORRECTION_ESCALATED is True``
+              -> ``passed=True, severity="warning"`` (alternative metadata
+                key carrying the same escalation signal)
+        - COMPLETED + ``META_CLASSIFIER_VERDICT="ambiguous"``
+              -> ``passed=False, severity="error"`` (user-prompt Q9a;
+                forces Wizard inspection on uncertain inputs)
+        - COMPLETED + neither key present
+              -> ``passed=True, severity="info"`` (skip-pass path; handler
+                already decided to skip-pass per Sage §D-CL.1 line 77)
+        - FAILED with any error_type
+              -> ``passed=False, severity="error"``
+
+    Gate name is locked at ``"sage_correction_resolved"`` (matches the
+    stage spec's ``gates=["sage_correction_resolved"]`` entry).
+    """
+
+    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
+        del context  # gate is envelope-only
+
+        if envelope.status != TaskStatus.COMPLETED:
+            error_type = envelope.error.error_type if envelope.error is not None else "unknown"
+            message = (
+                envelope.error.message if envelope.error is not None else "sage_correction blocked"
+            )
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=False,
+                severity="error",
+                message=f"Sage correction blocked: {error_type} -- {message}",
+            )
+
+        # AMBIGUOUS classifier verdict halts the pipeline (user-prompt Q9a).
+        # Either metadata key may carry the AMBIGUOUS signal -- the handler
+        # writes META_CLASSIFIER_VERDICT during escalation, but legacy
+        # callers (and the Knight A test fixtures) sometimes write to
+        # META_CORRECTION_VERDICT instead.
+        classifier_verdict = str(
+            envelope.metadata.get(META_CLASSIFIER_VERDICT, ""),
+        ).lower()
+        # Correction verdict drives info / warning routing.
+        correction_verdict = str(
+            envelope.metadata.get(META_CORRECTION_VERDICT, ""),
+        ).lower()
+        if classifier_verdict == "ambiguous" or correction_verdict == "ambiguous":
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=False,
+                severity="error",
+                message=(
+                    "Sage correction classifier returned AMBIGUOUS; Wizard inspection required."
+                ),
+            )
+
+        if correction_verdict == "corrected":
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=True,
+                severity="info",
+                message="Sage correction succeeded.",
+            )
+        if correction_verdict.startswith("not_needed"):
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=True,
+                severity="info",
+                message="Sage correction skipped (warrior was already green).",
+            )
+        if correction_verdict in ("escalated", "warrior_bug"):
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=True,
+                severity="warning",
+                message=("Sage correction escalated; pipeline proceeds for Wizard review."),
+            )
+
+        # Escalation flag (alternative spelling carrying the same signal).
+        if envelope.metadata.get(META_CORRECTION_ESCALATED) is True:
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=True,
+                severity="warning",
+                message="Sage correction escalated; pipeline proceeds for Wizard review.",
+            )
+
+        # Skip-pass / clean default: COMPLETED with no correction metadata.
+        return GateResult(
+            gate_name=_SAGE_CORRECTION_GATE_NAME,
+            passed=True,
+            severity="info",
+            message="Sage correction not needed (skip-pass).",
         )
 
 

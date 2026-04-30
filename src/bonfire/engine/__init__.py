@@ -31,17 +31,20 @@ from bonfire.engine.gates import (
     GateChain,
     RedPhaseGate,
     ReviewApprovalGate,
+    SageCorrectionResolvedGate,  # noqa: F401 -- not in __all__; reachable via package attr access
     TestPassGate,
     VerificationGate,
 )
 from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 
-# ``MergePreflightGate`` is intentionally NOT exported in
-# ``__all__`` here; the canonical 14-symbol surface is locked by
-# ``tests/unit/test_engine_init.py``. The gate is importable from the
-# submodule (``from bonfire.engine.gates import MergePreflightGate``) which
-# is sufficient for v0.1 wiring. Promoting it to ``__all__`` is a follow-up
-# decision once the 14-surface lock is widened.
+# ``MergePreflightGate`` and ``SageCorrectionResolvedGate`` are intentionally
+# NOT in ``__all__`` -- the canonical 14-symbol surface is locked by
+# ``tests/unit/test_engine_init.py``. ``SageCorrectionResolvedGate`` is
+# imported here so it is available via attribute access on the package
+# (``hasattr(bonfire.engine, "SageCorrectionResolvedGate")``); promoting
+# it to ``__all__`` is a follow-up decision once the 14-surface lock is
+# widened. ``MergePreflightGate`` is reachable only via the submodule
+# (``from bonfire.engine.gates import MergePreflightGate``).
 
 __all__ = [
     "CheckpointData",

@@ -24,6 +24,7 @@ from bonfire.handlers.architect import ArchitectHandler
 from bonfire.handlers.bard import BardHandler
 from bonfire.handlers.herald import HeraldHandler
 from bonfire.handlers.merge_preflight import MergePreflightHandler
+from bonfire.handlers.sage_correction_bounce import SageCorrectionBounceHandler
 from bonfire.handlers.wizard import WizardHandler
 
 HANDLER_ROLE_MAP: dict[str, AgentRole] = {
@@ -39,5 +40,6 @@ __all__ = [
     "BardHandler",
     "HeraldHandler",
     "MergePreflightHandler",
+    "SageCorrectionBounceHandler",
     "WizardHandler",
 ]

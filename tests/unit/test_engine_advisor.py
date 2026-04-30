@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.advisor.VaultAdvisor`` (BON-334).
+"""Canonical RED — ``bonfire.engine.advisor.VaultAdvisor``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

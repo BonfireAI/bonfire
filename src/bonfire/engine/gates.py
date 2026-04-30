@@ -12,6 +12,7 @@ catches it and returns ``PipelineResult(success=False)``.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from bonfire.models.envelope import (
     META_CLASSIFIER_VERDICT,
@@ -22,6 +23,9 @@ from bonfire.models.envelope import (
     TaskStatus,
 )
 from bonfire.models.plan import GateContext, GateResult
+
+if TYPE_CHECKING:
+    from bonfire.protocols import QualityGate
 
 # Pattern matching a non-zero count followed by "failed" (case-insensitive).
 _NONZERO_FAILED_RE = re.compile(r"[1-9]\d*\s+failed", re.IGNORECASE)
@@ -277,7 +281,7 @@ class SageCorrectionResolvedGate:
 class GateChain:
     """Sequential gate evaluator with short-circuit on error-severity failure."""
 
-    def __init__(self, gates: list) -> None:
+    def __init__(self, gates: list[QualityGate]) -> None:
         self.gates = gates
 
     async def evaluate_all(self, envelope: Envelope, context: GateContext) -> list[GateResult]:

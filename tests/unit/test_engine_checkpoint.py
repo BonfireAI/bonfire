@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.checkpoint`` (BON-334).
+"""Canonical RED — ``bonfire.engine.checkpoint``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

@@ -7,7 +7,7 @@ that file. Its ``test_rejects_compiler_kwarg`` sentinel MUST remain green;
 this file also independently re-asserts that invariant.
 
 Sage decisions asserted (BON-337 unified Sage doc, 2026-04-18):
-    D3 (from BON-334): ``compiler=`` kwarg rejected.
+    D3: ``compiler=`` kwarg rejected.
     D5: Constructor accepts ``tool_policy: ToolPolicy | None = None``,
         keyword-only. Stored as ``self._tool_policy``. ``PipelineEngine``
         does NOT use ``__slots__``.
@@ -37,7 +37,6 @@ from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import Envelope, ErrorDetail
 from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 from bonfire.protocols import DispatchOptions
-
 
 # ---------------------------------------------------------------------------
 # Mocks
@@ -102,20 +101,14 @@ class TestPipelineConstructorAcceptsToolPolicy:
         from bonfire.engine.pipeline import PipelineEngine
 
         policy = DefaultToolPolicy()
-        engine = PipelineEngine(
-            backend=_MockBackend(), bus=bus, config=config, tool_policy=policy
-        )
+        engine = PipelineEngine(backend=_MockBackend(), bus=bus, config=config, tool_policy=policy)
         assert engine._tool_policy is policy
 
-    def test_accepts_tool_policy_none_explicit(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    def test_accepts_tool_policy_none_explicit(self, bus: EventBus, config: PipelineConfig) -> None:
         """Sage D5 — explicit ``tool_policy=None`` still valid."""
         from bonfire.engine.pipeline import PipelineEngine
 
-        engine = PipelineEngine(
-            backend=_MockBackend(), bus=bus, config=config, tool_policy=None
-        )
+        engine = PipelineEngine(backend=_MockBackend(), bus=bus, config=config, tool_policy=None)
         assert engine._tool_policy is None
 
     def test_tool_policy_kwarg_is_keyword_only(self) -> None:
@@ -326,9 +319,7 @@ class TestPipelineRatchetRunnerObserved:
                 cost_usd=0.0,
             )
 
-        monkeypatch.setattr(
-            "bonfire.engine.pipeline.execute_with_retry", fake_execute_with_retry
-        )
+        monkeypatch.setattr("bonfire.engine.pipeline.execute_with_retry", fake_execute_with_retry)
 
         engine = PipelineEngine(
             backend=_MockBackend(),
@@ -352,9 +343,7 @@ class TestPipelineRatchetRunnerObserved:
 class TestPipelineRolePropagation:
     """Sage D6 — pipeline backend branch propagates ``spec.role`` to DispatchOptions."""
 
-    async def test_role_propagates(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    async def test_role_propagates(self, bus: EventBus, config: PipelineConfig) -> None:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
@@ -520,9 +509,7 @@ class TestPipelineCustomPolicy:
                 return ["CustomTool"]
 
         backend = _MockBackend()
-        engine = PipelineEngine(
-            backend=backend, bus=bus, config=config, tool_policy=_SpyPolicy()
-        )
+        engine = PipelineEngine(backend=backend, bus=bus, config=config, tool_policy=_SpyPolicy())
         await engine.run(_single_plan(role="my-role", agent_name="x"))
         assert calls == ["my-role"]
         _, opts = backend.calls[0]
@@ -542,9 +529,7 @@ class TestPipelineCustomPolicy:
                 return ["X"]
 
         backend = _MockBackend()
-        engine = PipelineEngine(
-            backend=backend, bus=bus, config=config, tool_policy=_SpyPolicy()
-        )
+        engine = PipelineEngine(backend=backend, bus=bus, config=config, tool_policy=_SpyPolicy())
         await engine.run(_single_plan(role="", agent_name="x"))
         assert calls == []
 
@@ -557,9 +542,7 @@ class TestPipelineCustomPolicy:
 class TestPipelineHandlerRouteBypass:
     """Handler-dispatched stages bypass the policy entirely."""
 
-    async def test_handler_stage_skips_policy(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    async def test_handler_stage_skips_policy(self, bus: EventBus, config: PipelineConfig) -> None:
         from bonfire.engine.pipeline import PipelineEngine
 
         spy_invocations = 0
@@ -635,9 +618,7 @@ class TestPipelineNeverRaises:
 class TestPipelineAdversarialRoles:
     """Whitespace / unicode / tool-name-collision role values at pipeline seam."""
 
-    async def test_whitespace_role_pipelined(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    async def test_whitespace_role_pipelined(self, bus: EventBus, config: PipelineConfig) -> None:
         """``"   "`` is truthy so the policy IS called; returns ``[]``."""
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
@@ -651,9 +632,7 @@ class TestPipelineAdversarialRoles:
         assert opts.tools == []
         assert opts.role == "   "
 
-    async def test_unicode_role_pipelined(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    async def test_unicode_role_pipelined(self, bus: EventBus, config: PipelineConfig) -> None:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 

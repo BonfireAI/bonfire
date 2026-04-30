@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.context.ContextBuilder`` (BON-334).
+"""Canonical RED — ``bonfire.engine.context.ContextBuilder``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

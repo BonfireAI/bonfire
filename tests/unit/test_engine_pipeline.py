@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.pipeline`` (BON-334).
+"""Canonical RED — ``bonfire.engine.pipeline``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

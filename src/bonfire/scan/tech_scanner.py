@@ -62,7 +62,9 @@ def _extract_pyproject_deps(text: str) -> set[str]:
 
     Scans [project.dependencies], [project.optional-dependencies.*],
     and [tool.poetry.dependencies] sections. Also extracts names from
-    inline array values like ``dev = ["pytest>=8.0"]``.
+    inline array values like ``dev = ["pytest>=8.0"]`` and from
+    inline-table forms on ``[project]`` like
+    ``optional-dependencies = {dev = ["pytest>=8.0"]}``.
     Returns lowercased package names.
     """
     names: set[str] = set()
@@ -76,6 +78,21 @@ def _extract_pyproject_deps(text: str) -> set[str]:
             re.IGNORECASE,
         ):
             in_deps = True
+            continue
+        # Inline-table form on [project]: ``optional-dependencies = {...}`` or
+        # inline-array form: ``dependencies = [...]``. These never produce a
+        # section header that matches the regex above, so detect them
+        # independently of ``in_deps`` and harvest quoted package specs from
+        # the same line.
+        if not stripped.startswith("#") and re.match(
+            r"(optional-dependencies|dependencies)\s*=\s*[\{\[]",
+            stripped,
+            re.IGNORECASE,
+        ):
+            for spec in re.findall(r'"([^"]+)"', stripped):
+                pkg = re.split(r"[><=!~\[; ]", spec)[0].strip().lower()
+                if pkg:
+                    names.add(pkg)
             continue
         # Any other section header ends the dep section
         if stripped.startswith("[") and in_deps:

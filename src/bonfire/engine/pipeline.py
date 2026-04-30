@@ -27,12 +27,16 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bonfire.agent.tiers import resolve_model_for_role
+from bonfire.agent.tiers import (
+    resolve_model_for_role,  # noqa: F401 -- preserved for monkeypatch sites
+)
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.executor import (
     StageExecutor,  # noqa: F401 -- public re-export for patch/discover
 )
+from bonfire.engine.factory import load_settings_or_default
+from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import (
     BonfireEvent,
@@ -103,8 +107,6 @@ class PipelineEngine:
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
     ) -> None:
-        from bonfire.models.config import BonfireSettings as _BonfireSettings
-
         self._backend = backend
         self._bus = bus
         self._config = config
@@ -113,7 +115,10 @@ class PipelineEngine:
         self._context_builder = context_builder or ContextBuilder()
         self._project_root = project_root
         self._tool_policy = tool_policy
-        self._settings = settings if settings is not None else _BonfireSettings()
+        # Per cluster-351 Sage memo §G.2 -- the settings=None branch routes
+        # through the engine factory so load failures emit a warning rather
+        # than propagate a raw pydantic ValidationError from a constructor.
+        self._settings = settings if settings is not None else load_settings_or_default()
 
     # -- Public API ----------------------------------------------------------
 
@@ -448,12 +453,23 @@ class PipelineEngine:
             # Stage-level role OVERRIDES initial metadata on key collision.
             merged_metadata: dict[str, Any] = {**initial_meta, **stage_role_meta}
 
+            # Per cluster-351 Sage memo §D + §F.2 -- ``Envelope.model`` is an
+            # INTERNAL per-call-site record-keeping field, not a cross-stage
+            # public contract. The previous write
+            # ``spec.model_override or self._config.model`` was dead weight:
+            # cost telemetry sources ``options.model`` (DispatchStarted +
+            # DispatchCompleted events on ``runner.py:109,192``), not
+            # ``envelope.model``. Aligning to the executor's empty-string
+            # sentinel (``executor.py:196``) removes the asymmetry surface;
+            # the resolved dispatch model lives in ``DispatchOptions.model``
+            # only, computed at the dispatch site below via
+            # ``resolve_dispatch_model``.
             envelope = Envelope(
                 envelope_id=session_id,
                 task=task_prompt,
                 context=context,
                 agent_name=spec.agent_name,
-                model=spec.model_override or self._config.model,
+                model=spec.model_override or "",
                 metadata=merged_metadata,
             )
 
@@ -499,11 +515,18 @@ class PipelineEngine:
                     role_tools: list[str] = []
                 else:
                     role_tools = self._tool_policy.tools_for(spec.role)
+                # Per cluster-351 Sage memo §F.2 item 2 -- the inline 3-tier
+                # ``or`` chain is replaced with the engine-side seam
+                # ``resolve_dispatch_model``. Precedence is locked there
+                # (explicit_override -> role-tier -> config.model), and the
+                # three call sites (executor, pipeline, wizard) now share a
+                # single source of truth.
                 options = DispatchOptions(
-                    model=(
-                        spec.model_override
-                        or resolve_model_for_role(spec.role, self._settings)
-                        or self._config.model
+                    model=resolve_dispatch_model(
+                        explicit_override=spec.model_override,
+                        role=spec.role,
+                        settings=self._settings,
+                        config=self._config,
                     ),
                     max_turns=self._config.max_turns,
                     max_budget_usd=self._config.max_budget_usd,

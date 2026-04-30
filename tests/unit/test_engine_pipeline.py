@@ -1306,3 +1306,187 @@ class TestModelResolution:
         await engine.run(plan)
         assert len(backend.captured_options) == 1
         assert backend.captured_options[0].model == "pipeline-config-fallback"
+
+
+# ===========================================================================
+# 19. Cluster 351 — pipeline call-site integration with model_resolver helper
+# ===========================================================================
+#
+# Sage memo: docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md
+# Sections F (Axis 1 Warrior contract) + H.3 (Knight B test contract).
+#
+# After Axis 1 lands, ``pipeline.py`` no longer holds an inline 3-tier
+# ``or`` chain at the dispatch site. The DispatchOptions.model is sourced
+# from ``bonfire.engine.model_resolver.resolve_dispatch_model``. The
+# pipeline's envelope.model field aligns to the executor's empty-string
+# sentinel (Sage decision D — internal field, no public cross-stage
+# contract; ``pipeline.py:456`` dead write deleted).
+#
+# These RED tests assert:
+#   1. After construction, the envelope handed to a backend-mode dispatch
+#      has ``envelope.model == ""`` when no per-stage override is set.
+#      This locks Decision D's "internal field; pipeline aligns to executor
+#      empty-string sentinel."
+#   2. The dispatch site calls ``resolve_dispatch_model(...)`` exactly once
+#      with the documented kwargs (Sage memo §F.2 item 2).
+
+
+class _EnvelopeAndOptionsRecordingPipelineBackend:
+    """Captures both Envelope and DispatchOptions for assertion."""
+
+    def __init__(self) -> None:
+        self.captured_envelopes: list[Envelope] = []
+        self.captured_options: list[DispatchOptions] = []
+
+    async def execute(
+        self, envelope: Envelope, *, options: DispatchOptions
+    ) -> Envelope:
+        self.captured_envelopes.append(envelope)
+        self.captured_options.append(options)
+        return envelope.with_result(f"{envelope.agent_name} done", cost_usd=0.01)
+
+    async def health_check(self) -> bool:
+        return True
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Cluster-351 Axis 1 RED — pipeline.py:456 still writes "
+        "self._config.model into envelope.model; Sage memo decision D "
+        "deletes this dead write and aligns to executor empty-string "
+        "sentinel. RED until Warrior phase lands."
+    ),
+    strict=True,
+)
+class TestPipelineEnvelopeInternalSentinel:
+    """Sage memo cluster-351 §H.3.1 — envelope.model is the empty-string
+    sentinel in pipeline-mode dispatch when no per-stage override exists.
+
+    Per Sage decision D, ``Envelope.model`` is an INTERNAL field; the
+    pipeline's existing write of ``spec.model_override or self._config.model``
+    is dead weight (cost telemetry sources ``options.model``, not
+    ``envelope.model``). Axis 1 deletes that write and replaces it with
+    ``model=spec.model_override or ""``, mirroring ``executor.py:196``.
+
+    Sage memo: ``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md``
+    """
+
+    async def test_pipeline_envelope_model_is_empty_string_sentinel(
+        self,
+    ) -> None:
+        """Envelope handed to the backend has ``model == ""`` when there's
+        no per-stage override.
+
+        Locks Sage memo §F.2 item 2 (the dead write at pipeline.py:456 is
+        gone) and §D ("envelope.model is INTERNAL — a per-call-site
+        record-keeping field, not a cross-stage public contract").
+        """
+        backend = _EnvelopeAndOptionsRecordingPipelineBackend()
+        # Use a non-empty config.model so an OLD inline write would surface
+        # the config value into envelope.model and FAIL this assertion.
+        cfg = PipelineConfig(model="pipeline-config-default")
+        engine = _make_engine(backend=backend, config=cfg)
+        plan = WorkflowPlan(
+            name="envelope-sentinel",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
+        )
+        await engine.run(plan)
+
+        assert len(backend.captured_envelopes) == 1
+        assert backend.captured_envelopes[0].model == "", (
+            "Pipeline envelope.model should be the empty-string sentinel "
+            "when no spec.model_override is set; the resolved dispatch "
+            "model lives in DispatchOptions.model, not on the envelope."
+        )
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Cluster-351 Axis 1 RED — pipeline.py:502-507 still uses an inline "
+        "3-tier ``or`` chain; Sage memo decision F.2 routes that through "
+        "bonfire.engine.model_resolver.resolve_dispatch_model. RED until "
+        "Warrior phase lands."
+    ),
+    strict=True,
+)
+class TestPipelineUsesResolveDispatchModel:
+    """Sage memo cluster-351 §H.3.2 — pipeline calls resolve_dispatch_model
+    helper at the dispatch site.
+
+    Per Sage memo §F.2 item 2, the inline 3-tier ``or`` chain at
+    ``pipeline.py:502-507`` is replaced with a call to
+    ``bonfire.engine.model_resolver.resolve_dispatch_model(...)``. The
+    keyword arguments pass spec.model_override as ``explicit_override``,
+    spec.role as ``role``, and the engine's settings + config.
+
+    Sage memo: ``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md``
+    """
+
+    async def test_pipeline_uses_resolve_dispatch_model_helper(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Pipeline calls resolve_dispatch_model with documented kwargs.
+
+        Patches ``bonfire.engine.pipeline.resolve_dispatch_model`` (the
+        import the pipeline uses at the dispatch site) and asserts the
+        helper IS called with explicit_override / role / settings /
+        config kwargs matching the spec being dispatched.
+        """
+        captured_kwargs: list[dict[str, Any]] = []
+
+        def fake_helper(
+            *,
+            explicit_override: str,
+            role: str,
+            settings: object,
+            config: object,
+        ) -> str:
+            captured_kwargs.append(
+                {
+                    "explicit_override": explicit_override,
+                    "role": role,
+                    "settings": settings,
+                    "config": config,
+                }
+            )
+            return "RESOLVED-VIA-HELPER"
+
+        monkeypatch.setattr(
+            "bonfire.engine.pipeline.resolve_dispatch_model",
+            fake_helper,
+            raising=False,
+        )
+
+        backend = _EnvelopeAndOptionsRecordingPipelineBackend()
+        cfg = PipelineConfig(model="pipeline-config-default")
+        engine = _make_engine(backend=backend, config=cfg)
+        plan = WorkflowPlan(
+            name="helper-call",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    role="warrior",
+                    model_override="STAGE-OVERRIDE",
+                )
+            ],
+        )
+        await engine.run(plan)
+
+        # Helper called exactly once at the dispatch site.
+        assert len(captured_kwargs) == 1, (
+            "resolve_dispatch_model should be called exactly once per "
+            f"backend-mode dispatch; got {len(captured_kwargs)} calls."
+        )
+        kwargs = captured_kwargs[0]
+        assert kwargs["explicit_override"] == "STAGE-OVERRIDE"
+        assert kwargs["role"] == "warrior"
+        # settings + config come from the engine instance (identity check).
+        assert kwargs["settings"] is engine._settings
+        assert kwargs["config"] is engine._config
+
+        # Helper return value flows into DispatchOptions.model.
+        assert len(backend.captured_options) == 1
+        assert backend.captured_options[0].model == "RESOLVED-VIA-HELPER"

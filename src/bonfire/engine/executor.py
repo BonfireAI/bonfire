@@ -23,9 +23,13 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from bonfire.agent.tiers import resolve_model_for_role
+from bonfire.agent.tiers import (
+    resolve_model_for_role,  # noqa: F401 -- preserved for monkeypatch sites
+)
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine.context import ContextBuilder
+from bonfire.engine.factory import load_settings_or_default
+from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import StageCompleted, StageFailed, StageStarted
 from bonfire.protocols import DispatchOptions
@@ -79,8 +83,6 @@ class StageExecutor:
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
     ) -> None:
-        from bonfire.models.config import BonfireSettings as _BonfireSettings
-
         self._backend = backend
         self._bus = bus
         self._config = config
@@ -89,7 +91,10 @@ class StageExecutor:
         self._vault_advisor = vault_advisor
         self._project_root = project_root
         self._tool_policy = tool_policy
-        self._settings = settings if settings is not None else _BonfireSettings()
+        # Per cluster-351 Sage memo §G.2 -- the settings=None branch routes
+        # through the engine factory so load failures emit a warning rather
+        # than propagate a raw pydantic ValidationError from a constructor.
+        self._settings = settings if settings is not None else load_settings_or_default()
 
     # -- Public API -----------------------------------------------------------
 
@@ -268,11 +273,18 @@ class StageExecutor:
             role_tools: list[str] = []
         else:
             role_tools = self._tool_policy.tools_for(stage.role)
+        # Per cluster-351 Sage memo §F.2 item 1 -- the inline 3-tier ``or``
+        # chain is replaced with the engine-side seam ``resolve_dispatch_model``.
+        # Precedence: ``envelope.model`` (built at executor.py:196 from
+        # ``stage.model_override or ""``) -> ``resolve_model_for_role(...)`` ->
+        # ``self._config.model``. The same helper handles the pipeline +
+        # wizard call sites so the three engines share a single contract.
         options = DispatchOptions(
-            model=(
-                envelope.model
-                or resolve_model_for_role(stage.role, self._settings)
-                or self._config.model
+            model=resolve_dispatch_model(
+                explicit_override=envelope.model,
+                role=stage.role,
+                settings=self._settings,
+                config=self._config,
             ),
             max_turns=self._config.max_turns,
             max_budget_usd=self._config.max_budget_usd,

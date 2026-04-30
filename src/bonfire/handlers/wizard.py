@@ -30,8 +30,12 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
-from bonfire.agent.tiers import resolve_model_for_role
+from bonfire.agent.tiers import (
+    resolve_model_for_role,  # noqa: F401 -- preserved for monkeypatch sites
+)
 from bonfire.dispatch.runner import execute_with_retry
+from bonfire.engine.factory import load_settings_or_default
+from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import (
     META_PR_NUMBER,
     META_REVIEW_SEVERITY,
@@ -255,13 +259,14 @@ class WizardHandler:
         event_bus: EventBus | None = None,
         settings: BonfireSettings | None = None,
     ) -> None:
-        from bonfire.models.config import BonfireSettings as _BonfireSettings
-
         self._github_client = github_client
         self._backend = backend
         self._config = config
         self._bus = event_bus
-        self._settings = settings if settings is not None else _BonfireSettings()
+        # Per cluster-351 Sage memo §G.2 -- the settings=None branch routes
+        # through the engine factory so load failures emit a warning rather
+        # than propagate a raw pydantic ValidationError from a constructor.
+        self._settings = settings if settings is not None else load_settings_or_default()
 
     async def _emit(self, event: Any) -> None:
         """Emit an event on the bus when the bus exists. No-op otherwise."""
@@ -305,13 +310,23 @@ class WizardHandler:
                 pr_number=pr_number,
             )
 
+            # Per cluster-351 Sage memo §F.2 item 3 -- the inline 3-tier
+            # ``or`` chain is replaced with the engine-side seam
+            # ``resolve_dispatch_model``. The wizard preserves the canonical
+            # ``ROLE.value`` ("reviewer") at this call site -- gamified
+            # passthrough is correct at the executor + pipeline (where
+            # ``stage.role`` is verbatim workflow output), but the wizard
+            # speaks canonical here per the post-cluster-350 contract that
+            # ``tests/unit/test_wizard_handler.py:586`` locks
+            # (``captured.get("role") == "reviewer"``).
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",
-                model=(
-                    stage.model_override
-                    or resolve_model_for_role(ROLE.value, self._settings)
-                    or self._config.model
+                model=resolve_dispatch_model(
+                    explicit_override=stage.model_override or "",
+                    role=ROLE.value,
+                    settings=self._settings,
+                    config=self._config,
                 ),
                 metadata={"role": ROLE.value},
             )

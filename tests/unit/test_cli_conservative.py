@@ -120,6 +120,70 @@ class TestInitCommand:
         runner.invoke(app, ["init"])
         assert "# user-marker" in toml_path.read_text()
 
+    def test_init_twice_preserves_bonfire_dir_contents(self, tmp_path, monkeypatch) -> None:
+        """Running init twice must not overwrite existing .bonfire/ contents.
+
+        Coverage gap: the floor `test_init_twice_does_not_overwrite` only
+        verifies bonfire.toml survives. `mkdir(exist_ok=True)` handles
+        directory idempotency, but a marker file inside .bonfire/ is the
+        real signal that user state survives the second init.
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        bonfire_dir = tmp_path / ".bonfire"
+        assert bonfire_dir.is_dir()
+        marker = bonfire_dir / "user-marker.txt"
+        marker.write_text("user content")
+        # Run init again
+        runner.invoke(app, ["init"])
+        assert marker.exists(), ".bonfire/user-marker.txt must survive init re-run"
+        assert marker.read_text() == "user content"
+
+    def test_init_twice_preserves_agents_dir_contents(self, tmp_path, monkeypatch) -> None:
+        """Running init twice must not overwrite existing agents/ contents.
+
+        Coverage gap: same shape as `test_init_twice_preserves_bonfire_dir_contents`
+        but for the `agents/` directory — the second user-state surface created
+        by `bonfire init`.
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+        agents_dir = tmp_path / "agents"
+        assert agents_dir.is_dir()
+        marker = agents_dir / "user-marker.md"
+        marker.write_text("# user agent content")
+        # Run init again
+        runner.invoke(app, ["init"])
+        assert marker.exists(), "agents/user-marker.md must survive init re-run"
+        assert marker.read_text() == "# user agent content"
+
+    def test_init_preserves_nonempty_agents_tree(self, tmp_path, monkeypatch) -> None:
+        """A multi-level agents/ tree survives re-init byte-for-byte.
+
+        Models the real-world case where a user has populated agents/ with
+        custom agent definitions (sub-dirs + .md / .toml files) and then
+        re-runs `bonfire init` (e.g. after upgrading bonfire-ai).
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        agents = tmp_path / "agents"
+        nested = agents / "my-team" / "scout"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "agent.md").write_text("# Scout\nUser-defined agent.")
+        (agents / "shared-config.toml").write_text('[shared]\nkey = "value"\n')
+
+        runner.invoke(app, ["init"])
+
+        assert (nested / "agent.md").read_text() == "# Scout\nUser-defined agent.", (
+            "nested user agent file mutated by re-init"
+        )
+        assert (agents / "shared-config.toml").read_text() == '[shared]\nkey = "value"\n', (
+            "top-level user config file mutated by re-init"
+        )
+        # Directory tree shape preserved
+        assert nested.is_dir(), "nested user agent directory removed by re-init"
+
 
 # ---------------------------------------------------------------------------
 # status command contract

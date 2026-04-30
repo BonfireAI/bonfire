@@ -107,8 +107,7 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan", "--port", str(port_value), "--no-browser"])
         assert result.exit_code == 0, (
-            f"scan with port={port_value} exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"scan with port={port_value} exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=port_value, no_browser=True)
 
@@ -136,7 +135,32 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan"])
         assert result.exit_code == 0, (
-            f"default scan invocation exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"default scan invocation exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=0, no_browser=False)
+
+    @patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock)
+    def test_scan_prints_closed_on_keyboard_interrupt(self, mock_run: AsyncMock) -> None:
+        """`Front Door closed.` must print when KeyboardInterrupt propagates from _run_scan.
+
+        The scan command's `try/except KeyboardInterrupt` at the asyncio.run
+        boundary is the load-bearing surface. Any KeyboardInterrupt that
+        propagates out of `_run_scan` — whether raised at the start of the
+        flow, mid-flow, or from inside the finally block during
+        `server.stop()` — bubbles to the outer catch and the closed-message
+        must print.
+
+        This test simulates the propagation by having the mocked `_run_scan`
+        raise KeyboardInterrupt directly. A test of the exact mid-stop path
+        would require a partially-running async coroutine fixture; the
+        asyncio.run boundary catch is sufficient coverage for the
+        user-visible contract.
+        """
+        mock_run.side_effect = KeyboardInterrupt()
+
+        result = runner.invoke(app, ["scan", "--no-browser"])
+
+        assert "Front Door closed." in result.output, (
+            f"`Front Door closed.` missing from output when "
+            f"KeyboardInterrupt propagates; got output={result.output!r}"
+        )

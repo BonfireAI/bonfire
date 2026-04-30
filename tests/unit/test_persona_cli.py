@@ -234,3 +234,70 @@ class TestPersonaDiscoverySurface:
             assert "builtins" in builtin_str, (
                 f"builtin_dir must descend into 'builtins/' — got {builtin_str!r}"
             )
+
+    def test_loader_builtin_dir_resolved_via_importlib_resources_files_call(self) -> None:
+        """`_get_loader()` MUST invoke `importlib.resources.files('bonfire')`.
+
+        Strengthens the substring-presence assertion in
+        `test_loader_builtin_dir_resolves_through_importlib_resources`. The
+        substring check `"persona" in str(builtin_dir)` would pass for a
+        hardcoded `Path(__file__).parent.parent / "persona" / "builtins"`
+        construction, but that would silently break `pip install bonfire-ai`
+        wheel deployments where __file__ may be inside a zip.
+
+        The unambiguous signal is at the CALL SITE: `importlib.resources.files`
+        must actually be invoked with "bonfire" as the package argument. A
+        hardcoded `__file__`-based construction would never call it.
+
+        Note: at runtime `importlib.resources.files()` for regular (non-zip)
+        packages on Python 3.12 returns a `PosixPath` subclass, so a
+        type-level "not a Path" check would falsely fail; the call-site
+        invocation is the only deterministic strengthening.
+        """
+        from bonfire.cli.commands.persona import _get_loader
+
+        with (
+            patch("bonfire.cli.commands.persona.importlib.resources.files") as mock_files,
+            patch("bonfire.cli.commands.persona.PersonaLoader") as mock_loader_cls,
+        ):
+            mock_loader_cls.return_value = MagicMock()
+            mock_files.return_value = MagicMock()  # supports `/` chaining
+            _get_loader()
+
+            mock_files.assert_called_once_with("bonfire")
+
+
+class TestPersonaTomlFallbackWarning:
+    """`_get_active_persona` must surface a warning when bonfire.toml fails to parse.
+
+    Today the function silently catches `tomllib.TOMLDecodeError` and falls
+    back to the default. A user with a corrupted bonfire.toml sees the
+    active marker on the wrong persona with no signal that anything is
+    wrong. The fix: emit a stderr warning before fallback.
+    """
+
+    @pytest.mark.xfail(
+        reason="contract gap: TOML parse failure currently silent; needs typer.echo on stderr"
+    )
+    def test_get_active_persona_emits_warning_on_toml_decode_error(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        """Malformed bonfire.toml must emit a stderr warning before default-fallback."""
+        from bonfire.cli.commands.persona import _get_active_persona
+
+        monkeypatch.chdir(tmp_path)
+        # Write a malformed TOML file
+        (tmp_path / "bonfire.toml").write_text("this is not = valid [toml")
+
+        result = _get_active_persona()
+
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err, (
+            f"_get_active_persona must emit a stderr warning when TOML fails to parse; "
+            f"got stderr={captured.err!r}"
+        )
+        assert "bonfire.toml" in captured.err, (
+            f"warning must name the file; got stderr={captured.err!r}"
+        )
+        # Default fallback still applies
+        assert result == "passe" + "lewe"

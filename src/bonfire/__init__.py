@@ -8,6 +8,25 @@ reviewers -- each with its own identity, tools, and quality gates.
 TDD built in. Code review built in. Your repo, your rules.
 
 Apache-2.0. https://github.com/BonfireAI/bonfire
+
+Extension Surface
+-----------------
+
+Bonfire's pluggable architecture exposes four protocols and two
+supporting value types. Code never imports them from this root --
+the canonical module is ``bonfire.protocols``.
+
+The four protocols:
+
+* ``AgentBackend`` -- dispatch backend (SDK, Pydantic-AI, custom).
+* ``VaultBackend`` -- knowledge vault storage.
+* ``QualityGate`` -- pass/fail evaluation between stages.
+* ``StageHandler`` -- custom stage logic.
+
+The two supporting value types:
+
+* ``DispatchOptions`` -- options envelope passed to AgentBackend.execute.
+* ``VaultEntry`` -- record type for VaultBackend store/query.
 """
 
 from importlib.metadata import PackageNotFoundError

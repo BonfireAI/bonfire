@@ -103,7 +103,6 @@ class TestSageCorrectionResolvedGate:
         | FAILED + any other error_type             |  False | error    |
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_gate_importable_from_engine_gates_module(self) -> None:
         """Sage §B line 325, §D-CL.1 line 20: gate is in
         ``bonfire.engine.gates``."""
@@ -111,7 +110,6 @@ class TestSageCorrectionResolvedGate:
 
         assert SageCorrectionResolvedGate is not None
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_gate_importable_from_engine_package(self) -> None:
         """Sage §B line 326: gate re-exported from ``bonfire.engine``
         public surface."""
@@ -119,14 +117,12 @@ class TestSageCorrectionResolvedGate:
 
         assert hasattr(engine_pkg, "SageCorrectionResolvedGate")
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_gate_in_engine_gates_dunder_all(self) -> None:
         """Sage §A Q9 line 303: gate added to ``__all__``."""
         import bonfire.engine.gates as gates_mod
 
         assert "SageCorrectionResolvedGate" in getattr(gates_mod, "__all__", [])
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_corrected_verdict_passes_with_info_severity(self) -> None:
         """Sage §D-CL.1 line 96 + §A Q9 lines 298-302: ``corrected``
         verdict → passed=True, severity='info'."""
@@ -143,7 +139,6 @@ class TestSageCorrectionResolvedGate:
         assert result.passed is True
         assert result.severity == "info"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_warrior_bug_verdict_passes_with_warning_severity(self) -> None:
         """Sage §A Q9 line 306 (Sage proposal): ``warrior_bug`` is the
         genuine-bug escalate path. Gate returns passed=True,
@@ -168,7 +163,6 @@ class TestSageCorrectionResolvedGate:
         )
         assert result.severity == "warning"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_not_needed_warrior_green_passes_with_info_severity(self) -> None:
         """Sage §D3 line 291 (verdict='not_needed_warrior_green'): warrior
         was already green, no correction needed → passed=True,
@@ -184,7 +178,6 @@ class TestSageCorrectionResolvedGate:
         assert result.passed is True
         assert result.severity == "info"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_ambiguous_verdict_blocks_with_error_severity(self) -> None:
         """Sage §A Q9a (line 308, Anta-ratified conservative default):
         ``ambiguous`` verdict → gate passed=False, severity='error'.
@@ -203,7 +196,6 @@ class TestSageCorrectionResolvedGate:
         )
         assert result.severity == "error"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_unknown_classifier_verdict_failed_envelope_blocks(self) -> None:
         """Sage §D-CL.1 line 94: FAILED envelope with
         ``error_type='UnknownClassifierVerdict'`` → passed=False,
@@ -216,7 +208,6 @@ class TestSageCorrectionResolvedGate:
         assert result.passed is False
         assert result.severity == "error"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_correction_failed_blocks_with_error_severity(self) -> None:
         """Sage §A Q5 line 184 + §D-CL.1: when classifier returns
         ``correction_failed`` (max attempts exhausted, re-verify still
@@ -231,7 +222,6 @@ class TestSageCorrectionResolvedGate:
         assert result.passed is False
         assert result.severity == "error"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_completed_with_missing_verdict_metadata_passes_info(self) -> None:
         """Sage §D-CL.1 line 97: COMPLETED with neither verdict nor
         escalation key (skip path) → passed=True, severity='info'.
@@ -248,7 +238,6 @@ class TestSageCorrectionResolvedGate:
         assert result.passed is True
         assert result.severity == "info"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_gate_name_locked_string(self) -> None:
         """Sage §D-CL.6 #5 anchor + §A Q3 line 124 (gates registry):
         the gate name string is locked at ``'sage_correction_resolved'``
@@ -428,7 +417,6 @@ class TestSageCorrectionResolvedGateMatrix:
         "envelope_kwargs,expected_passed,expected_severity",
         _GATE_PARAMS,
     )
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_gate_evaluates_envelope_to_expected_result(
         self,
@@ -458,7 +446,6 @@ class TestSageCorrectionResolvedGateMatrix:
 class TestSageCorrectionResolvedGateShape:
     """Gate name, evaluate signature, and GateResult shape."""
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_gate_name_is_sage_correction_resolved(self) -> None:
         """Sage §D-CL.6 line 414 + user-prompt Q9 (b): the gate name is
@@ -475,7 +462,6 @@ class TestSageCorrectionResolvedGateShape:
             "sage_correction",
         )
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_gate_result_is_immutable_pydantic_model(self) -> None:
         """`GateResult` is `model_config=ConfigDict(frozen=True)` per
@@ -489,7 +475,6 @@ class TestSageCorrectionResolvedGateShape:
         with pytest.raises(Exception):
             result.passed = not result.passed  # type: ignore[misc]
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_evaluate_is_async(self) -> None:
         """Gate.evaluate must be async (Sage protocols.py:178 contract)."""
@@ -507,7 +492,6 @@ class TestSageCorrectionResolvedGateShape:
 class TestSageCorrectionResolvedGateSafety:
     """Sage §D-CL.7 #6 (non-determinism) + #8 (gate-block path coverage)."""
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_gate_evaluate_is_pure_no_io_no_clock(self) -> None:
         """Sage §D-CL.7 #6 + §D-CL.6 #2: gate is a pure function over
@@ -520,7 +504,6 @@ class TestSageCorrectionResolvedGateSafety:
         assert first.severity == second.severity
         assert first.gate_name == second.gate_name
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_ambiguous_verdict_blocks_pipeline_hard(self) -> None:
         """User-prompt Q9a: `AMBIGUOUS` verdict -> gate fails hard
@@ -544,7 +527,6 @@ class TestSageCorrectionResolvedGateSafety:
             "insufficient — Wizard would not halt."
         )
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_escalated_envelope_is_warning_not_error(self) -> None:
         """Sage §D-CL.1 line 96: `META_CORRECTION_ESCALATED=True` ->
@@ -557,7 +539,6 @@ class TestSageCorrectionResolvedGateSafety:
         assert result.passed is True
         assert result.severity == "warning"
 
-    @_GATE_XFAIL
     @pytest.mark.asyncio
     async def test_corrected_envelope_is_info_severity(self) -> None:
         """Sage §D-CL.1 line 95: `META_CORRECTION_VERDICT="corrected"` ->

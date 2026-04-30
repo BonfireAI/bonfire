@@ -164,7 +164,6 @@ class TestClassifierGreenPath:
     asserts "empty failures returns a non-blaming verdict".
     """
 
-    @_CLASSIFIER_XFAIL
     def test_no_failures_returns_non_blaming_verdict(self) -> None:
         from bonfire.verify.classifier import (
             ClassifierVerdict,
@@ -184,7 +183,6 @@ class TestClassifierGreenPath:
             ClassifierVerdict.WARRIOR_BUG,
         )
 
-    @_CLASSIFIER_XFAIL
     def test_no_failures_failing_tests_is_empty_tuple(self) -> None:
         """Round-trip: classifier output `failing_tests` is `()` on green."""
         from bonfire.verify.classifier import classify_warrior_failure
@@ -201,7 +199,6 @@ class TestClassifierSageUnderMarked:
     """Sage §D-CL.2 'TestClassifierSageUnderMarked' — failing tests cite
     deps that the Sage decision log did NOT enumerate."""
 
-    @_CLASSIFIER_XFAIL
     def test_one_failure_two_cited_deps_one_in_decision_log(self) -> None:
         """Failing test cites BON-A AND BON-B; Sage memo only enumerates
         BON-A. Verdict: SAGE_UNDER_MARKED."""
@@ -221,7 +218,6 @@ class TestClassifierSageUnderMarked:
         )
         assert result.verdict == ClassifierVerdict.SAGE_UNDER_MARKED
 
-    @_CLASSIFIER_XFAIL
     def test_round_trip_under_marked_tests_tuple(self) -> None:
         """`result.under_marked_tests` round-trips the failing test paths."""
         from bonfire.verify.classifier import classify_warrior_failure
@@ -239,7 +235,6 @@ class TestClassifierSageUnderMarked:
         assert isinstance(result.under_marked_tests, tuple)
         assert "tests/unit/test_alpha.py" in {t.file_path for t in result.under_marked_tests}
 
-    @_CLASSIFIER_XFAIL
     def test_cited_deps_is_frozenset(self) -> None:
         """`result.cited_deps` is `frozenset[str]` of deps the failing
         tests' xfail reasons mention."""
@@ -258,7 +253,6 @@ class TestClassifierSageUnderMarked:
         assert "BON-X" in result.cited_deps
         assert "BON-Y" in result.cited_deps
 
-    @_CLASSIFIER_XFAIL
     def test_sage_specified_deps_is_frozenset(self) -> None:
         """`result.sage_specified_deps` is a `frozenset[str]` parsed
         from the decision log."""
@@ -277,7 +271,6 @@ class TestClassifierSageUnderMarked:
         assert "BON-X" in result.sage_specified_deps
         assert "BON-Z" in result.sage_specified_deps
 
-    @_CLASSIFIER_XFAIL
     def test_missing_deps_is_set_difference(self) -> None:
         """`result.missing_deps == result.cited_deps -
         result.sage_specified_deps` (the "what Sage forgot" set)."""
@@ -302,7 +295,6 @@ class TestClassifierWarriorBug:
     """Sage §D-CL.2 'TestClassifierWarriorBug' — Sage specified the
     cited deps correctly; Warrior is the bug source."""
 
-    @_CLASSIFIER_XFAIL
     def test_failing_test_cites_dep_in_decision_log_returns_warrior_bug(
         self,
     ) -> None:
@@ -320,7 +312,6 @@ class TestClassifierWarriorBug:
         )
         assert result.verdict == ClassifierVerdict.WARRIOR_BUG
 
-    @_CLASSIFIER_XFAIL
     def test_failing_test_no_xfail_reason_returns_warrior_bug(self) -> None:
         """Raw pytest failure (no xfail marker at all) -> WARRIOR_BUG."""
         from bonfire.verify.classifier import (
@@ -337,7 +328,6 @@ class TestClassifierWarriorBug:
         )
         assert result.verdict == ClassifierVerdict.WARRIOR_BUG
 
-    @_CLASSIFIER_XFAIL
     def test_classifier_never_blames_sage_for_unconditional_failures(
         self,
     ) -> None:
@@ -362,7 +352,6 @@ class TestClassifierEdgeCases:
     """Sage §D-CL.2 'TestClassifierEdgeCases' — empty memo, malformed
     memo, JUnit fallback, partial-match -> AMBIGUOUS."""
 
-    @_CLASSIFIER_XFAIL
     def test_empty_decision_log_with_xfail_failure_returns_sage_under_marked(
         self,
     ) -> None:
@@ -381,7 +370,6 @@ class TestClassifierEdgeCases:
         )
         assert result.verdict == ClassifierVerdict.SAGE_UNDER_MARKED
 
-    @_CLASSIFIER_XFAIL
     def test_malformed_decision_log_returns_warrior_bug(self) -> None:
         """No parseable canonical heading -> fail-safe to WARRIOR_BUG.
         (Never silently classify as Sage's fault on unparseable input.)
@@ -400,7 +388,6 @@ class TestClassifierEdgeCases:
         )
         assert result.verdict == ClassifierVerdict.WARRIOR_BUG
 
-    @_CLASSIFIER_XFAIL
     def test_junit_xml_none_falls_back_to_stdout_regex(self) -> None:
         """JUnit XML missing -> fall back to stdout regex parsing of
         `warrior_envelope.result`. Sage §D-CL.2 line 179."""
@@ -417,7 +404,6 @@ class TestClassifierEdgeCases:
         assert result is not None
         assert hasattr(result, "verdict")
 
-    @_CLASSIFIER_XFAIL
     def test_partial_dep_match_returns_ambiguous_not_warrior_bug(self) -> None:
         """User-prompt §A Q1a + Knight B specific constraint:
         classifier emits AMBIGUOUS (NOT silently WARRIOR_BUG) when the
@@ -463,7 +449,6 @@ class TestClassifierEdgeCases:
         )
         assert result.verdict != ClassifierVerdict.WARRIOR_BUG
 
-    @_CLASSIFIER_XFAIL
     def test_classification_dataclass_is_frozen(self) -> None:
         """Sage §D-CL.7 #6: classifier non-determinism via dict ordering.
         Mitigation: every set-shape field is `frozenset[str]`; the
@@ -543,7 +528,6 @@ class TestDecisionLogParser:
         "memo_text,expected_deps,expected_source",
         _PARSER_PARAMS,
     )
-    @_CLASSIFIER_XFAIL
     def test_parses_deps_and_source(
         self,
         memo_text: str,
@@ -556,7 +540,6 @@ class TestDecisionLogParser:
         assert parsed.deps == expected_deps
         assert parsed.parse_source == expected_source
 
-    @_CLASSIFIER_XFAIL
     def test_parser_returns_frozenset_not_set(self) -> None:
         """Sage §D-CL.7 #6 mitigation: parser returns frozenset (immutable)."""
         from bonfire.verify.classifier import parse_sage_decision_log
@@ -566,7 +549,6 @@ class TestDecisionLogParser:
         )
         assert isinstance(parsed.deps, frozenset)
 
-    @_CLASSIFIER_XFAIL
     def test_parser_is_pure_function_no_io(self) -> None:
         """Sage §D-CL.6 #2 + §D-CL.7 #6: parser has NO I/O. Verified by
         passing in-memory text and confirming output is deterministic."""
@@ -579,7 +561,6 @@ class TestDecisionLogParser:
         assert first.deps == second.deps
         assert first.parse_source == second.parse_source
 
-    @_CLASSIFIER_XFAIL
     def test_parser_strict_canonical_heading_literal(self) -> None:
         """User-prompt Q6 (a): strict canonical heading literal
         `## DEFER via xfail`. A near-miss heading like `## Defer via XFail`
@@ -591,7 +572,6 @@ class TestDecisionLogParser:
         parsed = parse_sage_decision_log(wrong_case)
         assert parsed.deps == frozenset()
 
-    @_CLASSIFIER_XFAIL
     def test_parser_multi_section_unions(self) -> None:
         """Sage §D-CL.2 line 184: memo with multiple DEFER sections —
         parser unions across sections (same parse_source)."""

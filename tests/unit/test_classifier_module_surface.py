@@ -38,8 +38,6 @@ import dataclasses
 import inspect
 from enum import StrEnum
 
-import pytest
-
 # === Knight A SPINE ===
 
 _RED_REASON = (
@@ -60,17 +58,14 @@ class TestVerifyPackageImport:
     classifier lives under a NEW ``verify/`` package.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_verify_package_importable(self) -> None:
         """``import bonfire.verify`` succeeds."""
         import bonfire.verify  # noqa: F401  (import-only smoke)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classifier_module_importable(self) -> None:
         """``import bonfire.verify.classifier`` succeeds."""
         import bonfire.verify.classifier  # noqa: F401
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classifier_module_has_module_docstring(self) -> None:
         """Sage §D1 line 21: classifier module is documented."""
         import bonfire.verify.classifier as classifier_mod
@@ -90,35 +85,30 @@ class TestVerifyPublicSurface:
     creates the package init.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classify_warrior_failure_exported(self) -> None:
         """``classify_warrior_failure`` is re-exported from the package."""
         from bonfire.verify import classify_warrior_failure
 
         assert callable(classify_warrior_failure)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_classification_exported(self) -> None:
         """``BounceClassification`` is re-exported from the package."""
         from bonfire.verify import BounceClassification
 
         assert BounceClassification is not None
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_verdict_exported(self) -> None:
         """``ClassifierVerdict`` is re-exported from the package."""
         from bonfire.verify import ClassifierVerdict
 
         assert ClassifierVerdict is not None
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_defer_record_exported(self) -> None:
         """``DeferRecord`` is re-exported from the package (Sage §D1 line 61)."""
         from bonfire.verify import DeferRecord
 
         assert DeferRecord is not None
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_dunder_all_lists_public_symbols(self) -> None:
         """``bonfire.verify.__all__`` enumerates the public exports
         per Sage §D1 lines 53-63.
@@ -156,7 +146,6 @@ class TestClassifierVerdictEnum:
     auto-bouncing.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_verdict_is_str_enum(self) -> None:
         """``ClassifierVerdict`` is a ``StrEnum`` (one-string-everywhere
         discipline per ``bonfire.agent.roles`` AgentRole convention)."""
@@ -164,21 +153,18 @@ class TestClassifierVerdictEnum:
 
         assert issubclass(ClassifierVerdict, StrEnum)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_sage_under_marked_member_present(self) -> None:
         """``ClassifierVerdict.SAGE_UNDER_MARKED`` member exists. Sage §A Q1a."""
         from bonfire.verify import ClassifierVerdict
 
         assert hasattr(ClassifierVerdict, "SAGE_UNDER_MARKED")
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_warrior_bug_member_present(self) -> None:
         """``ClassifierVerdict.WARRIOR_BUG`` member exists. Sage §A Q1a."""
         from bonfire.verify import ClassifierVerdict
 
         assert hasattr(ClassifierVerdict, "WARRIOR_BUG")
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_ambiguous_member_present(self) -> None:
         """``ClassifierVerdict.AMBIGUOUS`` member exists. Sage §A Q1a Anta-ratified
         as the third verdict (NOT folded into WARRIOR_BUG)."""
@@ -186,21 +172,18 @@ class TestClassifierVerdictEnum:
 
         assert hasattr(ClassifierVerdict, "AMBIGUOUS")
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_sage_under_marked_value_is_canonical_string(self) -> None:
         """Verdict value is the snake_case string (StrEnum convention)."""
         from bonfire.verify import ClassifierVerdict
 
         assert ClassifierVerdict.SAGE_UNDER_MARKED.value == "sage_under_marked"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_warrior_bug_value_is_canonical_string(self) -> None:
         """``ClassifierVerdict.WARRIOR_BUG`` value is ``'warrior_bug'``."""
         from bonfire.verify import ClassifierVerdict
 
         assert ClassifierVerdict.WARRIOR_BUG.value == "warrior_bug"
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_ambiguous_value_is_canonical_string(self) -> None:
         """``ClassifierVerdict.AMBIGUOUS`` value is ``'ambiguous'``."""
         from bonfire.verify import ClassifierVerdict
@@ -221,14 +204,12 @@ class TestBounceClassificationDataclass:
     only pins the *frozen* + *dataclass* property.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_classification_is_dataclass(self) -> None:
         """``BounceClassification`` is decorated with ``@dataclass``."""
         from bonfire.verify import BounceClassification
 
         assert dataclasses.is_dataclass(BounceClassification)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_classification_is_frozen(self) -> None:
         """Frozen dataclass: instances are immutable.
 
@@ -242,7 +223,6 @@ class TestBounceClassificationDataclass:
         assert params is not None, "BounceClassification must be a dataclass."
         assert params.frozen is True, "BounceClassification must be a frozen dataclass."
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_bounce_classification_carries_verdict_field(self) -> None:
         """The classification result has a ``verdict`` field. Sage §D2 line 100."""
         from bonfire.verify import BounceClassification
@@ -261,14 +241,12 @@ class TestBounceClassificationDataclass:
 class TestDeferRecordDataclass:
     """``DeferRecord`` is a frozen dataclass per Sage §A Q2 line 75."""
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_defer_record_is_dataclass(self) -> None:
         """``DeferRecord`` is a dataclass."""
         from bonfire.verify import DeferRecord
 
         assert dataclasses.is_dataclass(DeferRecord)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_defer_record_is_frozen(self) -> None:
         """``DeferRecord`` is frozen (immutable). Sage §A Q2 (DeferRecord
         is a value type, not a mutable container)."""
@@ -293,14 +271,12 @@ class TestClassifyWarriorFailureCallable:
     (Knight B exercises the algorithm).
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classify_warrior_failure_is_callable(self) -> None:
         """The classifier function is callable."""
         from bonfire.verify import classify_warrior_failure
 
         assert callable(classify_warrior_failure)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classify_warrior_failure_is_synchronous(self) -> None:
         """Pure function: NOT a coroutine (sync semantics).
 
@@ -314,7 +290,6 @@ class TestClassifyWarriorFailureCallable:
             "coroutine signature implies hidden I/O which violates Sage §A Q1."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_classifier_lives_in_classifier_submodule(self) -> None:
         """The function's canonical home is ``bonfire.verify.classifier``."""
         from bonfire.verify import classifier as classifier_mod

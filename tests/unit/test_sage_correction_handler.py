@@ -127,7 +127,6 @@ class TestProtocolConformance:
     runtime_checkable Protocol; importable from package and submodule.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handler_importable_from_submodule(self) -> None:
         """Sage §D-CL.1 line 55: importable from
         ``bonfire.handlers.sage_correction_bounce``."""
@@ -137,14 +136,12 @@ class TestProtocolConformance:
 
         assert SageCorrectionBounceHandler is not None
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handler_importable_from_package(self) -> None:
         """Sage §D-CL.1 line 55 + §B line 50: re-exported via ``__all__``."""
         import bonfire.handlers as handlers_pkg
 
         assert hasattr(handlers_pkg, "SageCorrectionBounceHandler")
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handler_in_package_dunder_all(self) -> None:
         """Sage §B line 50: ``SageCorrectionBounceHandler`` listed in
         ``bonfire.handlers.__all__``."""
@@ -152,14 +149,12 @@ class TestProtocolConformance:
 
         assert "SageCorrectionBounceHandler" in getattr(handlers_pkg, "__all__", [])
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handler_satisfies_stage_handler_protocol(self) -> None:
         """Sage §D-CL.1 line 56: ``isinstance(handler, StageHandler)``."""
         from bonfire.protocols import StageHandler
 
         assert isinstance(_make_handler(), StageHandler)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handle_is_coroutine_function(self) -> None:
         """Sage §D-CL.1 line 57: ``inspect.iscoroutinefunction(handler.handle)``
         is True."""
@@ -183,7 +178,6 @@ class TestStageHandlerSignature:
     ``(stage, envelope, prior_results)`` returning ``Envelope``.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handle_parameters_match_protocol(self) -> None:
         """Sage §D-CL.1 line 61: signature is
         ``(self, stage, envelope, prior_results) -> Envelope``."""
@@ -199,7 +193,6 @@ class TestStageHandlerSignature:
             "prior_results",
         ]
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_handle_return_annotation_is_envelope(self) -> None:
         """Sage §D3 line 221: return type is ``Envelope``.
 
@@ -234,7 +227,6 @@ class TestModuleRoleConstant:
     dispatch contract.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_module_exposes_role_constant(self) -> None:
         """Sage §D-CL.1 line 64: module-level ``ROLE`` exists."""
         from bonfire.handlers import sage_correction_bounce
@@ -244,7 +236,6 @@ class TestModuleRoleConstant:
             "constant per Sage §D-CL.1 line 64."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_role_is_synthesizer(self) -> None:
         """Sage §D-CL.1 line 64 + §A Q4a line 159 (Anta-ratified):
         ``ROLE is AgentRole.SYNTHESIZER``."""
@@ -253,7 +244,6 @@ class TestModuleRoleConstant:
 
         assert sage_correction_bounce.ROLE is AgentRole.SYNTHESIZER
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_role_is_agent_role_instance(self) -> None:
         """Sage §D-CL.1 line 65: ROLE is an ``AgentRole`` enum member."""
         from bonfire.agent.roles import AgentRole
@@ -261,7 +251,6 @@ class TestModuleRoleConstant:
 
         assert isinstance(sage_correction_bounce.ROLE, AgentRole)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_role_value_is_synthesizer_string(self) -> None:
         """StrEnum value: ``ROLE == 'synthesizer'``."""
         from bonfire.handlers import sage_correction_bounce
@@ -290,7 +279,6 @@ class TestCorrectionEnvelopeShape:
     TestReverifyOrchestration).
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_meta_bounce_verdict_constant_importable(self) -> None:
         """Sage §A Q3 line 132 + §B line 327: ``META_CORRECTION_VERDICT``
         constant lives in ``bonfire.models.envelope`` (alphabetically
@@ -300,7 +288,6 @@ class TestCorrectionEnvelopeShape:
         assert isinstance(META_CORRECTION_VERDICT, str)
         assert META_CORRECTION_VERDICT  # non-empty
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_meta_bounce_attempt_constant_importable(self) -> None:
         """Sage §A Q3 line 132 + §B line 327: ``META_CORRECTION_CYCLES``
         constant lives in ``bonfire.models.envelope``."""
@@ -309,7 +296,6 @@ class TestCorrectionEnvelopeShape:
         assert isinstance(META_CORRECTION_CYCLES, str)
         assert META_CORRECTION_CYCLES
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_meta_bounce_correction_branch_constant_importable(self) -> None:
         """Sage §A Q3 line 132 + §B line 327: ``META_CORRECTION_BRANCH``
         constant lives in ``bonfire.models.envelope``."""
@@ -318,7 +304,6 @@ class TestCorrectionEnvelopeShape:
         assert isinstance(META_CORRECTION_BRANCH, str)
         assert META_CORRECTION_BRANCH
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     def test_meta_bounce_keys_distinct(self) -> None:
         """The three new keys are distinct from each other and from
         existing META_* keys (no collision). Mirror BON-519
@@ -347,7 +332,6 @@ class TestCorrectionEnvelopeShape:
             "other AND from existing META_* keys."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_corrected_envelope_status_is_completed(self) -> None:
         """Sage §D-CL.1 line 70: after a successful correction cycle the
         envelope returns COMPLETED."""
@@ -363,7 +347,6 @@ class TestCorrectionEnvelopeShape:
         result = await handler.handle(stage, envelope, {})
         assert result.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_corrected_envelope_preserves_original_metadata(self) -> None:
         """Sage §D-CL.1 lines 73-74: original metadata is preserved via
         ``{**envelope.metadata, ...}`` merge (never replacement). The
@@ -392,7 +375,6 @@ class TestEarlyReturnPaths:
     Sage §D-CL.1 lines 76-78 + §D3 lines 228-241.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_warrior_bug_verdict_short_circuits_to_completed(self) -> None:
         """Sage §D-CL.1 line 76: classifier verdict ``warrior_bug`` →
         handler returns COMPLETED with escalation flag (no Sage dispatch).
@@ -412,7 +394,6 @@ class TestEarlyReturnPaths:
             "warrior_bug verdict must short-circuit to COMPLETED, not FAILED."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_missing_classifier_verdict_returns_completed_skipped(self) -> None:
         """Sage §D-CL.1 line 77: prior_results missing classifier verdict
         → handler returns COMPLETED (NOT FAILED — pipeline must continue)."""
@@ -427,7 +408,6 @@ class TestEarlyReturnPaths:
             "Missing classifier verdict must skip-pass, not fail (Sage §D-CL.1 line 77)."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_warrior_green_short_circuits_no_dispatch(self) -> None:
         """Sage §D-CL.1 line 78 + §D3 lines 240-241: warrior-green
         (META_REVIEW_VERDICT='approve' AND no warrior failure) → handler
@@ -467,7 +447,6 @@ class TestNeverRaises:
     git-cherry-pick raise, pytest-runner raise) is Knight B's lane.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_handle_with_minimal_inputs_never_raises(self) -> None:
         """Smoke test: minimal env + empty prior_results → handler returns
         Envelope, never raises. Sage §D3 line 199."""
@@ -481,7 +460,6 @@ class TestNeverRaises:
             "handle() must return an Envelope, never raise (Protocol contract)."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_handle_with_invalid_prior_results_never_raises(self) -> None:
         """Garbage in prior_results (non-string values) → handler returns
         Envelope, never raises. Sage §D-CL.1 line 80."""
@@ -496,7 +474,6 @@ class TestNeverRaises:
         result = await handler.handle(stage, envelope, prior)
         assert isinstance(result, Envelope)
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_failure_envelope_carries_error_detail(self) -> None:
         """Sage §D-CL.1 line 85: every FAILED return path has
         ``ErrorDetail.error_type`` and ``.stage_name == stage.name``."""
@@ -535,7 +512,6 @@ class TestVerdictRouting:
         - unknown → FAILED with ``error.error_type='UnknownClassifierVerdict'``.
     """
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_sage_under_marked_routes_to_correction_flow(self) -> None:
         """Sage §D-CL.1 line 87: ``sage_under_marked`` verdict drives
         the handler into the correction flow.
@@ -563,7 +539,6 @@ class TestVerdictRouting:
                 "produce UnknownClassifierVerdict for it."
             )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_warrior_bug_routes_to_escalation_no_dispatch(self) -> None:
         """Sage §D-CL.1 line 89: ``warrior_bug`` verdict produces
         ``META_CORRECTION_ESCALATED`` (or analogous escalation metadata)
@@ -584,7 +559,6 @@ class TestVerdictRouting:
         # bounce and reviews); handler must NOT return FAILED.
         assert result.status == TaskStatus.COMPLETED
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_unknown_verdict_yields_failed_envelope(self) -> None:
         """Sage §D-CL.1 line 91: unknown verdict → FAILED envelope with
         ``error.error_type='UnknownClassifierVerdict'`` (fail-safe; never
@@ -605,7 +579,6 @@ class TestVerdictRouting:
             "'UnknownClassifierVerdict' for the unknown-verdict failure path."
         )
 
-    @pytest.mark.xfail(strict=True, reason=_RED_REASON)
     async def test_ambiguous_verdict_handled_explicitly(self) -> None:
         """Sage §A Q1a (Anta-ratified): ``AMBIGUOUS`` is the third
         deterministic verdict (NOT folded into WARRIOR_BUG). The handler
@@ -748,7 +721,6 @@ class TestPureFunctionClassifierIntegration:
     """
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_handler_invokes_classify_warrior_failure_once(self) -> None:
         """Handler calls the classifier exactly once per `handle()` call.
         Repeated calls would risk non-determinism if the function is
@@ -768,7 +740,6 @@ class TestPureFunctionClassifierIntegration:
         assert classifier.classify.call_count <= 1
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_handler_passes_decision_log_text_not_path(self) -> None:
         """Handler reads the decision log via the loader, then passes the
         text (not the path) to the classifier — keeps classifier pure."""
@@ -817,7 +788,6 @@ class TestDispatchToolRestriction:
     """
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_dispatch_options_allowed_tools_is_frozenset(self) -> None:
         """`allowed_tools` is a `frozenset`, not a `set` (immutability)."""
         backend = AsyncMock()
@@ -865,7 +835,6 @@ class TestDispatchToolRestriction:
             )
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_dispatch_options_allowed_tools_contains_read_and_edit(
         self,
     ) -> None:
@@ -900,7 +869,6 @@ class TestDispatchToolRestriction:
             assert "Edit" in tool_field
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_dispatch_options_allowed_tools_excludes_bash_and_write(
         self,
     ) -> None:
@@ -955,7 +923,6 @@ class TestAttemptCounter:
     Re-verify after correction; if still failing, escalate (do NOT loop)."""
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_first_correction_cycle_sets_cycles_to_one(self) -> None:
         """After one correction cycle, envelope metadata records cycles=1
         (parseable as int)."""
@@ -982,7 +949,6 @@ class TestAttemptCounter:
         assert int(cycles_value) >= 1
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_second_attempt_caps_at_max_and_escalates(self) -> None:
         """If `META_CORRECTION_CYCLES >= 1` already in prior_results, the
         handler MUST NOT spawn another correction cycle — it escalates."""
@@ -1012,7 +978,6 @@ class TestAttemptCounter:
         assert result.metadata.get(META_CORRECTION_ESCALATED) is True
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_attempt_counter_is_string_in_prior_results(self) -> None:
         """Sage §D8 line 779: `prior_results: dict[str, str]` — counter is
         stringified-int at the boundary. Handler MUST tolerate string values."""
@@ -1051,7 +1016,6 @@ class TestEscalatePath:
     """
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_warrior_bug_verdict_escalates_without_dispatch(self) -> None:
         """`META_CLASSIFIER_VERDICT="warrior_bug"` -> NO Sage dispatch."""
         from bonfire.models.envelope import META_CORRECTION_ESCALATED
@@ -1070,7 +1034,6 @@ class TestEscalatePath:
         assert result.metadata.get(META_CORRECTION_ESCALATED) is True
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_ambiguous_verdict_marks_envelope_for_gate_block(self) -> None:
         """User-prompt Q9a: AMBIGUOUS verdict -> gate fails hard
         (severity='error'); pipeline halts. The handler envelope carries
@@ -1093,7 +1056,6 @@ class TestEscalatePath:
         assert result.metadata.get(META_CLASSIFIER_VERDICT) == "ambiguous"
 
     @pytest.mark.asyncio
-    @_HANDLER_XFAIL
     async def test_escalation_preserves_prior_metadata(self) -> None:
         """Sage §D-CL.7 #3: escalation envelope preserves prior metadata
         (no envelope-leak via `with_error` overwrite)."""
@@ -1127,7 +1089,6 @@ class TestPostDispatchVerification:
     THEN classify THEN envelope-update."""
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_cherry_pick_invoked_after_successful_dispatch(self) -> None:
         """After Sage-correction dispatch succeeds, handler invokes
         `git_workflow.cherry_pick(commit_sha)` exactly once."""
@@ -1160,7 +1121,6 @@ class TestPostDispatchVerification:
         assert git_workflow.cherry_pick.call_count == 1
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_cherry_pick_failure_returns_failed_envelope(self) -> None:
         """Sage §D-CL.7 #7: cherry-pick failure -> handler returns FAILED
         with `error.error_type` reflecting the cause; no re-verify
@@ -1201,7 +1161,6 @@ class TestPostDispatchVerification:
         assert pytest_runner.run.call_count == 0
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_reverify_subprocess_uses_tuple_args_never_shell(self) -> None:
         """Sage §D-CL.7 #9 + user-prompt §CONSTRAINTS: subprocess args
         MUST be `tuple[str, ...]` or `list[str]`; never `shell=True`.
@@ -1249,7 +1208,6 @@ class TestPostDispatchVerification:
                     )
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_reverify_pass_marks_envelope_corrected(self) -> None:
         """After cherry-pick, re-verify pytest passes -> envelope
         metadata `META_CORRECTION_VERDICT="corrected"`."""
@@ -1284,7 +1242,6 @@ class TestPostDispatchVerification:
         assert result.metadata.get(META_CORRECTION_VERDICT) == "corrected"
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_reverify_still_failing_marks_escalated(self) -> None:
         """After cherry-pick, re-verify still fails -> envelope metadata
         `META_CORRECTION_VERDICT="escalated"` AND
@@ -1329,7 +1286,6 @@ class TestPostDispatchVerification:
         assert result.metadata.get(META_CORRECTION_ESCALATED) is True
 
     @pytest.mark.asyncio
-    @_FULL_STACK_XFAIL
     async def test_handler_handle_is_coroutine_function(self) -> None:
         """Defensive: handle is async (mirrors Sage §D-CL.1 line 56 but
         Knight B asserts again because the handler innovation classes

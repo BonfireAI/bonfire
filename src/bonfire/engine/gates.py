@@ -14,6 +14,9 @@ from __future__ import annotations
 import re
 
 from bonfire.models.envelope import (
+    META_CLASSIFIER_VERDICT,
+    META_CORRECTION_ESCALATED,
+    META_CORRECTION_VERDICT,
     META_PREFLIGHT_TEST_DEBT_NOTED,
     Envelope,
     TaskStatus,
@@ -26,6 +29,18 @@ _NONZERO_FAILED_RE = re.compile(r"[1-9]\d*\s+failed", re.IGNORECASE)
 # Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.
 _MERGE_PREFLIGHT_GATE_NAME: str = "merge_preflight_passed"
 
+# Gate name string -- locked per Sage §D-CL.6 #5 + §A Q3 line 124 for the
+# sage-correction-bounce stage.
+_SAGE_CORRECTION_GATE_NAME: str = "sage_correction_resolved"
+
+# Verdict-routing tables for SageCorrectionResolvedGate (frozen so wrong
+# states are unrepresentable; missing keys fall through to the default
+# "info" rule). why: dict-dispatch keeps the four-row Sage matrix on a
+# single screen; an if/elif chain spreads the rules across 30+ lines.
+_AMBIGUOUS_VERDICT: str = "ambiguous"
+_WARRIOR_BUG_VERDICT: str = "warrior_bug"
+_PASSING_WARNING_VERDICTS: frozenset[str] = frozenset({_WARRIOR_BUG_VERDICT})
+
 __all__ = [
     "CompletionGate",
     "CostLimitGate",
@@ -33,6 +48,7 @@ __all__ = [
     "MergePreflightGate",
     "RedPhaseGate",
     "ReviewApprovalGate",
+    "SageCorrectionResolvedGate",
     "TestPassGate",
     "VerificationGate",
 ]
@@ -173,17 +189,88 @@ class MergePreflightGate:
             )
 
         # FAILED (or any non-COMPLETED) -> blocking gate.
-        error_type = (
-            envelope.error.error_type if envelope.error is not None else "unknown"
-        )
-        message = (
-            envelope.error.message if envelope.error is not None else "preflight blocked"
-        )
+        error_type = envelope.error.error_type if envelope.error is not None else "unknown"
+        message = envelope.error.message if envelope.error is not None else "preflight blocked"
         return GateResult(
             gate_name=_MERGE_PREFLIGHT_GATE_NAME,
             passed=False,
             severity="error",
             message=f"Preflight blocked merge: {error_type} -- {message}",
+        )
+
+
+class SageCorrectionResolvedGate:
+    """Gate adapter for :class:`SageCorrectionBounceHandler` envelopes.
+
+    Translates the handler's correction-cycle envelope into a
+    :class:`GateResult`. Verdict-routing matrix (Sage §D-CL.1 lines 93-97
+    + Anta-ratified §A Q9a):
+
+        | envelope shape                                      | passed | severity |
+        |-----------------------------------------------------|--------|----------|
+        | COMPLETED + classifier_verdict="ambiguous"          | False  | error    |
+        | COMPLETED + correction_verdict="ambiguous"          | False  | error    |
+        | COMPLETED + correction_verdict="warrior_bug"        | True   | warning  |
+        | COMPLETED + correction_escalated=True               | True   | warning  |
+        | COMPLETED + correction_verdict="corrected"          | True   | info     |
+        | COMPLETED + correction_verdict="not_needed_*"       | True   | info     |
+        | COMPLETED + (missing both keys; skip path)          | True   | info     |
+        | FAILED + any error_type                             | False  | error    |
+
+    The gate is a pure function of the envelope -- same envelope, same
+    result. Gate name is locked at ``"sage_correction_resolved"``.
+    """
+
+    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
+        del context  # gate is envelope-only
+        # FAILED short-circuits to error (any error_type).
+        if envelope.status != TaskStatus.COMPLETED:
+            error_type = envelope.error.error_type if envelope.error is not None else "unknown"
+            message = (
+                envelope.error.message if envelope.error is not None else "sage_correction blocked"
+            )
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=False,
+                severity="error",
+                message=f"Sage correction blocked: {error_type} -- {message}",
+            )
+
+        # COMPLETED. Read both verdict keys; ambiguous on either blocks.
+        classifier_verdict = envelope.metadata.get(META_CLASSIFIER_VERDICT, "")
+        correction_verdict = envelope.metadata.get(META_CORRECTION_VERDICT, "")
+        escalated = envelope.metadata.get(META_CORRECTION_ESCALATED) is True
+
+        if classifier_verdict == _AMBIGUOUS_VERDICT or correction_verdict == _AMBIGUOUS_VERDICT:
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=False,
+                severity="error",
+                message=(
+                    "Sage correction blocked: ambiguous classifier verdict "
+                    "(forces Wizard inspection)."
+                ),
+            )
+
+        if correction_verdict in _PASSING_WARNING_VERDICTS or escalated:
+            return GateResult(
+                gate_name=_SAGE_CORRECTION_GATE_NAME,
+                passed=True,
+                severity="warning",
+                message=(
+                    "Sage correction escalated to Wizard "
+                    f"(verdict={correction_verdict or 'escalated'})."
+                ),
+            )
+
+        # Default: passed + info (corrected, not_needed_*, or skip path).
+        return GateResult(
+            gate_name=_SAGE_CORRECTION_GATE_NAME,
+            passed=True,
+            severity="info",
+            message=(
+                f"Sage correction resolved cleanly (verdict={correction_verdict or 'skipped'})."
+            ),
         )
 
 

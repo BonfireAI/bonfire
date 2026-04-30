@@ -174,3 +174,12 @@ META_TICKET_REF: str = "ticket_ref"
 # Preflight metadata (Sage §D10 line 753 — merge-preflight pipeline stage).
 META_PREFLIGHT_CLASSIFICATION: str = "preflight_classification"
 META_PREFLIGHT_TEST_DEBT_NOTED: str = "preflight_test_debt_noted"
+# Sage-correction-bounce metadata (sage_correction_bounce pipeline stage).
+# The classifier verdict is the upstream input; the correction-cycle keys
+# are the handler outputs.
+META_CLASSIFIER_VERDICT: str = "classifier_verdict"
+META_CORRECTION_BRANCH: str = "correction_branch"
+META_CORRECTION_CYCLES: str = "correction_cycles"
+META_CORRECTION_ESCALATED: str = "correction_escalated"
+META_CORRECTION_SKIPPED_REASON: str = "correction_skipped_reason"
+META_CORRECTION_VERDICT: str = "correction_verdict"

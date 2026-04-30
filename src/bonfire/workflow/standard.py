@@ -47,6 +47,13 @@ def standard_build() -> WorkflowPlan:
       tip BEFORE the merge button (Sage memo
       ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     - Herald announces the result.
+
+    The :class:`bonfire.handlers.SageCorrectionBounceHandler` stage is
+    available as a composable building block (with the canonical
+    ``sage_correction_bounce`` stage name and ``sage_correction_resolved``
+    gate), but is NOT yet wired into ``standard_build``. Wiring it
+    requires extending the workflow contract tests; that update lives in
+    a follow-up ticket so this commit's surface stays minimal.
     """
     return WorkflowPlan(
         name="standard_build",

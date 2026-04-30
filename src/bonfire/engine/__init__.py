@@ -31,19 +31,17 @@ from bonfire.engine.gates import (
     GateChain,
     RedPhaseGate,
     ReviewApprovalGate,
-    SageCorrectionResolvedGate,  # noqa: F401 — re-exported at package level
+    SageCorrectionResolvedGate,
     TestPassGate,
     VerificationGate,
 )
 from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 
-# ``MergePreflightGate`` and ``SageCorrectionResolvedGate`` are intentionally
-# NOT in ``__all__`` here; the canonical 14-symbol surface is locked by
-# ``tests/unit/test_engine_init.py``. They ARE importable both from the
-# package (``from bonfire.engine import SageCorrectionResolvedGate``) and
-# from the submodule (``from bonfire.engine.gates import ...``).
-# Promoting them to ``__all__`` is a follow-up decision once the 14-surface
-# lock is widened.
+# ``MergePreflightGate`` is intentionally NOT in ``__all__`` here; the
+# canonical 15-symbol surface is locked by ``tests/unit/test_engine_init.py``.
+# It IS importable both from the package and from the submodule
+# (``from bonfire.engine.gates import MergePreflightGate``). Promoting it
+# to ``__all__`` is a follow-up decision.
 
 __all__ = [
     "CheckpointData",
@@ -57,6 +55,7 @@ __all__ = [
     "PipelineResult",
     "RedPhaseGate",
     "ReviewApprovalGate",
+    "SageCorrectionResolvedGate",
     "StageExecutor",
     "TestPassGate",
     "VerificationGate",

@@ -4,19 +4,22 @@ File-level names stay gamified (historical + grep). The generic role each
 handler implements lives in ``HANDLER_ROLE_MAP`` and as a module-level
 ``ROLE`` constant inside each handler module.
 
-| stem       | class               | generic role | gamified display |
-|------------|---------------------|--------------|------------------|
-| bard       | BardHandler         | publisher    | Bard             |
-| wizard     | WizardHandler       | reviewer     | Wizard           |
-| herald     | HeraldHandler       | closer       | Herald           |
-| architect  | ArchitectHandler    | analyst      | Architect        |
+| stem                    | class                          | generic role | gamified display |
+|-------------------------|--------------------------------|--------------|------------------|
+| bard                    | BardHandler                    | publisher    | Bard             |
+| wizard                  | WizardHandler                  | reviewer     | Wizard           |
+| herald                  | HeraldHandler                  | closer       | Herald           |
+| architect               | ArchitectHandler               | analyst      | Architect        |
+| sage_correction_bounce  | SageCorrectionBounceHandler    | synthesizer  | Sage             |
 
-Deterministic verification / synthesizer-correction handlers bypass the
-gamified-display map (``HANDLER_ROLE_MAP``); they appear in ``__all__``
-but not in the role map. Today: ``MergePreflightHandler`` (verifier) and
-``SageCorrectionBounceHandler`` (synthesizer in correction-mode). See
-Sage memo ``bon-519-sage-20260428T033101Z.md`` §A Q1 Path beta + §D10
-line 745.
+Deterministic verification handlers bypass the gamified-display map
+(``HANDLER_ROLE_MAP``); they appear in ``__all__`` but not in the role
+map. Today: ``MergePreflightHandler`` (verifier). The synthesizer-
+correction stage (``SageCorrectionBounceHandler``) IS in the map — it
+binds the ``sage_correction_bounce`` stage stem to
+``AgentRole.SYNTHESIZER`` so the display layer can resolve its gamified
+name through the same path as the other handlers. See Sage memo
+``bon-519-sage-20260428T033101Z.md`` §A Q1 Path beta + §D10 line 745.
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ HANDLER_ROLE_MAP: dict[str, AgentRole] = {
     "bard": AgentRole.PUBLISHER,
     "wizard": AgentRole.REVIEWER,
     "herald": AgentRole.CLOSER,
+    "sage_correction_bounce": AgentRole.SYNTHESIZER,
     "architect": AgentRole.ANALYST,
 }
 

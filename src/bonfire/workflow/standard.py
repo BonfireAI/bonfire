@@ -35,25 +35,21 @@ def _stage(
 
 
 def standard_build() -> WorkflowPlan:
-    """The reference 8-stage build pipeline.
+    """The reference 9-stage build pipeline.
 
-    Flow: scout -> knight -> warrior -> prover -> bard -> wizard ->
-    merge_preflight -> herald
+    Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
+    bard -> wizard -> merge_preflight -> herald
 
     - Knight writes RED tests, Warrior makes them GREEN (up to 3 attempts).
     - Prover verifies; on failure, bounces back to Warrior.
+    - Sage correction (``sage_correction_bounce``) classifies post-Prover
+      failures and either resolves them in a restricted-tool correction
+      cycle or escalates back to Warrior.
     - Bard writes the PR, Wizard reviews it; on rejection, bounces to Warrior.
     - MergePreflight runs full-suite pytest against the simulated merged
       tip BEFORE the merge button (Sage memo
       ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     - Herald announces the result.
-
-    The :class:`bonfire.handlers.SageCorrectionBounceHandler` stage is
-    available as a composable building block (with the canonical
-    ``sage_correction_bounce`` stage name and ``sage_correction_resolved``
-    gate), but is NOT yet wired into ``standard_build``. Wiring it
-    requires extending the workflow contract tests; that update lives in
-    a follow-up ticket so this commit's surface stays minimal.
     """
     return WorkflowPlan(
         name="standard_build",
@@ -77,10 +73,18 @@ def standard_build() -> WorkflowPlan:
                 depends_on=["warrior"],
             ),
             _stage(
+                "sage_correction_bounce",
+                "synthesizer",
+                handler_name="sage_correction_bounce",
+                gates=["sage_correction_resolved"],
+                on_gate_failure="warrior",
+                depends_on=["prover"],
+            ),
+            _stage(
                 "bard",
                 "bard",
                 handler_name="bard",
-                depends_on=["prover"],
+                depends_on=["sage_correction_bounce"],
             ),
             _stage(
                 "wizard",

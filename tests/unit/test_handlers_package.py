@@ -50,9 +50,7 @@ except ImportError as e:  # pragma: no cover
 @pytest.fixture(autouse=True)
 def _require_handlers_package() -> None:
     if _PACKAGE_IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.handlers package not importable: {_PACKAGE_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.handlers package not importable: {_PACKAGE_IMPORT_ERROR}")
 
 
 # ---------------------------------------------------------------------------
@@ -112,12 +110,25 @@ class TestHandlerRoleMap:
                 f"not {type(value).__name__}. Bare strings defeat the point."
             )
 
-    def test_handler_role_map_has_four_entries(self) -> None:
-        """Exactly four keys: bard, wizard, herald, architect. No strategist (D6)."""
+    def test_handler_role_map_has_five_entries(self) -> None:
+        """Exactly five keys: bard, wizard, herald, architect, sage_correction_bounce.
+
+        The fifth entry binds the synthesizer-correction stage stem to the
+        generic ``AgentRole.SYNTHESIZER`` so the display layer can resolve
+        the stage's gamified name through the same map as the other handlers.
+        Strategist remains OUT OF SCOPE.
+        """
         m = handlers_pkg.HANDLER_ROLE_MAP
-        assert set(m.keys()) == {"bard", "wizard", "herald", "architect"}, (
-            f"HANDLER_ROLE_MAP must have exactly {{bard, wizard, herald, architect}}; "
-            f"got {sorted(m.keys())}. Strategist is OUT OF SCOPE for W5.3."
+        assert set(m.keys()) == {
+            "bard",
+            "wizard",
+            "herald",
+            "architect",
+            "sage_correction_bounce",
+        }, (
+            f"HANDLER_ROLE_MAP must have exactly "
+            f"{{bard, wizard, herald, architect, sage_correction_bounce}}; "
+            f"got {sorted(m.keys())}. Strategist remains OUT OF SCOPE."
         )
 
     def test_bard_maps_to_publisher(self) -> None:
@@ -136,6 +147,14 @@ class TestHandlerRoleMap:
             "to this generic role."
         )
         assert handlers_pkg.HANDLER_ROLE_MAP["architect"] is AgentRole.ANALYST
+
+    def test_sage_correction_bounce_maps_to_synthesizer(self) -> None:
+        """The synthesizer-correction stage stem binds to AgentRole.SYNTHESIZER."""
+        assert hasattr(AgentRole, "SYNTHESIZER"), (
+            "AgentRole.SYNTHESIZER must exist. The sage_correction_bounce "
+            "handler binds to this generic role."
+        )
+        assert handlers_pkg.HANDLER_ROLE_MAP["sage_correction_bounce"] is AgentRole.SYNTHESIZER
 
 
 # ---------------------------------------------------------------------------
@@ -208,12 +227,19 @@ class TestPackageDocstring:
 class TestMappingSelfConsistency:
     def test_map_roundtrips_through_role_display(self) -> None:
         """For every (stem, AgentRole) in HANDLER_ROLE_MAP, ROLE_DISPLAY has
-        an entry whose gamified name equals the stem title-cased."""
+        an entry. For single-word handler stems (bard/wizard/herald/architect)
+        the gamified name (lower-cased) must equal the stem; multi-word
+        stage stems (e.g. ``sage_correction_bounce``) are stage names, not
+        gamified handler names, and are exempt from the title-case round-trip.
+        """
         m = handlers_pkg.HANDLER_ROLE_MAP
         for stem, role in m.items():
             assert role.value in ROLE_DISPLAY, (
                 f"HANDLER_ROLE_MAP[{stem!r}] = {role!r} but no ROLE_DISPLAY entry"
             )
+            if "_" in stem:
+                # Multi-word stage stems are not gamified handler names.
+                continue
             assert ROLE_DISPLAY[role.value].gamified.lower() == stem, (
                 f"Stem {stem!r} must equal ROLE_DISPLAY[{role.value!r}].gamified "
                 f"(lower-cased) = {ROLE_DISPLAY[role.value].gamified.lower()!r}"
@@ -247,8 +273,7 @@ class TestStrategistOutOfScope:
         init_path = Path(handlers_pkg.__file__)
         src = init_path.read_text()
         assert "strategist" not in src.lower(), (
-            "Strategist is OUT OF SCOPE for W5.3. "
-            "handlers/__init__.py must not reference it."
+            "Strategist is OUT OF SCOPE for W5.3. handlers/__init__.py must not reference it."
         )
 
 

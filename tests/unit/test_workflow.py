@@ -278,14 +278,16 @@ class TestFactoryInvariants:
 
 
 class TestStandardBuild:
-    """standard_build() returns a valid 8-stage STANDARD WorkflowPlan.
+    """standard_build() returns a valid 9-stage STANDARD WorkflowPlan.
 
-    Flow: scout -> knight -> warrior -> prover -> bard -> wizard ->
-    merge_preflight -> herald (Sage memo
-    ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
+    Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
+    bard -> wizard -> merge_preflight -> herald.
     Knight writes RED, Warrior makes GREEN (max 3 iterations, no self-bounce).
-    Prover + Wizard each bounce back to Warrior on gate failure.
-    MergePreflight runs full-suite pytest against the simulated merged tip.
+    Prover bounces to Warrior on gate failure; on prover pass, the
+    sage_correction_bounce stage runs (synthesizer-correction handler) and
+    on gate failure also bounces to Warrior. Bard publishes, Wizard reviews
+    (bounces to Warrior on rejection), MergePreflight runs full-suite
+    pytest against the simulated merged tip, and Herald announces.
     """
 
     @pytest.fixture()
@@ -298,8 +300,8 @@ class TestStandardBuild:
     def test_workflow_type_is_standard(self, plan: WorkflowPlan) -> None:
         assert plan.workflow_type == WorkflowType.STANDARD
 
-    def test_has_eight_stages(self, plan: WorkflowPlan) -> None:
-        assert len(plan.stages) == 8
+    def test_has_nine_stages(self, plan: WorkflowPlan) -> None:
+        assert len(plan.stages) == 9
 
     def test_stage_names_in_order(self, plan: WorkflowPlan) -> None:
         names = [s.name for s in plan.stages]
@@ -308,6 +310,7 @@ class TestStandardBuild:
             "knight",
             "warrior",
             "prover",
+            "sage_correction_bounce",
             "bard",
             "wizard",
             "merge_preflight",
@@ -363,62 +366,91 @@ class TestStandardBuild:
         prover = plan.stages[3]
         assert "warrior" in prover.depends_on
 
+    def test_sage_correction_bounce_name(self, plan: WorkflowPlan) -> None:
+        stage = plan.stages[4]
+        assert stage.name == "sage_correction_bounce"
+
+    def test_sage_correction_bounce_role(self, plan: WorkflowPlan) -> None:
+        """The synthesizer-correction stage carries the synthesizer role."""
+        stage = plan.stages[4]
+        assert stage.role == "synthesizer"
+
+    def test_sage_correction_bounce_handler_name(self, plan: WorkflowPlan) -> None:
+        stage = plan.stages[4]
+        assert stage.handler_name == "sage_correction_bounce"
+
+    def test_sage_correction_bounce_has_resolved_gate(self, plan: WorkflowPlan) -> None:
+        stage = plan.stages[4]
+        assert "sage_correction_resolved" in stage.gates
+
+    def test_sage_correction_bounce_bounces_to_warrior(self, plan: WorkflowPlan) -> None:
+        """On gate failure the synthesizer-correction stage bounces to
+        Warrior, mirroring the prover bounce pattern."""
+        stage = plan.stages[4]
+        assert stage.on_gate_failure == "warrior"
+
+    def test_sage_correction_bounce_depends_on_prover(self, plan: WorkflowPlan) -> None:
+        stage = plan.stages[4]
+        assert "prover" in stage.depends_on
+
     def test_bard_role(self, plan: WorkflowPlan) -> None:
-        bard = plan.stages[4]
+        bard = plan.stages[5]
         assert bard.role == "bard"
 
     def test_bard_handler_name(self, plan: WorkflowPlan) -> None:
-        bard = plan.stages[4]
+        bard = plan.stages[5]
         assert bard.handler_name == "bard"
 
-    def test_bard_depends_on_prover(self, plan: WorkflowPlan) -> None:
-        bard = plan.stages[4]
-        assert "prover" in bard.depends_on
+    def test_bard_depends_on_sage_correction_bounce(self, plan: WorkflowPlan) -> None:
+        """Bard's upstream dependency moves from prover to the
+        synthesizer-correction stage once the latter is wired."""
+        bard = plan.stages[5]
+        assert "sage_correction_bounce" in bard.depends_on
+        assert "prover" not in bard.depends_on
 
     def test_wizard_role(self, plan: WorkflowPlan) -> None:
-        wizard = plan.stages[5]
+        wizard = plan.stages[6]
         assert wizard.role == "wizard"
 
     def test_wizard_handler_name(self, plan: WorkflowPlan) -> None:
-        wizard = plan.stages[5]
+        wizard = plan.stages[6]
         assert wizard.handler_name == "wizard"
 
     def test_wizard_has_review_approval_gate(self, plan: WorkflowPlan) -> None:
-        wizard = plan.stages[5]
+        wizard = plan.stages[6]
         assert "review_approval" in wizard.gates
 
     def test_wizard_bounces_to_warrior(self, plan: WorkflowPlan) -> None:
-        wizard = plan.stages[5]
+        wizard = plan.stages[6]
         assert wizard.on_gate_failure == "warrior"
 
     def test_wizard_depends_on_bard(self, plan: WorkflowPlan) -> None:
-        wizard = plan.stages[5]
+        wizard = plan.stages[6]
         assert "bard" in wizard.depends_on
 
     def test_merge_preflight_role(self, plan: WorkflowPlan) -> None:
-        preflight = plan.stages[6]
+        preflight = plan.stages[7]
         assert preflight.role == "verifier"
 
     def test_merge_preflight_handler_name(self, plan: WorkflowPlan) -> None:
-        preflight = plan.stages[6]
+        preflight = plan.stages[7]
         assert preflight.handler_name == "merge_preflight"
 
     def test_merge_preflight_depends_on_wizard(self, plan: WorkflowPlan) -> None:
-        preflight = plan.stages[6]
+        preflight = plan.stages[7]
         assert "wizard" in preflight.depends_on
 
     def test_herald_role(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[7]
+        herald = plan.stages[8]
         assert herald.role == "herald"
 
     def test_herald_handler_name(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[7]
+        herald = plan.stages[8]
         assert herald.handler_name == "herald"
 
     def test_herald_depends_on_merge_preflight(self, plan: WorkflowPlan) -> None:
-        """Sage memo §D6 line 542: herald.depends_on rewired to
-        ['merge_preflight']."""
-        herald = plan.stages[7]
+        """herald.depends_on stays rewired to ['merge_preflight']."""
+        herald = plan.stages[8]
         assert "merge_preflight" in herald.depends_on
 
     def test_plan_is_frozen(self, plan: WorkflowPlan) -> None:

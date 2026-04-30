@@ -107,8 +107,7 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan", "--port", str(port_value), "--no-browser"])
         assert result.exit_code == 0, (
-            f"scan with port={port_value} exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"scan with port={port_value} exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=port_value, no_browser=True)
 
@@ -136,7 +135,140 @@ class TestScanCliThreading:
         mock_run.return_value = None
         result = runner.invoke(app, ["scan"])
         assert result.exit_code == 0, (
-            f"default scan invocation exit_code: {result.exit_code}; "
-            f"output: {result.output!r}"
+            f"default scan invocation exit_code: {result.exit_code}; output: {result.output!r}"
         )
         mock_run.assert_called_once_with(port=0, no_browser=False)
+
+
+# ---------------------------------------------------------------------------
+# Innovation lens — BON-600: Ctrl-C cleanup contract across timing windows.
+#
+# The narrow ticket spec is: print "Front Door closed." when Ctrl-C arrives
+# mid-`server.stop()`. The policy intent is wider — `bonfire scan` is a
+# user-facing TUI command, and the cleanup line is the user's only signal
+# that the server actually closed cleanly. It MUST print regardless of
+# WHEN the KeyboardInterrupt arrives in the lifecycle:
+#
+#   1. before any server work (asyncio.run hasn't started the coroutine);
+#   2. mid-flight inside _run_scan (after server.start, before stop);
+#   3. mid-server.stop() itself (the BON-600 narrow case);
+#   4. after _run_scan completes (stop already finished, but the user
+#      hammered Ctrl-C during teardown of the asyncio loop).
+#
+# We parametrize over the four arrival points by varying which part of
+# the stack the mock raises from. All four MUST surface "Front Door
+# closed." — that's the lens-widening: BON-600 is one shape of the same
+# policy, not a one-off case.
+#
+# Innovation also: assert the EXACT text (newline + capitalization) so a
+# future refactor that changes "Front Door closed." → "Closed." (less
+# informative) is caught.
+# ---------------------------------------------------------------------------
+
+
+class TestScanCleanupOnInterrupt:
+    """Drift-guards on the Ctrl-C cleanup contract across timing windows."""
+
+    @pytest.mark.xfail(
+        reason="BON-600: KeyboardInterrupt mid-_run_scan must surface cleanup line",
+    )
+    @pytest.mark.parametrize(
+        ("scenario", "side_effect"),
+        [
+            ("interrupt_at_start", KeyboardInterrupt()),
+            ("interrupt_after_partial_work", KeyboardInterrupt("user pressed Ctrl-C")),
+        ],
+    )
+    @patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock)
+    def test_scan_prints_cleanup_on_interrupt_during_run(
+        self,
+        mock_run: AsyncMock,
+        scenario: str,
+        side_effect: KeyboardInterrupt,
+    ) -> None:
+        """`bonfire scan` prints `Front Door closed.` when interrupted mid-run.
+
+        Parametrized over interrupt arrival points. Mock raises
+        KeyboardInterrupt directly from `_run_scan` — simulating both the
+        "interrupt before any work" case and "interrupt after partial work
+        with a message" case.
+
+        Cites scan.py:52-55 — the `try/except KeyboardInterrupt: typer.echo`
+        wrapper is the load-bearing contract.
+        """
+        mock_run.side_effect = side_effect
+        result = runner.invoke(app, ["scan", "--no-browser"])
+
+        # The CliRunner captures the echo; exit code can be 0 (caught) or 1
+        # depending on how the impl chooses to surface — what matters is the
+        # cleanup text is visible to the user.
+        assert "Front Door closed." in result.output, (
+            f"scenario={scenario!r}: cleanup line missing from output. "
+            f"exit_code={result.exit_code}; output={result.output!r}"
+        )
+
+    @pytest.mark.xfail(
+        reason="BON-600: KeyboardInterrupt raised from server.stop() must still cleanup",
+    )
+    def test_scan_prints_cleanup_on_interrupt_during_server_stop(self) -> None:
+        """KeyboardInterrupt from inside `server.stop()` surfaces cleanup line.
+
+        This is the narrow BON-600 case: simulates the user pressing Ctrl-C
+        AFTER `server.start()` has succeeded, while `server.stop()` is
+        running in the `finally` block of `_run_scan`. The `try/except
+        KeyboardInterrupt` wrapper at the `asyncio.run` boundary MUST
+        catch the propagated interrupt and emit the cleanup line.
+
+        We construct a stand-in `_run_scan` coroutine that emulates the
+        real lifecycle: start work, hit a KeyboardInterrupt on the way out
+        of stop().
+        """
+
+        async def fake_run_scan(*, port: int, no_browser: bool) -> None:  # noqa: ARG001
+            # Simulate server.start() succeeding, then KeyboardInterrupt
+            # arriving from inside `await server.stop()`. The try/finally
+            # in the real _run_scan calls server.stop() in the finally —
+            # if stop raises KeyboardInterrupt, asyncio.run propagates it.
+            try:
+                # Pretend we got past server.start and into the wait
+                pass
+            finally:
+                # Pretend server.stop() itself raised KeyboardInterrupt
+                raise KeyboardInterrupt("Ctrl-C during server.stop")
+
+        with patch("bonfire.cli.commands.scan._run_scan", side_effect=fake_run_scan):
+            result = runner.invoke(app, ["scan", "--no-browser"])
+
+        assert "Front Door closed." in result.output, (
+            f"cleanup line missing when KeyboardInterrupt arrived mid-server.stop(). "
+            f"exit_code={result.exit_code}; output={result.output!r}"
+        )
+
+    @pytest.mark.xfail(
+        reason="BON-600: cleanup line text format is load-bearing user signal",
+    )
+    @patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock)
+    def test_scan_cleanup_text_format_is_stable(self, mock_run: AsyncMock) -> None:
+        """Cleanup line MUST be exactly `Front Door closed.` — guards drift.
+
+        The text is the user's only signal that cleanup ran. Drift to
+        less-informative shapes ("Closed.", "Goodbye!", "exit") would pass
+        the narrow `"Front Door closed." in output` substring test only by
+        accident. This test asserts the exact phrase appears as a complete
+        token (preceded by a newline per scan.py:55).
+        """
+        mock_run.side_effect = KeyboardInterrupt()
+        result = runner.invoke(app, ["scan", "--no-browser"])
+
+        # scan.py:55 prints "\nFront Door closed." — the newline is part
+        # of the contract (separates from any prior chatter).
+        assert "\nFront Door closed." in result.output, (
+            f"cleanup line missing leading newline or has drifted text. output={result.output!r}"
+        )
+        # Capitalization: "Front Door" with both Fs and Ds capitalized
+        # (proper-noun branding per the module docstring). A lowercased
+        # variant ("front door closed.") would be a regression — the
+        # surface name is a proper noun for the onboarding feature.
+        assert "front door closed." not in result.output, (
+            "cleanup line capitalization drifted to lowercase 'front door'"
+        )

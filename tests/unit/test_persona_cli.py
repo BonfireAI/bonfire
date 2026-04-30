@@ -234,3 +234,272 @@ class TestPersonaDiscoverySurface:
             assert "builtins" in builtin_str, (
                 f"builtin_dir must descend into 'builtins/' — got {builtin_str!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Innovation lens — BON-601: type-level `Traversable` contract.
+#
+# The floor test asserts that the *string representation* of `builtin_dir`
+# contains the path components "persona" and "builtins". That is a fragile
+# proxy: a contributor could pass `Path(__file__).parent / "persona" /
+# "builtins"` and pass the floor test while breaking the wheel-install
+# resolution that BON-601 is actually about.
+#
+# The S007 lesson (worktree + editable install hazard) names the canonical
+# fix: builtin_dir MUST resolve through `importlib.resources.files()`. The
+# duck-typed contract `importlib.resources` returns is `Traversable` —
+# defined in `importlib.resources.abc`. `pathlib.Path` IS-A Traversable
+# (Python's stdlib uses ABC.register), but a plain `Path("…")` constructed
+# from `__file__` is NOT what `importlib.resources.files()` returns inside
+# a wheel install (where it can be a `MultiplexedPath` or similar zip-aware
+# Traversable). Asserting the type, not the str, is the canonical guard.
+#
+# Innovation: assert `isinstance(builtin_dir, Traversable)` AND probe the
+# Traversable interface methods (`joinpath`, `iterdir`, `is_dir`) actually
+# work on the value passed — that catches a regression where someone
+# passes a string path or a non-Traversable wrapper.
+# ---------------------------------------------------------------------------
+
+
+class TestPersonaLoaderTypeContract:
+    """Drift-guards on the type-level Traversable contract for builtin_dir."""
+
+    @pytest.mark.xfail(
+        reason="BON-601: builtin_dir must be importlib.resources.abc.Traversable instance",
+    )
+    def test_loader_builtin_dir_is_traversable(self) -> None:
+        """`_get_loader()` passes a `Traversable` for `builtin_dir`.
+
+        `importlib.resources.files()` is documented to return a
+        `Traversable` — the only abstract type that survives across
+        wheel / editable / zipped-egg installs. Asserting the canonical
+        type is the only check that survives the install-mode permutations.
+
+        Floor test compares `str(builtin_dir)` against literal substrings,
+        which would still pass if a future refactor switched to a hard-coded
+        `Path(__file__).parent` — silently breaking wheel installs.
+        """
+        import importlib.resources.abc
+
+        from bonfire.cli.commands.persona import _get_loader
+
+        with patch("bonfire.cli.commands.persona.PersonaLoader") as mock_loader_cls:
+            mock_loader_cls.return_value = MagicMock()
+            _get_loader()
+
+            kwargs = mock_loader_cls.call_args.kwargs
+            builtin_dir = kwargs["builtin_dir"]
+
+            assert isinstance(builtin_dir, importlib.resources.abc.Traversable), (
+                f"builtin_dir must be an importlib.resources.abc.Traversable; "
+                f"got {type(builtin_dir).__name__!r}. A plain `pathlib.Path` "
+                f"constructed from __file__ would fail this — the canonical "
+                f"resolution is `importlib.resources.files('bonfire')`."
+            )
+
+    @pytest.mark.xfail(
+        reason="BON-601: builtin_dir must support the live Traversable interface",
+    )
+    def test_loader_builtin_dir_supports_traversable_interface(self) -> None:
+        """`builtin_dir` exposes the live `joinpath`/`iterdir`/`is_dir` ops.
+
+        Beyond static `isinstance`, the Traversable interface MUST actually
+        function on the live value. Walks the abstract API to catch:
+          - a regression where a wrapper claims Traversable but iterdir()
+            raises (e.g. a stale closed zipfile handle);
+          - a regression where `joinpath` returns a non-Traversable
+            (breaks downstream PersonaLoader._find_persona_dir).
+
+        Uses the un-patched `_get_loader()` so we exercise the real
+        importlib.resources path on the real package data.
+        """
+        import importlib.resources.abc
+
+        from bonfire.cli.commands.persona import _get_loader
+
+        loader = _get_loader()
+        # Reach through the loader's stored attribute to the actual value.
+        builtin_dir = loader._builtin_dir  # noqa: SLF001 — contract probe
+
+        assert isinstance(builtin_dir, importlib.resources.abc.Traversable)
+        # The three live operations the rest of the loader depends on.
+        assert builtin_dir.is_dir(), "builtin_dir.is_dir() must be True at runtime"
+        # joinpath returns another Traversable
+        passelewe_dir = builtin_dir.joinpath("passelewe")
+        assert isinstance(passelewe_dir, importlib.resources.abc.Traversable), (
+            "builtin_dir.joinpath() must return a Traversable, not a str/Path"
+        )
+        # iterdir returns Traversables
+        children = list(builtin_dir.iterdir())
+        assert children, "builtin_dir.iterdir() returned no entries"
+        for child in children:
+            assert isinstance(child, importlib.resources.abc.Traversable), (
+                f"iterdir entry {child!r} is not a Traversable"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Innovation lens — BON-599: TOML parse failure must warn, not silently fall
+# back.
+#
+# `_get_active_persona` today catches TOMLDecodeError + OSError and
+# silently returns the default. That is a debuggability hazard: a user with
+# a corrupt bonfire.toml gets the default persona with NO signal that
+# their config was ignored. The narrow ticket asks for ONE warning emit
+# on one TOML failure shape.
+#
+# The policy intent is wider: ANY TOML parse failure deserves the same
+# warning. We parametrize over four real-world failure shapes:
+#
+#   1. truncated mid-table     ("[bonfire")
+#   2. unclosed string         ('persona = "passe')
+#   3. invalid escape          ('persona = "\\q"')
+#   4. duplicate-key           ("[bonfire]\npersona = 'a'\npersona = 'b'")
+#
+# All four MUST emit a warning that:
+#   * is visible on stderr (caplog at WARNING+ level);
+#   * names the offending file (so the user can find it);
+#   * carries a parseable shape (not just an opaque traceback dump).
+#
+# Innovation also: an OSError (permission denied, etc.) gets the SAME
+# warning treatment — currently silently swallowed alongside
+# TOMLDecodeError per persona.py:38.
+# ---------------------------------------------------------------------------
+
+
+class TestActivePersonaTOMLFailureWarnings:
+    """Drift-guards on the warning contract for unreadable bonfire.toml."""
+
+    @pytest.mark.xfail(
+        reason="BON-599: every TOML decode failure shape must emit a warning",
+    )
+    @pytest.mark.parametrize(
+        ("failure_shape", "toml_content"),
+        [
+            ("truncated_table", "[bonfire"),
+            ("unclosed_string", '[bonfire]\npersona = "passe'),
+            ("invalid_escape", '[bonfire]\npersona = "\\q"'),
+            (
+                "duplicate_key",
+                '[bonfire]\npersona = "a"\npersona = "b"\n',
+            ),
+        ],
+    )
+    def test_get_active_persona_warns_on_any_toml_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        failure_shape: str,
+        toml_content: str,
+    ) -> None:
+        """Every TOML parse failure shape MUST emit a WARNING-level log.
+
+        Parametrized over 4 real-world corruption shapes. The narrow ticket
+        asks for ONE warning case; the policy widens to "any TOML failure →
+        warning, not silent fallback".
+
+        Cites persona.py:38 — the `except (TOMLDecodeError, OSError): pass`
+        is the silent-fallback regression site.
+        """
+        import logging
+
+        from bonfire.cli.commands.persona import _get_active_persona
+
+        monkeypatch.chdir(tmp_path)
+        toml_path = tmp_path / "bonfire.toml"
+        toml_path.write_text(toml_content)
+
+        with caplog.at_level(logging.WARNING):
+            result = _get_active_persona()
+
+        # Fallback still happens — the function is total, never raises.
+        assert isinstance(result, str), (
+            f"failure_shape={failure_shape!r}: expected str fallback, got {result!r}"
+        )
+
+        # But the warning MUST be visible.
+        warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert warning_records, (
+            f"failure_shape={failure_shape!r}: no WARNING-or-higher log emitted; "
+            f"caplog records: {[(r.levelname, r.message) for r in caplog.records]!r}"
+        )
+
+    @pytest.mark.xfail(
+        reason="BON-599: warning text must be parseable — name the file + the cause",
+    )
+    def test_get_active_persona_warning_names_the_file(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Warning text identifies the offending file so the user can fix it.
+
+        A warning that says only "TOML parse failed" is unactionable. The
+        warning MUST mention `bonfire.toml` (the canonical filename) so
+        the user knows what to edit. Innovation over a bare `caplog
+        records` count check: assert the message has parseable shape.
+        """
+        import logging
+
+        from bonfire.cli.commands.persona import _get_active_persona
+
+        monkeypatch.chdir(tmp_path)
+        toml_path = tmp_path / "bonfire.toml"
+        toml_path.write_text("[bonfire\npersona = ")  # mid-table truncation
+
+        with caplog.at_level(logging.WARNING):
+            _get_active_persona()
+
+        # At least one warning must mention the filename, so the user can
+        # locate the broken file.
+        warning_messages = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("bonfire.toml" in msg for msg in warning_messages), (
+            f"no warning mentioned `bonfire.toml`; messages: {warning_messages!r}"
+        )
+
+    @pytest.mark.xfail(
+        reason="BON-599: OSError on read MUST also warn — same silent-swallow site",
+    )
+    def test_get_active_persona_warns_on_oserror(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """OSError (permission, IO failure) gets the same warning treatment.
+
+        persona.py:38 catches `(TOMLDecodeError, OSError)` together — the
+        narrow ticket only names TOMLDecodeError, but the SAME silent-
+        swallow exists for OSError. The policy "fail loudly when config
+        is unreadable" is symmetric across both exception types.
+
+        Simulates the OSError by patching `tomllib.load` to raise it,
+        rather than fiddling with filesystem permissions (which would be
+        flaky on Windows CI per CLAUDE.md cross-platform rule).
+        """
+        import logging
+        from unittest.mock import patch as mock_patch
+
+        from bonfire.cli.commands.persona import _get_active_persona
+
+        monkeypatch.chdir(tmp_path)
+        toml_path = tmp_path / "bonfire.toml"
+        toml_path.write_text('[bonfire]\npersona = "minimal"\n')
+
+        with (
+            mock_patch(
+                "bonfire.cli.commands.persona.tomllib.load",
+                side_effect=OSError("simulated read failure"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = _get_active_persona()
+
+        assert isinstance(result, str), "fallback persona must be a string"
+        warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert warning_records, (
+            f"OSError on read silently swallowed — no warning emitted. "
+            f"caplog records: {[(r.levelname, r.message) for r in caplog.records]!r}"
+        )

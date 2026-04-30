@@ -25,6 +25,7 @@ PyPI-name-reservation stub that does NOT export `app` from a package path.
 
 from __future__ import annotations
 
+import pytest
 import typer
 from typer.testing import CliRunner
 
@@ -256,4 +257,114 @@ class TestRegistrationSurface:
         # Strip trailing newline only — content must match verbatim
         assert result.output.strip() == "bonfire 0.1.0", (
             f"Expected exact format 'bonfire 0.1.0'; got {result.output.strip()!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Innovation lens — BON-602: init idempotency, deeper than file presence.
+#
+# Floor `test_init_twice_does_not_overwrite` only verifies that a user marker
+# inside bonfire.toml survives a second `init`. The policy intent is wider:
+# `bonfire init` is meant to be safe to re-run on an existing project. That
+# means EVERY scaffolded artifact (bonfire.toml, .bonfire/, agents/) AND any
+# user content placed inside them must survive verbatim.
+#
+# These tests widen the surface to cover the directory side of idempotency:
+#
+#   * a marker file written into .bonfire/ survives re-init;
+#   * a marker file written into agents/ survives re-init;
+#   * a non-empty agents/ tree (sub-directories + files) is preserved
+#     recursively;
+#   * the original bonfire.toml mtime is unchanged by re-init (no write
+#     thrash even when content matches).
+#
+# Parametrized over the two scaffolded directories so a future regression
+# affecting only one of them is still surfaced.
+# ---------------------------------------------------------------------------
+
+
+class TestInitIdempotencyInnovation:
+    """Drift-guards on the wider `init` idempotency contract."""
+
+    @pytest.mark.xfail(
+        reason="BON-602: deep directory idempotency — user files inside scaffolded dirs",
+    )
+    @pytest.mark.parametrize("subdir", [".bonfire", "agents"])
+    def test_init_preserves_user_files_in_scaffolded_dirs(
+        self, tmp_path, monkeypatch, subdir: str
+    ) -> None:
+        """User files inside `.bonfire/` and `agents/` survive re-init.
+
+        The init command MUST treat existing scaffolded dirs as user
+        territory — never recursively wipe, never overwrite. Parametrized
+        over the two dirs so a regression touching only one is caught.
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        target = tmp_path / subdir
+        assert target.is_dir(), f"{subdir}/ missing after first init"
+
+        marker = target / "user-marker.txt"
+        marker.write_text("user content — must survive re-init")
+        marker_content = marker.read_text()
+
+        runner.invoke(app, ["init"])
+
+        assert marker.exists(), f"{subdir}/user-marker.txt deleted by re-init"
+        assert marker.read_text() == marker_content, (
+            f"{subdir}/user-marker.txt content mutated by re-init"
+        )
+
+    @pytest.mark.xfail(
+        reason="BON-602: re-init must preserve non-empty agents/ tree recursively",
+    )
+    def test_init_preserves_nonempty_agents_tree(self, tmp_path, monkeypatch) -> None:
+        """A multi-level agents/ tree survives re-init byte-for-byte.
+
+        Models the real-world case where a user has populated agents/ with
+        custom agent definitions (sub-dirs + .md / .toml files) and then
+        re-runs `bonfire init` (e.g. after upgrading bonfire-ai).
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        agents = tmp_path / "agents"
+        nested = agents / "my-team" / "scout"
+        nested.mkdir(parents=True, exist_ok=True)
+        (nested / "agent.md").write_text("# Scout\nUser-defined agent.")
+        (agents / "shared-config.toml").write_text('[shared]\nkey = "value"\n')
+
+        runner.invoke(app, ["init"])
+
+        assert (nested / "agent.md").read_text() == "# Scout\nUser-defined agent.", (
+            "nested user agent file mutated by re-init"
+        )
+        assert (agents / "shared-config.toml").read_text() == '[shared]\nkey = "value"\n', (
+            "top-level user config file mutated by re-init"
+        )
+        # Directory tree shape preserved
+        assert nested.is_dir(), "nested user agent directory removed by re-init"
+
+    @pytest.mark.xfail(
+        reason="BON-602: re-init must not write-thrash existing bonfire.toml (mtime stable)",
+    )
+    def test_init_does_not_thrash_existing_bonfire_toml_mtime(self, tmp_path, monkeypatch) -> None:
+        """Re-init must not rewrite bonfire.toml when content matches.
+
+        Even an idempotent overwrite (writing identical bytes) bumps mtime
+        and triggers downstream file-watchers (editors, build tools). The
+        policy is no-op-on-exists.
+        """
+        monkeypatch.chdir(tmp_path)
+        runner.invoke(app, ["init"])
+
+        toml_path = tmp_path / "bonfire.toml"
+        original_mtime = toml_path.stat().st_mtime_ns
+
+        runner.invoke(app, ["init"])
+
+        assert toml_path.stat().st_mtime_ns == original_mtime, (
+            "bonfire.toml was rewritten by re-init (mtime changed) — "
+            "init must be a true no-op when target exists"
         )

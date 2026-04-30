@@ -538,9 +538,9 @@ class PipelineEngine:
 
         # All iterations exhausted -- return final failed envelope
         if last_envelope is None:
-            last_envelope = Envelope(task=spec.name, agent_name=spec.agent_name).with_error(
-                ErrorDetail(error_type="executor", message="no iterations executed")
-            )
+            last_envelope = Envelope(
+                task=spec.name or "<unnamed>", agent_name=spec.agent_name
+            ).with_error(ErrorDetail(error_type="executor", message="no iterations executed"))
         await self._emit(
             StageFailed(
                 session_id=session_id,

@@ -104,10 +104,19 @@ class ParsedDecisionLog:
     ``deps`` is a ``frozenset[str]`` of dep ids the memo enumerates;
     ``parse_source`` is the source the parser used. ``front_matter``
     wins when both are present.
+
+    ``records`` is a ``tuple[DeferRecord, ...]`` of per-bullet provenance
+    entries -- one record per parsed dep, tagged with the
+    ``parse_source`` it came from. Additive: production callers today
+    consume ``deps`` only; the records carry forward provenance so future
+    error messages can cite the source of each defer ("Sage memo: dep
+    BON-X parsed from prose section but not in failing-test xfail
+    reasons").
     """
 
     deps: frozenset[str] = field(default_factory=frozenset)
     parse_source: Literal["front_matter", "prose", "absent"] = "absent"
+    records: tuple[DeferRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,21 +194,42 @@ def parse_sage_decision_log(text: str) -> ParsedDecisionLog:
     fm_match = _FRONT_MATTER_RE.search(text)
     if fm_match is not None:
         body = fm_match.group("body")
-        deps = frozenset(m.group("dep") for m in _FRONT_MATTER_DEP_RE.finditer(body))
-        return ParsedDecisionLog(deps=deps, parse_source="front_matter")
+        fm_deps = [m.group("dep") for m in _FRONT_MATTER_DEP_RE.finditer(body)]
+        deps = frozenset(fm_deps)
+        # Provenance records: one per dep, tagged ``front_matter``.
+        # Sorted for deterministic ordering (frozenset iteration is
+        # insertion-ordered in CPython 3.7+ but not specified).
+        records = tuple(
+            DeferRecord(dep_id=dep, parse_source="front_matter") for dep in sorted(deps)
+        )
+        return ParsedDecisionLog(
+            deps=deps,
+            parse_source="front_matter",
+            records=records,
+        )
 
     # 2. Canonical heading prose (multi-section unions).
     sections = list(_DEFER_SECTION_RE.finditer(text))
     if sections:
         deps_set: set[str] = set()
+        records_list: list[DeferRecord] = []
         for section in sections:
             body = section.group("body")
             for m in _BULLET_DEP_RE.finditer(body):
-                deps_set.add(m.group("dep"))
-        return ParsedDecisionLog(deps=frozenset(deps_set), parse_source="prose")
+                dep = m.group("dep")
+                if dep not in deps_set:
+                    deps_set.add(dep)
+                    records_list.append(
+                        DeferRecord(dep_id=dep, parse_source="prose"),
+                    )
+        return ParsedDecisionLog(
+            deps=frozenset(deps_set),
+            parse_source="prose",
+            records=tuple(records_list),
+        )
 
     # 3. Absent -- no parseable section.
-    return ParsedDecisionLog(deps=frozenset(), parse_source="absent")
+    return ParsedDecisionLog(deps=frozenset(), parse_source="absent", records=())
 
 
 # ---------------------------------------------------------------------------

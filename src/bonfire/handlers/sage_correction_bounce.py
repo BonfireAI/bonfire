@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -85,6 +86,15 @@ _VERDICT_WARRIOR_BUG: str = "warrior_bug"
 _VERDICT_AMBIGUOUS: str = "ambiguous"
 _VERDICT_GREEN: str = "green"
 _VERDICT_NOT_NEEDED_WARRIOR_GREEN: str = "not_needed_warrior_green"
+
+# Warrior-was-already-green skip signals. Two spellings carry the same
+# routing intent: ``"green"`` (canonical classifier output) and the legacy
+# ``"not_needed_warrior_green"`` from Sage §D3 line 291. Treating them as
+# a single set keeps ``_route_verdict`` symmetric and prevents the legacy
+# spelling from silently falling through to the SAGE_UNDER_MARKED path.
+_GREEN_VERDICTS: frozenset[str] = frozenset(
+    {_VERDICT_GREEN, _VERDICT_NOT_NEEDED_WARRIOR_GREEN},
+)
 _KNOWN_VERDICTS: frozenset[str] = frozenset(
     {
         _VERDICT_SAGE_UNDER_MARKED,
@@ -102,6 +112,14 @@ _ERROR_CORRECTION_EXHAUSTED: str = "sage_correction_exhausted"
 
 # Default re-verify pytest invocation. Tuple args -- never `shell=True`.
 _DEFAULT_PYTEST_ARGS: tuple[str, ...] = ("pytest",)
+
+# Free-text fallback for ``_extract_commit_sha`` when the backend result
+# does not expose a structured ``metadata["correction_commit_sha"]`` field.
+# Matches ``sha=<hex>``, ``sha: <hex>``, and ``sha <hex>`` for hex runs of
+# 4-40 chars (4 to allow short SHAs in tests, 40 = full git SHA-1).
+_COMMIT_SHA_FALLBACK_RE: re.Pattern[str] = re.compile(
+    r"sha[=\s:]+([a-fA-F0-9]{4,40})",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +441,7 @@ class SageCorrectionBounceHandler:
                 },
             )
 
-        if verdict == _VERDICT_GREEN:
+        if verdict in _GREEN_VERDICTS:
             return self._build_skip_envelope(
                 envelope=envelope,
                 reason="warrior_green",
@@ -649,16 +667,29 @@ class SageCorrectionBounceHandler:
     def _extract_commit_sha(backend_result: Any) -> str:
         """Pull a commit SHA out of the backend result (mock-tolerant).
 
-        The backend-of-record envelope carries
-        ``metadata["correction_commit_sha"]``. Tests pass a MagicMock with
-        ``metadata={"correction_commit_sha": "abc123"}``; tolerate plain
-        objects exposing the attribute.
+        Two-tier extraction:
+          1. Structured first: ``metadata["correction_commit_sha"]`` --
+             this is the protocol-conformant backend's contract.
+          2. Free-text fallback: ``sha=<hex>`` regex against
+             ``backend_result.result`` -- catches backends that return a
+             plain string blob without metadata (tolerant to backends that
+             do not yet implement the structured envelope).
+
+        Returns ``""`` when no SHA is recoverable.
         """
+        # Tier 1: structured metadata (protocol-conformant backend).
         metadata = getattr(backend_result, "metadata", None)
         if isinstance(metadata, dict):
             sha = metadata.get("correction_commit_sha", "")
-            if isinstance(sha, str):
+            if isinstance(sha, str) and sha:
                 return sha
+        # Tier 2: free-text fallback. Match ``sha=<hex>`` (also tolerates
+        # ``sha: <hex>`` and ``sha <hex>``) against the result blob.
+        result_text = getattr(backend_result, "result", "") or ""
+        if isinstance(result_text, str) and result_text:
+            match = _COMMIT_SHA_FALLBACK_RE.search(result_text)
+            if match is not None:
+                return match.group(1)
         return ""
 
     @staticmethod

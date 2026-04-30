@@ -138,6 +138,14 @@ class TestContainsAbsolutePaths:
     def test_no_false_positive_on_ftp_url(self) -> None:
         assert PathGuard.contains_absolute_paths("ftp://example.com/files") is False
 
+    def test_detects_workspace_path(self) -> None:
+        """GitHub Codespaces mounts repos at /workspace/... — must be detected."""
+        assert PathGuard.contains_absolute_paths("Edit /workspace/myrepo/main.py") is True
+
+    def test_detects_github_workspace_path(self) -> None:
+        """GitHub Actions runners use /github/workspace/... — must be detected."""
+        assert PathGuard.contains_absolute_paths("Read /github/workspace/main.py") is True
+
 
 # ===========================================================================
 # PathGuard.find_absolute_paths
@@ -197,6 +205,16 @@ class TestFindAbsolutePaths:
 
     def test_ignores_https_url(self) -> None:
         assert PathGuard.find_absolute_paths("https://github.com/foo/bar") == []
+
+    def test_finds_workspace_path(self) -> None:
+        """GitHub Codespaces mounts at /workspace/... — must be returned."""
+        result = PathGuard.find_absolute_paths("Edit /workspace/myrepo/main.py")
+        assert "/workspace/myrepo/main.py" in result
+
+    def test_finds_github_workspace_path(self) -> None:
+        """GitHub Actions runners use /github/workspace/... — must be returned."""
+        result = PathGuard.find_absolute_paths("Read /github/workspace/main.py")
+        assert "/github/workspace/main.py" in result
 
 
 # ===========================================================================

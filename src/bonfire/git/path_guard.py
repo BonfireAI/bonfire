@@ -55,7 +55,7 @@ class PathGuardError(Exception):
 # Negative lookbehind prevents matching URLs (https://..., ftp://..., etc.)
 _UNIX_PATH_RE = re.compile(
     r"(?<![a-zA-Z0-9+\-.:])"
-    r"(/(?:home|tmp|var|etc|usr|opt|root|mnt|srv|proc|sys|dev|run|boot|lib|sbin|bin|snap|media|nix)/\S+)"
+    r"(/(?:home|tmp|var|etc|usr|opt|root|mnt|srv|proc|sys|dev|run|boot|lib|sbin|bin|snap|media|nix|workspace|github)/\S+)"
 )
 
 # Windows absolute paths — drive letter + backslash

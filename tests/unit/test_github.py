@@ -812,6 +812,22 @@ class TestDetectGithubRepo:
         missing = tmp_path / "does-not-exist"
         assert detect_github_repo(missing) == ""
 
+    def test_subprocess_timeout_returns_empty(self, tmp_path) -> None:
+        """A subprocess timeout is a detection failure — returns ``""`` per contract.
+
+        Slow NFS mounts or non-git pinfs that walk the filesystem can hang
+        ``git remote get-url``. The function's contract ("Returns an empty
+        string if detection fails") covers this case.
+        """
+        from bonfire.github import detect_github_repo
+
+        with patch("bonfire.github.client.subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(
+                cmd=["git", "remote", "get-url", "origin"],
+                timeout=5,
+            )
+            assert detect_github_repo(tmp_path) == ""
+
 
 # ---------------------------------------------------------------------------
 # Package exports

@@ -27,12 +27,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bonfire.agent.tiers import resolve_model_for_role
 from bonfire.dispatch.runner import execute_with_retry
+from bonfire.engine import factory
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.executor import (
     StageExecutor,  # noqa: F401 -- public re-export for patch/discover
 )
+from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import (
     BonfireEvent,
@@ -103,8 +104,6 @@ class PipelineEngine:
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
     ) -> None:
-        from bonfire.models.config import BonfireSettings as _BonfireSettings
-
         self._backend = backend
         self._bus = bus
         self._config = config
@@ -113,7 +112,7 @@ class PipelineEngine:
         self._context_builder = context_builder or ContextBuilder()
         self._project_root = project_root
         self._tool_policy = tool_policy
-        self._settings = settings if settings is not None else _BonfireSettings()
+        self._settings = settings if settings is not None else factory.load_settings_or_default()
 
     # -- Public API ----------------------------------------------------------
 
@@ -453,7 +452,7 @@ class PipelineEngine:
                 task=task_prompt,
                 context=context,
                 agent_name=spec.agent_name,
-                model=spec.model_override or self._config.model,
+                model=spec.model_override or "",
                 metadata=merged_metadata,
             )
 
@@ -500,10 +499,11 @@ class PipelineEngine:
                 else:
                     role_tools = self._tool_policy.tools_for(spec.role)
                 options = DispatchOptions(
-                    model=(
-                        spec.model_override
-                        or resolve_model_for_role(spec.role, self._settings)
-                        or self._config.model
+                    model=resolve_dispatch_model(
+                        explicit_override=spec.model_override,
+                        role=spec.role,
+                        settings=self._settings,
+                        config=self._config,
                     ),
                     max_turns=self._config.max_turns,
                     max_budget_usd=self._config.max_budget_usd,

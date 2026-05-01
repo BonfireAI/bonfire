@@ -89,6 +89,11 @@ class PipelineEngine:
     Constructor accepts all dependencies via keyword-only arguments.
     ``run()`` is the sole public method -- a never-raise shell around
     ``_run_inner()``.
+
+    Known limitation: budget enforcement is group-boundary, not mid-group.
+    A long-running stage inside a parallel group cannot be cancelled when
+    the budget is exceeded mid-execution; the watchdog only fires between
+    groups. Future enhancement: cancellation-aware budget watchdog.
     """
 
     def __init__(

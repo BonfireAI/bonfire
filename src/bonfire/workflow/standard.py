@@ -35,21 +35,15 @@ def _stage(
 
 
 def standard_build() -> WorkflowPlan:
-    """The reference 9-stage build pipeline.
+    """The reference 9-stage TDD build pipeline.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
-    bard -> wizard -> merge_preflight -> herald
+    bard -> wizard -> merge_preflight -> herald.
 
-    - Knight writes RED tests, Warrior makes them GREEN (up to 3 attempts).
-    - Prover verifies; on failure, bounces back to Warrior.
-    - Sage correction (``sage_correction_bounce``) classifies post-Prover
-      failures and either resolves them in a restricted-tool correction
-      cycle or escalates back to Warrior.
-    - Bard writes the PR, Wizard reviews it; on rejection, bounces to Warrior.
-    - MergePreflight runs full-suite pytest against the simulated merged
-      tip BEFORE the merge button (Sage memo
-      ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
-    - Herald announces the result.
+    Three on_gate_failure bounces target the warrior (from prover,
+    sage_correction_bounce, and wizard). MergePreflight runs full-suite
+    pytest against the simulated merged tip before the merge button
+    (Sage memo ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     """
     return WorkflowPlan(
         name="standard_build",

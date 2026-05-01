@@ -26,7 +26,8 @@ Contract locked by this suite (Warrior hands this back GREEN):
 * Cost accumulates across every attempt whose envelope was received
   (terminal + success + retryable-failure all carry cost).
 * Exception-only exhaustion: final envelope carries
-  ``ErrorDetail(error_type='infrastructure', message=str(exc))``.
+  ``ErrorDetail(error_type=type(exc).__name__, message=str(exc))``,
+  falling back to ``"infrastructure"`` only when no exception was ever raised.
 * ``event_bus=None`` is the documented default — never crashes.
 * Session id on every emitted event equals ``envelope.envelope_id``.
 

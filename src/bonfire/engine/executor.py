@@ -300,6 +300,6 @@ class StageExecutor:
     def _fail_envelope(*, stage: StageSpec, message: str) -> Envelope:
         """Create a failed Envelope from an exception -- C19 safety net."""
         return Envelope(
-            task=stage.name,
+            task=stage.name or "<unnamed>",
             agent_name=stage.agent_name,
         ).with_error(ErrorDetail(error_type="executor", message=message))

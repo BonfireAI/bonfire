@@ -1472,3 +1472,64 @@ class TestPipelineUsesResolveDispatchModel:
         # Helper return value flows into DispatchOptions.model.
         assert len(backend.captured_options) == 1
         assert backend.captured_options[0].model == "RESOLVED-VIA-HELPER"
+
+
+# ===========================================================================
+# KT-001 — Last-resort fallback hardening (BON-664, CR-02 from PR #13)
+# ===========================================================================
+
+
+class TestPipelineLastResortFallbackUnnamedTask:
+    """Pin the contract that the last-resort fallback Envelope produced when
+    ``last_envelope is None`` (zero-iteration / no-iterations-executed path)
+    carries a non-empty ``task`` field.
+
+    Origin: BON-334 PR #13 pre-merge dual-lens gate finding CR-02 (Important).
+    Source memo:
+        ``docs/audit/retrospective/code-reviewer-2026-04-18T20-30-50Z.md``
+
+    Production site: ``src/bonfire/engine/pipeline.py:539-543``. When the
+    iteration loop does not execute (``spec.max_iterations == 0``) and no
+    envelope has been produced, the engine constructs a fallback failed
+    envelope at that line. Today it sets ``task=spec.name``; the contract
+    pinned here is that an empty ``spec.name`` resolves to the literal string
+    ``"<unnamed>"`` rather than leaking the empty string into the result.
+    """
+
+    async def test_pipeline_last_resort_fallback_uses_unnamed_when_spec_name_empty(
+        self,
+    ) -> None:
+        """Empty stage name + zero iterations -> fallback Envelope.task == "<unnamed>".
+
+        The simplest deterministic route into the ``if last_envelope is None``
+        branch is ``max_iterations=0``, which causes the iteration ``for``
+        loop to skip entirely. The branch then constructs the fallback
+        ``Envelope(task=spec.name, agent_name=spec.agent_name).with_error(...)``.
+        After the Warrior change, ``spec.name == ""`` MUST be replaced with
+        the literal ``"<unnamed>"`` at the call site.
+        """
+        engine = _make_engine()
+        plan = WorkflowPlan(
+            name="last-resort-empty-name",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(name="", agent_name="lonely-agent", max_iterations=0),
+            ],
+        )
+
+        result = await engine.run(plan)
+
+        # The empty-named stage should be in stages_done keyed by "" and
+        # carry the fallback failed envelope.
+        assert "" in result.stages, (
+            "Pipeline must record the empty-named stage in stages_done; "
+            f"got keys: {sorted(result.stages.keys())}"
+        )
+        fallback_env = result.stages[""]
+        assert fallback_env.task == "<unnamed>", (
+            "Last-resort fallback envelope must carry task='<unnamed>' when "
+            "spec.name is empty (BON-664 / CR-02). Got "
+            f"task={fallback_env.task!r}. Site: pipeline.py:539-543. The "
+            "Warrior changes ``task=spec.name`` -> ``task=spec.name or "
+            "'<unnamed>'``."
+        )

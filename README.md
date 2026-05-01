@@ -100,9 +100,11 @@ lookup.
 | Combines multiple reports into unified analysis   | `synthesizer`              | `sage`                    |
 | Architectural and structural analysis             | `analyst`                  | `architect`               |
 
-The `verifier` role has two gamified aliases (`assayer` and `prover`)
-because the workflow templates use both interchangeably depending on
-the stage's framing.
+The string `prover` appears in the `standard_build` pipeline as a stage
+label; that stage dispatches to the `verifier` role. `Assayer` is the
+verifier's only display alias — stage labels name DAG nodes inside a
+workflow plan, while display names are the persona-emitted role names
+in CLI output.
 
 ## Config Reference
 

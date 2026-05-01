@@ -79,6 +79,7 @@ must match that file exactly. If you change one, change the other.
 | reviewer       | Review Agent           | Wizard             |
 | closer         | Release Agent          | Herald             |
 | synthesizer    | Synthesis Agent        | Sage               |
+| analyst        | Analysis Agent         | Architect          |
 
 ## How to Add a New Role
 

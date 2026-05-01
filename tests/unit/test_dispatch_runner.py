@@ -26,7 +26,8 @@ Contract locked by this suite (Warrior hands this back GREEN):
 * Cost accumulates across every attempt whose envelope was received
   (terminal + success + retryable-failure all carry cost).
 * Exception-only exhaustion: final envelope carries
-  ``ErrorDetail(error_type='infrastructure', message=str(exc))``.
+  ``ErrorDetail(error_type=type(exc).__name__, message=str(exc))``,
+  falling back to ``"infrastructure"`` only when no exception was ever raised.
 * ``event_bus=None`` is the documented default — never crashes.
 * Session id on every emitted event equals ``envelope.envelope_id``.
 
@@ -346,15 +347,102 @@ class TestRetryOnException:
         assert result.envelope.status == TaskStatus.FAILED
         assert result.retries == 3
 
-    async def test_exhausted_attaches_infrastructure_error_type(self):
-        """Final FAILED envelope from exception-only exhaustion carries
-        ``error_type='infrastructure'`` with the exception message."""
+
+# ---------------------------------------------------------------------------
+# Exception-path error_type preservation
+# ---------------------------------------------------------------------------
+
+
+class TestExceptionPathErrorTypePreservation:
+    """When retries exhaust via the exception path, the final envelope's
+    ``error.error_type`` MUST equal the raised exception's class name
+    (``exc.__class__.__name__``), not the literal string ``"infrastructure"``.
+
+    Downstream observability consumers read ``envelope.error.error_type`` to
+    discriminate failure modes — a network timeout, a connection drop, a
+    backend bug, and a value error are different failure shapes that must
+    not collapse into a single opaque label. Keeping the exception class
+    name preserves the discrimination at zero added cost.
+
+    The boundary test locks the FAILED-path early-return is unchanged: a
+    backend that *returns* a FAILED envelope (rather than *raising*) with
+    a rich ``error_type`` keeps that rich type all the way through retry
+    exhaustion via the early-return at the FAILED-path branch.
+    """
+
+    async def test_timeout_error_class_name_preserved(self):
+        """``TimeoutError`` raised on every attempt → error_type='TimeoutError'."""
         env = _envelope()
-        backend = ScriptedBackend([RuntimeError("pipe closed")])
-        result = await execute_with_retry(backend, env, _options(), max_retries=0, retry_delay=0.0)
+        backend = ScriptedBackend(
+            [TimeoutError("attempt 1"), TimeoutError("attempt 2"), TimeoutError("attempt 3")]
+        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=2, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 2
         assert result.envelope.error is not None
-        assert result.envelope.error.error_type == "infrastructure"
-        assert "pipe closed" in result.envelope.error.message
+        assert result.envelope.error.error_type == "TimeoutError"
+        assert "attempt 3" in result.envelope.error.message
+
+    async def test_connection_error_class_name_preserved(self):
+        """``ConnectionError`` raised on every attempt → error_type='ConnectionError'."""
+        env = _envelope()
+        backend = ScriptedBackend(
+            [
+                ConnectionError("dropped 1"),
+                ConnectionError("dropped 2"),
+                ConnectionError("dropped 3"),
+            ]
+        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=2, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 2
+        assert result.envelope.error is not None
+        assert result.envelope.error.error_type == "ConnectionError"
+        assert "dropped 3" in result.envelope.error.message
+
+    async def test_runtime_error_class_name_preserved(self):
+        """``RuntimeError`` raised on every attempt → error_type='RuntimeError'."""
+        env = _envelope()
+        backend = ScriptedBackend(
+            [RuntimeError("boom 1"), RuntimeError("boom 2"), RuntimeError("boom 3")]
+        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=2, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 2
+        assert result.envelope.error is not None
+        assert result.envelope.error.error_type == "RuntimeError"
+        assert "boom 3" in result.envelope.error.message
+
+    async def test_value_error_class_name_preserved(self):
+        """``ValueError`` raised on every attempt → error_type='ValueError'."""
+        env = _envelope()
+        backend = ScriptedBackend([ValueError("bad 1"), ValueError("bad 2"), ValueError("bad 3")])
+        result = await execute_with_retry(backend, env, _options(), max_retries=2, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 2
+        assert result.envelope.error is not None
+        assert result.envelope.error.error_type == "ValueError"
+        assert "bad 3" in result.envelope.error.message
+
+    async def test_failed_envelope_path_preserves_rich_error_type(self):
+        """Boundary: a backend that RETURNS a FAILED envelope with a rich
+        error_type (e.g. ``"auth_denied"``) keeps that error_type through
+        retry exhaustion. The FAILED-path early-return path is unchanged
+        by the exception-path fix — this test pins that invariant.
+        """
+        env = _envelope()
+        failed = env.with_error(
+            ErrorDetail(error_type="auth_denied", message="bearer token rejected")
+        )
+        # Three identical FAILED responses — non-terminal so they get retried,
+        # then exhausted on the third attempt with max_retries=2.
+        backend = ScriptedBackend([failed, failed, failed])
+        result = await execute_with_retry(backend, env, _options(), max_retries=2, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 2
+        assert result.envelope.error is not None
+        assert result.envelope.error.error_type == "auth_denied"
+        assert result.envelope.error.message == "bearer token rejected"
 
 
 # ---------------------------------------------------------------------------
@@ -990,9 +1078,7 @@ class TestModelOnRetry:
         class _ObservingBackend:
             call_count = 0
 
-            async def execute(
-                self, envelope: Envelope, *, options: DispatchOptions
-            ) -> Envelope:
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
                 observed_models.append(options.model)
                 _ObservingBackend.call_count += 1
                 if _ObservingBackend.call_count < 3:
@@ -1032,9 +1118,7 @@ class TestModelOnRetry:
         backend = ScriptedBackend([RuntimeError("net"), RuntimeError("net2"), success])
 
         opts = DispatchOptions(model="claude-haiku-4-5", max_budget_usd=1.0)
-        await execute_with_retry(
-            backend, env, opts, max_retries=3, event_bus=bus, retry_delay=0.0
-        )
+        await execute_with_retry(backend, env, opts, max_retries=3, event_bus=bus, retry_delay=0.0)
 
         started = capture.of_type(DispatchStarted)
         completed = capture.of_type(DispatchCompleted)

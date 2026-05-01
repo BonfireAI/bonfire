@@ -112,6 +112,7 @@ async def execute_with_retry(
 
     start = time.monotonic()
     last_error_msg = ""
+    last_exception_type = ""
     cumulative_cost = 0.0
 
     for attempt in range(max_retries + 1):
@@ -201,6 +202,7 @@ async def execute_with_retry(
 
         except Exception as exc:  # noqa: BLE001
             last_error_msg = str(exc)
+            last_exception_type = type(exc).__name__
 
             # If we still have retries left, emit retry event and backoff.
             if attempt < max_retries:
@@ -221,7 +223,7 @@ async def execute_with_retry(
     # All retries exhausted via exception path.
     duration = time.monotonic() - start
     failed_env = envelope.with_error(
-        ErrorDetail(error_type="infrastructure", message=last_error_msg)
+        ErrorDetail(error_type=last_exception_type or "infrastructure", message=last_error_msg)
     )
 
     await _emit(

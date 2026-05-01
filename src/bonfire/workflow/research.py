@@ -36,7 +36,10 @@ def _multi_scout_workflow(
     scout_count: int,
     description: str = "",
 ) -> WorkflowPlan:
-    """Shared factory for N-scout + sage research workflows."""
+    """Shared factory for N-scout + sage research workflows.
+
+    ``dual_scout()`` and ``spike()`` are aliases — same shape, two names by intent.
+    """
     group = f"{name}_scouts"
     scout_names = [f"scout_{i + 1}" for i in range(scout_count)]
     scouts = [_scout(sn, parallel_group=group) for sn in scout_names]
@@ -81,6 +84,11 @@ def spike() -> WorkflowPlan:
     A spike is pure research: no knights, no warriors, no code.
     Used for architectural decisions, technology evaluation, and
     design exploration before committing to a build path.
+
+    Structurally identical to ``dual_scout()`` (both call
+    ``_multi_scout_workflow`` with ``scout_count=2``); the two are
+    intentional aliases — ``spike()`` is the design-exploration vocabulary,
+    ``dual_scout()`` is the build-research vocabulary.
     """
     return _multi_scout_workflow(
         "spike",

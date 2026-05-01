@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.gates`` (BON-334).
+"""Canonical RED — ``bonfire.engine.gates``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

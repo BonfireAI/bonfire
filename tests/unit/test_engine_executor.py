@@ -1,4 +1,4 @@
-"""Canonical RED — ``bonfire.engine.executor.StageExecutor`` (BON-334).
+"""Canonical RED — ``bonfire.engine.executor.StageExecutor``.
 
 Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 

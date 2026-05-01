@@ -48,13 +48,17 @@ Rationale: API key stays on Anta's machine. Cost is observable in real time. No 
 1. Host invokes `tests/e2e/scripts/e2e-box.sh <wave>`.
 2. **Host clones the fixture into `.e2e-runs/<run-id>/target/` via SSH.** Credentials stay on the host.
 3. Container launches with `ANTHROPIC_API_KEY` from host `.env`, output dir mounted at `/workspace/out`, and the fixture bind-mounted read-write at `/workspace/target`.
-4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, run the fixture ticket.
-5. Claude drives Bonfire end-to-end.
+4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, then use the package as a library to fix the broken test and emit Bonfire-shaped artifacts (cost log, session log, branch with bard-pattern naming, review-verdict JSON). v0.2 swaps the library-use prompt for an end-to-end `bonfire run` invocation once the `pipeline` command module ships per the public-port plan.
+5. Claude operates as a library client of `bonfire-ai`: it reads the package's source, applies its components, and emits the artifacts the gate expects. v0.1 ships the artifact contract; v0.2 swaps in the full pipeline.
 6. Post-run: diff filter + pytest + verdict JSON emission via the fixture's `gate/check-verdict.sh`.
 7. Verdict written to host at `.e2e-runs/<run-id>/verdict.json`.
-8. Wizard + code-reviewer read the verdict. Anta signs the merge.
+8. Both review lenses (Wizard + code-reviewer) read the verdict. Maintainer signs the merge.
 
-*Security property: the container reaches only `api.anthropic.com`. It never touches our GitHub — no fixture credentials enter the box. Any remote PR push happens on the host after verdict capture.*
+*Security properties:*
+
+- *Filesystem (enforced): the container has no host filesystem access beyond two bind-mounts: the cloned fixture worktree (`/workspace/target`, read-write) and the host output directory (`/workspace/out`, read-write). The host machine, the operator's git credentials, and any other repo on disk are unreachable.*
+- *GitHub credentials (enforced): no SSH key, no `gh` CLI, no `GITHUB_TOKEN` enters the container. The fixture is cloned on the host before `docker run` and bind-mounted in. Any remote PR push happens on the host after verdict capture.*
+- *Network egress (by-trust today): the container's only network-active processes are `claude-cli` (pinned to `@anthropic-ai/claude-code@2.1.123`) and `pip install`. Both are trusted to reach only `api.anthropic.com` + PyPI mirrors. The default Docker bridge network does not enforce this; a v0.2 follow-up will add a `DOCKER-USER` iptables allowlist following Anthropic's reference devcontainer pattern.*
 
 ### CLI-as-universal-surface
 
@@ -99,6 +103,20 @@ Throttle, budget caps, and full configuration module defer to **v0.2** (see BON-
 - Passed to the container via `docker run --env-file .env`.
 - **Never** baked into the image.
 - **Never** committed.
+
+## claude-cli bump policy
+
+The `@anthropic-ai/claude-code` package is pinned in `tests/e2e/Dockerfile`. Floating to `@latest` means an upstream flag rename or auth-flow change can silently break the gate the morning of a release tag. Pinning is the discipline.
+
+When bumping the pinned version:
+
+1. Run two box runs (current pin + candidate pin) on the same fixture-ref. Both must PASS.
+2. Update `tests/e2e/Dockerfile` and this file (the bump policy section) in the same PR.
+3. Cite the upstream CHANGELOG link in the PR body, calling out any flag renames or behavior changes.
+4. Both review lenses approve before merge.
+5. After merge, file a one-line note in the project's release notes capturing the new pin.
+
+A minimum-version constraint (e.g. `@>=2.1.0`) is **not** an acceptable substitute. Either pin or float; no half-measures.
 
 ## Re-publish checklist (flip back public at v0.1.0)
 

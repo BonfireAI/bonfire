@@ -596,3 +596,205 @@ class TestCorruptFileHandling:
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
         with pytest.raises(Exception):  # noqa: B017 — JSONDecodeError or ValidationError
             mgr.load("bad")
+
+
+# ===========================================================================
+# 11. Corrupt-file tolerance on directory scan (KT-001..KT-008)
+#
+# Contract pinned: ``_load_all`` MUST be fault-tolerant on directory scan. Any
+# corrupt file in the checkpoint directory must be skipped with a
+# ``logger.warning`` call rather than poisoning the entire scan. This protects
+# ``latest()`` and ``list_checkpoints()`` from a single bad file taking down
+# the whole resume-from-checkpoint surface.
+#
+# Caught exception types: exactly ``json.JSONDecodeError``,
+# ``pydantic.ValidationError``, and ``OSError``. The warning message must
+# cite the corrupt file's path.
+# ===========================================================================
+
+
+class TestLoadAllCorruptFileTolerance:
+    """``_load_all`` skips corrupt files with a warning instead of raising."""
+
+    def test_load_all_skips_corrupt_json_with_warning(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """KT-001: corrupt JSON file is skipped; one WARNING is logged."""
+        import logging
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        mgr.save("good", _make_result("good"), _make_plan())
+        (tmp_path / "broken.json").write_text("{not valid json")
+
+        caplog.set_level(logging.WARNING, logger="bonfire.engine.checkpoint")
+        results = mgr._load_all()
+
+        assert len(results) == 1
+        assert results[0].session_id == "good"
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "bonfire.engine.checkpoint"
+        ]
+        assert len(warnings) == 1
+
+    def test_load_all_returns_valid_when_some_corrupt(self, tmp_path: Path) -> None:
+        """KT-002: 3 valid + 2 corrupt yields exactly 3 valid entries."""
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        for sid in ("v1", "v2", "v3"):
+            mgr.save(sid, _make_result(sid), _make_plan())
+        (tmp_path / "bad-a.json").write_text("{garbage")
+        (tmp_path / "bad-b.json").write_text("not even json at all")
+
+        results = mgr._load_all()
+
+        assert len(results) == 3
+        session_ids = {r.session_id for r in results}
+        assert session_ids == {"v1", "v2", "v3"}
+
+    def test_latest_survives_corrupt_files_in_dir(self, tmp_path: Path) -> None:
+        """KT-003: ``latest()`` returns the newest valid checkpoint despite corrupt sibling."""
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        mgr.save("older", _make_result("older"), _make_plan())
+        time.sleep(0.01)
+        mgr.save("newer", _make_result("newer"), _make_plan())
+        (tmp_path / "corrupt.json").write_text("{nope")
+
+        latest = mgr.latest()
+
+        assert latest is not None
+        assert latest.session_id == "newer"
+
+    def test_list_checkpoints_skips_corrupt_files(self, tmp_path: Path) -> None:
+        """KT-004: ``list_checkpoints()`` returns valid summaries sorted desc."""
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        mgr.save("first", _make_result("first"), _make_plan())
+        time.sleep(0.01)
+        mgr.save("second", _make_result("second"), _make_plan())
+        (tmp_path / "rotten-1.json").write_text("{not json")
+        (tmp_path / "rotten-2.json").write_text('{"missing": "fields"}')
+
+        summaries = mgr.list_checkpoints()
+
+        assert len(summaries) == 2
+        timestamps = [s.timestamp for s in summaries]
+        assert timestamps == sorted(timestamps, reverse=True)
+
+    def test_load_all_catches_json_decode_error(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """KT-005: malformed JSON is swallowed; warning is logged, no exception escapes."""
+        import logging
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        (tmp_path / "syntax-error.json").write_text("{not valid json")
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        caplog.set_level(logging.WARNING, logger="bonfire.engine.checkpoint")
+
+        results = mgr._load_all()  # must NOT raise
+
+        assert results == []
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "bonfire.engine.checkpoint"
+        ]
+        assert len(warnings) >= 1
+
+    def test_load_all_catches_validation_error(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """KT-006: schema-invalid JSON is swallowed; warning logged, no exception escapes."""
+        import logging
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        # Valid JSON, but missing required CheckpointData fields
+        # (plan_name, completed, total_cost_usd, timestamp).
+        (tmp_path / "schema-bad.json").write_text('{"session_id": "x"}')
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        caplog.set_level(logging.WARNING, logger="bonfire.engine.checkpoint")
+
+        results = mgr._load_all()  # must NOT raise
+
+        assert results == []
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "bonfire.engine.checkpoint"
+        ]
+        assert len(warnings) >= 1
+
+    def test_load_all_catches_os_error(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """KT-007: OSError on read is swallowed; warning logged, no exception escapes."""
+        import logging
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        # Create a file the glob will discover; force read_text to raise OSError.
+        (tmp_path / "unreadable.json").write_text("placeholder")
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        caplog.set_level(logging.WARNING, logger="bonfire.engine.checkpoint")
+
+        with patch.object(Path, "read_text", side_effect=OSError("disk fail")):
+            results = mgr._load_all()  # must NOT raise
+
+        assert results == []
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "bonfire.engine.checkpoint"
+        ]
+        assert len(warnings) >= 1
+
+    def test_load_all_warning_cites_corrupt_path(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """KT-008: the warning message names the corrupt file (path or basename)."""
+        import logging
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        corrupt_name = "very-distinctive-corrupt-name.json"
+        corrupt_path = tmp_path / corrupt_name
+        corrupt_path.write_text("{not json")
+
+        mgr = CheckpointManager(checkpoint_dir=tmp_path)
+        caplog.set_level(logging.WARNING, logger="bonfire.engine.checkpoint")
+
+        mgr._load_all()
+
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "bonfire.engine.checkpoint"
+        ]
+        assert len(warnings) >= 1
+        # The corrupt file's name (or full path) must appear in at least one
+        # warning's rendered message — the operator needs to know which file.
+        rendered = " ".join(r.getMessage() for r in warnings)
+        assert corrupt_name in rendered or str(corrupt_path) in rendered

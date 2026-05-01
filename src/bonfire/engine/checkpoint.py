@@ -13,14 +13,17 @@ checkpoint files on crash.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path  # noqa: TC003 -- runtime use in constructor
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from bonfire.models.envelope import Envelope  # noqa: TC001 -- Pydantic needs runtime access
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from bonfire.engine.pipeline import PipelineResult
@@ -148,11 +151,26 @@ class CheckpointManager:
     # -- Private helpers -----------------------------------------------------
 
     def _load_all(self) -> list[CheckpointData]:
-        """Load all checkpoint files from the directory."""
+        """Load all checkpoint files from the directory.
+
+        Corrupt files (malformed JSON, schema violations, read errors) are
+        skipped with a ``logger.warning`` rather than poisoning the entire
+        scan. This ensures that one bad checkpoint file does not break
+        ``latest()`` or ``list_checkpoints()`` when valid checkpoints exist
+        alongside.
+        """
         if not self._dir.exists():
             return []
         results: list[CheckpointData] = []
         for path in self._dir.glob("*.json"):
-            raw = json.loads(path.read_text())
-            results.append(CheckpointData.model_validate(raw))
+            try:
+                raw = json.loads(path.read_text())
+                results.append(CheckpointData.model_validate(raw))
+            except (json.JSONDecodeError, ValidationError, OSError) as exc:
+                logger.warning(
+                    "Skipping corrupt checkpoint file %s: %s",
+                    path,
+                    exc,
+                )
+                continue
         return results

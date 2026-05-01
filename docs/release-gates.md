@@ -106,7 +106,7 @@ Throttle, budget caps, and full configuration module defer to **v0.2** (see BON-
 - [ ] v0.1.0 tag commit passes the full box E2E.
 - [ ] Every `README.md` example executable in a fresh box.
 - [ ] `CHANGELOG.md` cut and accurate.
-- [ ] Commit history audited — no leaked internal lore or secrets.
+- [x] Commit history audited — leaked internal-tracker references in pre-v0.1.0 commit subjects accepted as historical for v0.1.0; new commits comply per [CONTRIBUTING.md](../CONTRIBUTING.md). See [CHANGELOG.md](../CHANGELOG.md) `[0.1.0]` Notes section.
 - [ ] License headers consistent across `src/`.
 - [ ] `CONTRIBUTING.md` re-read against current reality.
 - [ ] `pip install bonfire-ai==0.1.0` works in a fresh venv.

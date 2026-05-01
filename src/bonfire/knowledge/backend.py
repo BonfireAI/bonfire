@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """LanceDB-backed vault backend.
 
 Connects to existing ``.bonfire/vault/`` data. Auto-migrates from ``vault``

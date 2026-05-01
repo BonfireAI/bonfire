@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """bonfire.handlers -- pipeline stage handlers.
 
 File-level names stay gamified (historical + grep). The generic role each

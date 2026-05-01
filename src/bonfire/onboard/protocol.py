@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Front Door WebSocket message protocol.
 
 Pydantic models for all messages exchanged between the WebSocket server

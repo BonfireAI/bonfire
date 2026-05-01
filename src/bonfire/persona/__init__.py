@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """bonfire.persona — CLI display translation subsystem.
 
 The persona module is Bonfire's display layer. It turns pipeline events

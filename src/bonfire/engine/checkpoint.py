@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Checkpoint persistence for pipeline state save/restore.
 
 Provides atomic JSON persistence of pipeline results, enabling

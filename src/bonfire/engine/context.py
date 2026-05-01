@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """ContextBuilder -- assembles context strings for pipeline stages.
 
 Accumulates prior stage results, task descriptions, bounce context, and

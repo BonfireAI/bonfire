@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Per-command Typer modules wired onto :mod:`bonfire.cli.app`.
 
 Each module here owns one top-level ``bonfire`` subcommand. The seven

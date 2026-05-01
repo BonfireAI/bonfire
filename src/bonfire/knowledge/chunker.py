@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Content chunking for vault ingestion.
 
 Split markdown and source files into VaultEntry chunks suitable for

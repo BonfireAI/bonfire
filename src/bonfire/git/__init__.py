@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Git integration — branch management, commit flow, worktree isolation."""
 
 from bonfire.git.path_guard import IsolationViolation, PathGuard, PathGuardError

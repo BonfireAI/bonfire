@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """PersonaProtocol — structural contract for persona implementations.
 
 Display-only. Transforms pipeline events into character-voiced renderables

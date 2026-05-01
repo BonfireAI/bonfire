@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Event bus machinery and consumers — Bonfire's nervous system.
 
 This package owns the typed pub/sub spine that decouples pipeline stages

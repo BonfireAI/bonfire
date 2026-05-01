@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Cost tracker consumer — accumulates cost and emits budget threshold events."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """bonfire.verify -- deterministic verification primitives.
 
 The ``verify`` package owns pure-function classifiers that decide pipeline

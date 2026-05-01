@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Cost analyzer — read-only query layer over the JSONL ledger."""
 
 from __future__ import annotations

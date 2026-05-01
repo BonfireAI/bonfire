@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Workflow plan models — DAG-validated, frozen Pydantic v2 models.
 
 All models are frozen (immutable). WorkflowPlan validates its stage DAG

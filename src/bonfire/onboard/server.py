@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Front Door WebSocket + HTTP server.
 
 Serves ``ui.html`` on GET ``/`` and accepts WebSocket connections on ``/ws``

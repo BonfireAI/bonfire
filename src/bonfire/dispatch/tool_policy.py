@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Per-role tool allow-list policy — W1.5.3 default floor.
 
 The :class:`ToolPolicy` Protocol lets the dispatch layer ask "for this role,
@@ -42,14 +45,14 @@ class DefaultToolPolicy:
     """
 
     _FLOOR: dict[str, list[str]] = {
-        "scout":   ["Read", "Write", "Grep", "WebSearch", "WebFetch"],
-        "knight":  ["Read", "Write", "Edit", "Grep", "Glob"],
+        "scout": ["Read", "Write", "Grep", "WebSearch", "WebFetch"],
+        "knight": ["Read", "Write", "Edit", "Grep", "Glob"],
         "warrior": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
-        "prover":  ["Read", "Bash", "Grep", "Glob"],
-        "sage":    ["Read", "Write", "Grep"],
-        "bard":    ["Read", "Write", "Grep", "Glob"],
-        "wizard":  ["Read", "Grep", "Glob"],
-        "herald":  ["Read", "Grep"],
+        "prover": ["Read", "Bash", "Grep", "Glob"],
+        "sage": ["Read", "Write", "Grep"],
+        "bard": ["Read", "Write", "Grep", "Glob"],
+        "wizard": ["Read", "Grep", "Glob"],
+        "herald": ["Read", "Grep"],
     }
 
     def tools_for(self, role: str) -> list[str]:

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Synthesizer pipeline stage handler -- auto-bounce under-marked xfail to Sage.
 
 The ``sage_correction_bounce`` stage fires after Warrior reports a verdict

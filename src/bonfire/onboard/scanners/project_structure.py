@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Project Structure Scanner — Reel 1.
 
 Async adapter over ``TechScanner`` that emits streaming

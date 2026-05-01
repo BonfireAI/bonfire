@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Path guard — absolute path detection and isolation for worktree safety.
 
 Agents running in git worktrees can bypass isolation by using absolute paths.

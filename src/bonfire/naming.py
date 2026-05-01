@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Three-layer naming vocabulary for Bonfire.
 
 Layer 1 (generic): Code identifiers. Python class names, config keys,

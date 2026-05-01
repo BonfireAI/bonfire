@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """TechScanner — one VaultEntry per detected technology.
 
 Scans a project directory for language manifests, dependency files, and

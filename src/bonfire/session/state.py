@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Session state tracking — mutable, in-memory."""
 
 from __future__ import annotations

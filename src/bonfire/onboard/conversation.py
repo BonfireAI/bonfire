@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Passelewe conversation engine — scripted 3-question profiling.
 
 Three questions map user responses to profile dimensions via keyword/pattern

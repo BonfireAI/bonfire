@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Two-pass project scanner for vault ingestion.
 
 Pass 1: discover() — walk file tree, classify files, compute content hashes.

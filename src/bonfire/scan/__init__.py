@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Scanners that produce VaultEntry records for knowledge ingestion."""
 
 from __future__ import annotations

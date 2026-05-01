@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Standard workflow factories — the bread and butter of Bonfire pipelines.
 
 These factories produce immutable WorkflowPlans for common build patterns.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """MockGitHubClient — in-memory fake with call recording.
 
 Same async interface as GitHubClient. Auto-incrementing PR numbers.

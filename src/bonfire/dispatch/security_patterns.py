@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Security pattern catalogue for the Bonfire pre-exec hook.
 
 Public surface — three symbols:
@@ -54,10 +57,7 @@ _C1_RULES: tuple[DenyRule, ...] = (
             r"(?!(?:/tmp/|/var/tmp/|\$TMPDIR/|\./|"
             r"[a-zA-Z0-9_./-]*node_modules|\.venv|__pycache__|dist/|build/))"
         ),
-        message=(
-            "rm -rf outside ephemeral paths is denied. "
-            "If intended, run manually."
-        ),
+        message=("rm -rf outside ephemeral paths is denied. If intended, run manually."),
     ),
     DenyRule(
         rule_id="C1.2-dd-to-device",
@@ -122,16 +122,13 @@ _C2_RULES: tuple[DenyRule, ...] = (
         rule_id="C2.2-git-clean-force",
         category="destructive-git",
         pattern=re.compile(r"\bgit\s+clean\s+-[a-zA-Z]*f"),
-        message="git clean -f* deletes untracked files — denied. "
-        "Use git clean -n to preview.",
+        message="git clean -f* deletes untracked files — denied. Use git clean -n to preview.",
     ),
     DenyRule(
         rule_id="C2.3-git-push-force",
         category="destructive-git",
         # ``--force`` followed by end-of-word (not the ``-with-lease`` variant).
-        pattern=re.compile(
-            r"\bgit\s+push\s+(?:--force(?![-a-zA-Z])|-f\b)"
-        ),
+        pattern=re.compile(r"\bgit\s+push\s+(?:--force(?![-a-zA-Z])|-f\b)"),
         message="Use --force-with-lease instead of --force.",
     ),
     DenyRule(
@@ -150,8 +147,7 @@ _C2_RULES: tuple[DenyRule, ...] = (
         rule_id="C2.6-git-restore-worktree",
         category="destructive-git",
         pattern=re.compile(r"\bgit\s+restore\b(?!.*--staged)"),
-        message="git restore (worktree) discards changes — denied. "
-        "Use --staged to unstage.",
+        message="git restore (worktree) discards changes — denied. Use --staged to unstage.",
     ),
     DenyRule(
         rule_id="C2.7-git-stash-drop-clear",
@@ -208,9 +204,7 @@ _C3_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C3.4-bash-c-substitution",
         category="pipe-to-shell",
-        pattern=re.compile(
-            r"\b(?:bash|sh)\s+-c\s+[\"'][^\"']*\$\(.*(?:curl|wget)"
-        ),
+        pattern=re.compile(r"\b(?:bash|sh)\s+-c\s+[\"'][^\"']*\$\(.*(?:curl|wget)"),
         message='bash -c "$(curl ...)" — denied.',
     ),
     DenyRule(
@@ -345,17 +339,13 @@ _C7_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C7.7-purge-python-minimal",
         category="system-integrity",
-        pattern=re.compile(
-            r"\bapt(?:-get)?\s+(?:purge|remove)\s+.*python[0-9.]*-minimal\b"
-        ),
+        pattern=re.compile(r"\bapt(?:-get)?\s+(?:purge|remove)\s+.*python[0-9.]*-minimal\b"),
         message="apt purge of python*-minimal breaks the OS — denied.",
     ),
     DenyRule(
         rule_id="C7.8-shutdown",
         category="system-integrity",
-        pattern=re.compile(
-            r"\b(?:halt|poweroff|shutdown|reboot|init\s+0)\b"
-        ),
+        pattern=re.compile(r"\b(?:halt|poweroff|shutdown|reboot|init\s+0)\b"),
         message="Shutdown/reboot command — denied.",
     ),
 )
@@ -375,9 +365,7 @@ _C5_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C5.1-sudo-default",
         category="priv-escalation",
-        pattern=re.compile(
-            r"^\s*sudo\s+(?!(?:-n\s+)?(?:-l\b|--list\b))"
-        ),
+        pattern=re.compile(r"^\s*sudo\s+(?!(?:-n\s+)?(?:-l\b|--list\b))"),
         message="sudo privilege escalation.",
     ),
     DenyRule(
@@ -401,25 +389,19 @@ _C5_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C5.5-append-authorized-keys",
         category="priv-escalation",
-        pattern=re.compile(
-            r">>?\s*(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/authorized_keys"
-        ),
+        pattern=re.compile(r">>?\s*(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/authorized_keys"),
         message="Writing to ~/.ssh/authorized_keys.",
     ),
     DenyRule(
         rule_id="C5.6-write-passwd-shadow",
         category="priv-escalation",
-        pattern=re.compile(
-            r">>?\s*/etc/(?:passwd|shadow|group|gshadow)\b"
-        ),
+        pattern=re.compile(r">>?\s*/etc/(?:passwd|shadow|group|gshadow)\b"),
         message="Writing to /etc/passwd|shadow|group|gshadow.",
     ),
     DenyRule(
         rule_id="C5.7-usermod-priv-group",
         category="priv-escalation",
-        pattern=re.compile(
-            r"\bvisudo\b|\busermod\s+-[aA]G\s+(?:sudo|wheel|admin)\b"
-        ),
+        pattern=re.compile(r"\bvisudo\b|\busermod\s+-[aA]G\s+(?:sudo|wheel|admin)\b"),
         message="usermod adding user to privileged group.",
     ),
 )
@@ -472,9 +454,7 @@ _C6_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C6.6-unicode-lookalike",
         category="shell-escape",
-        pattern=re.compile(
-            "[\u00a0\u2000-\u200f\u2028-\u202f\uff01-\uff5e]"
-        ),
+        pattern=re.compile("[\u00a0\u2000-\u200f\u2028-\u202f\uff01-\uff5e]"),
         message="Unicode lookalike character in command.",
     ),
     DenyRule(

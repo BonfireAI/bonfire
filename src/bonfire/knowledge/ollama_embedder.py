@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Local embedding via Ollama server.
 
 Requires: pip install ollama, Ollama server running, model pulled.

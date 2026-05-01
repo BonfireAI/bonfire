@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """XP display consumer — renders XP events with persona phrases."""
 
 from __future__ import annotations

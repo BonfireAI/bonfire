@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """MCP Server Scanner — Reel 5.
 
 Discovers MCP server declarations from config files across all known

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """GitWorkflow — async subprocess wrappers for common git operations.
 
 Auto-prefixes branch names with ``bonfire/`` unless already prefixed. All

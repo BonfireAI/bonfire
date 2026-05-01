@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """BasePersona — default persona implementation.
 
 Satisfies :class:`~bonfire.persona.protocol.PersonaProtocol` structurally.

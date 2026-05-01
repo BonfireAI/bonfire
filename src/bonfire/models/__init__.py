@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """bonfire.models — cross-package data contracts.
 
 This package holds the typed, frozen Pydantic shapes that travel

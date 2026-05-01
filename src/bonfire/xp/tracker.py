@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """XP tracker with JSONL persistence, level ladder, and temperature."""
 
 from __future__ import annotations

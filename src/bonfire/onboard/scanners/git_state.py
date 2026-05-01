@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Git State Scanner — Reel 4.
 
 Detects git repo state, branches, remotes, uncommitted changes,

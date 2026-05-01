@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Project analysis models — Pydantic shapes for code-graph studies.
 
 Frozen Pydantic models used across the Cartographer pipeline.

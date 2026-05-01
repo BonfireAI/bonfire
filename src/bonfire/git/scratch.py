@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Scratch worktree primitive for transient verification.
 
 Distinct from :class:`~bonfire.git.worktree.WorktreeManager`: scratch
@@ -163,12 +166,7 @@ class ScratchWorktreeContext:
 
     def _worktree_path(self) -> Path:
         """``<repo>/.bonfire-worktrees/<prefix>/pr-<N>-<8hex>/`` (§D3 line 346)."""
-        return (
-            self._repo
-            / WORKTREE_DIR
-            / self._prefix
-            / f"pr-{self._pr_token()}-{self._suffix}"
-        )
+        return self._repo / WORKTREE_DIR / self._prefix / f"pr-{self._pr_token()}-{self._suffix}"
 
     # -- async CM protocol --------------------------------------------
 

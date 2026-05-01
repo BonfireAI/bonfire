@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Content hashing utilities for vault dedup.
 
 SHA-256 of normalized content. Used by VaultEntry.content_hash and

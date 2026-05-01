@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Verifier pipeline stage handler -- pre-merge full-suite pytest.
 
 Runs full-suite pytest against a simulated merged tip BEFORE
@@ -306,9 +309,7 @@ def classify_pytest_run(
 
     # Step 3: PRE_EXISTING_DEBT -- ALL failing files present in baseline.
     # Sage §D4 line 450-451 ("NOT 'any' -- ALL").
-    if failing_tests and all(
-        ft.file_path in baseline_failures for ft in failing_tests
-    ):
+    if failing_tests and all(ft.file_path in baseline_failures for ft in failing_tests):
         return PreflightClassification(
             verdict=PreflightVerdict.PRE_EXISTING_DEBT,
             sibling_pr_numbers=(),
@@ -567,10 +568,7 @@ class MergePreflightHandler:
                 return envelope.with_error(
                     ErrorDetail(
                         error_type="ValueError",
-                        message=(
-                            "No PR number found in prior_results or "
-                            "envelope metadata"
-                        ),
+                        message=("No PR number found in prior_results or envelope metadata"),
                         stage_name=stage.name,
                     ),
                 )
@@ -688,9 +686,9 @@ class MergePreflightHandler:
                 sibling_detection_status=sibling_status,
                 pytest_returncode=-1,
                 pytest_duration_seconds=0.0,
-                pytest_stdout_tail=(
-                    f"git apply --3way failed for PR #{pr_number}: {exc}"
-                )[:_PYTEST_STDOUT_TAIL_BYTES],
+                pytest_stdout_tail=(f"git apply --3way failed for PR #{pr_number}: {exc}")[
+                    :_PYTEST_STDOUT_TAIL_BYTES
+                ],
             )
 
         # Step 6: apply each sibling's diff in ascending PR-number order
@@ -722,8 +720,7 @@ class MergePreflightHandler:
                     pytest_returncode=-1,
                     pytest_duration_seconds=0.0,
                     pytest_stdout_tail=(
-                        f"git apply --3way failed for sibling PR "
-                        f"#{sibling_pr_n}: {exc}"
+                        f"git apply --3way failed for sibling PR #{sibling_pr_n}: {exc}"
                     )[:_PYTEST_STDOUT_TAIL_BYTES],
                 )
 
@@ -853,7 +850,7 @@ class MergePreflightHandler:
                 )
             else:
                 stdout_b, _ = await proc.communicate()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # §D-CL.7 #2: actively kill + reap before the worktree is
             # torn down so the process holds no FDs into the scratch.
             proc.kill()

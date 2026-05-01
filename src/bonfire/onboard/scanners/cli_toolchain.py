@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """CLI Toolchain Scanner — Reel 2.
 
 Detects installed CLI tools, extracts versions via async subprocess,

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Agent role definitions and the canonical naming vocabulary."""
 
 from bonfire.agent.roles import AgentRole

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Envelope model and supporting types for task dispatch.
 
 Every agent dispatch, every pipeline stage, every result flows through an

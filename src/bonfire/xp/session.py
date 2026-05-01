@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Session boundary hooks — bridge XPTracker state to XPDisplayConsumer."""
 
 from __future__ import annotations

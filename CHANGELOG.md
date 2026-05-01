@@ -97,4 +97,11 @@ will ship in subsequent 0.1.x releases.
   Python :: 3.13` classifier will be claimed once 3.13 is added to
   CI and stays green.
 
+### Notes
+
+- Pre-v0.1.0 commit history on the `v0.1` branch contains internal-tracker
+  references (e.g., `BON-NNN`) in commit subjects. This is accepted as
+  historical for the v0.1.0 release. New commits comply with
+  [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
+
 [0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0

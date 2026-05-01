@@ -93,7 +93,7 @@ lookup.
 | Investigates the task and gathers context         | `researcher`               | `scout`                   |
 | Writes failing tests (TDD RED)                    | `tester`                   | `knight`                  |
 | Writes code to pass the tests (TDD GREEN)         | `implementer`              | `warrior`                 |
-| Independent quality verification                  | `verifier`                 | `assayer`, `prover`       |
+| Independent quality verification                  | `verifier`                 | `assayer`                 |
 | Creates branches, commits, opens PRs              | `publisher`                | `bard`                    |
 | Code review with structured verdicts              | `reviewer`                 | `wizard`                  |
 | Merges approved PRs and announces completion      | `closer`                   | `herald`                  |

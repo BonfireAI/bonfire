@@ -86,7 +86,7 @@ The three layers:
    Example: `Scout`.
 
 The `persona` module owns generic-to-display translation. **Code never uses display
-names.** A full agent-role table (8 roles × 3 layers) lives in
+names.** A full agent-role table (9 roles × 3 layers) lives in
 [`docs/adr/ADR-001-naming-vocabulary.md`](docs/adr/ADR-001-naming-vocabulary.md)
 lines 31–40 and in [`CONTRIBUTING.md`](CONTRIBUTING.md) lines 71–80. This file
 does not duplicate the table; it cites both.

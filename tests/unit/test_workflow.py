@@ -20,6 +20,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import ValidationError
 
 from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 
@@ -182,7 +183,7 @@ class TestFactoryInvariants:
     def test_plan_is_frozen(self) -> None:
         for factory_name, _ in _PUBLIC_FACTORIES:
             plan = _call(factory_name)
-            with pytest.raises(Exception):  # noqa: B017 — pydantic raises ValidationError
+            with pytest.raises(ValidationError):
                 plan.name = "mutated"  # type: ignore[misc]
 
     def test_stages_non_empty(self) -> None:
@@ -454,7 +455,7 @@ class TestStandardBuild:
         assert "merge_preflight" in herald.depends_on
 
     def test_plan_is_frozen(self, plan: WorkflowPlan) -> None:
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             plan.name = "mutated"  # type: ignore[misc]
 
     def test_dag_validation_passes(self) -> None:

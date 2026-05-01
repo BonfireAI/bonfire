@@ -38,6 +38,7 @@ Display is a presentation concern, not a data concern.
 | reviewer | Review Agent | Wizard | Code review |
 | closer | Release Agent | Herald | Merge, close, announce |
 | synthesizer | Synthesis Agent | Sage | Multi-report synthesis |
+| analyst | Analysis Agent | Architect | Architectural and structural analysis |
 
 ## Module Renames (from private codebase)
 

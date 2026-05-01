@@ -5,7 +5,21 @@
 This policy governs how `bonfire-ai` is versioned, tagged, and published
 to PyPI during the pre-release and v0.1 development periods.
 
+## Current Status
+
+The pre-release and release-candidate phases are complete. Version
+`0.1.0` shipped on 2026-04-28; see [`CHANGELOG.md`](../CHANGELOG.md) for
+the release entry. The two sections immediately below ("Pre-release
+Period" and "Release Candidate Period") describe phases that have
+already concluded and are retained as historical reference. The
+"v0.1.0 Release" section captures the gates that were cleared to cut
+the tag.
+
 ## Pre-release Period
+
+> **Historical.** This phase is complete. `bonfire-ai` was in
+> pre-release until Wave 9.2 of the v0.1 plan landed; `0.1.0` shipped
+> on 2026-04-28.
 
 `bonfire-ai` is in pre-release until Wave 9.2 of the v0.1 plan lands.
 
@@ -21,6 +35,9 @@ During this period:
   README.md preview on PyPI shows a clear "do not use" notice.
 
 ## Release Candidate Period
+
+> **Historical.** This phase is complete. The release-candidate window
+> closed when `0.1.0` was cut on 2026-04-28.
 
 When Wave 8 (documentation polish) is complete and Wave 9 (smoke tests)
 is in flight:
@@ -39,9 +56,11 @@ The first functional release is cut when:
 
 - Wave 9.1 end-to-end smoke tests pass in CI on `main`.
 - Wave 9.2 release preparation is merged.
-- All four trust-triangle components (W1.5.1 interfaces, W1.5.3 default
-  allow-list floor, W4.1 user-configurable allow-lists, W4.2 default
-  security hook set) are on `main`.
+- All four trust-triangle components are on `main`: the four
+  `@runtime_checkable` extension protocols (`AgentBackend`,
+  `VaultBackend`, `QualityGate`, `StageHandler`), the default
+  allow-list floor and user-configurable per-role allow-lists (W4.1),
+  and the default security hook set (W4.2).
 
 At that point:
 

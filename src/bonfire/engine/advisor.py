@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """VaultAdvisor -- pre-dispatch vault query for known failure patterns.
 
 Advisory-only, never blocking. Queries the vault for error patterns matching

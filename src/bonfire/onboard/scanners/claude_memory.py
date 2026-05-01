@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Claude Memory Scanner — Reel 3.
 
 Detects Claude Code installation, reads settings, counts memory files

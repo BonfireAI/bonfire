@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """ClaudeSDKBackend — wraps ``claude_agent_sdk.query()`` for agent execution.
 
 Implements the ``AgentBackend`` protocol defined in ``bonfire.protocols``.
@@ -115,7 +118,9 @@ class ClaudeSDKBackend:
             tools=list(options.tools),
             allowed_tools=options.tools,
             hooks=_build_security_hooks_dict(
-                options.security_hooks, bus=self._bus, envelope=envelope,
+                options.security_hooks,
+                bus=self._bus,
+                envelope=envelope,
             ),
             setting_sources=["project"],
             thinking=thinking_config,

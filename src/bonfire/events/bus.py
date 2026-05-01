@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Typed async EventBus — the nervous system of the Bonfire pipeline.
 
 Architecture

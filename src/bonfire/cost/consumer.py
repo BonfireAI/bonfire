@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Cost ledger consumer — persists cost events to JSONL."""
 
 from __future__ import annotations

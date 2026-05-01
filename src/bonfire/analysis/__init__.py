@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Project analysis — Pydantic shapes + fingerprint for code-graph studies."""
 
 from bonfire.analysis.fingerprint import compute_study_fingerprint

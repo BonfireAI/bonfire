@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Research workflow factories — parallel scouts converging on a sage.
 
 Research workflows are about gathering diverse perspectives before synthesis.

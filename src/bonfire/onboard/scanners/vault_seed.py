@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Vault Seed Scanner — Reel 6.
 
 Identifies key project documents that should be prioritised for vault

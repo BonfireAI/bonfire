@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Cost ledger models — records and aggregation results."""
 
 from __future__ import annotations

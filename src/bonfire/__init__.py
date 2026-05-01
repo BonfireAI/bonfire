@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Bonfire -- AI Build Pipelines for Real Code.
 
 Define agents. Wire stages. Ship quality.

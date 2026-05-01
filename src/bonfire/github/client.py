@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """GitHubClient — async wrapper around the gh CLI.
 
 Thin client: no ABC, no intermediate models. Parses gh JSON directly.

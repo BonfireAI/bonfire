@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Embedding provider protocol and factory.
 
 Abstracts embedding generation behind a protocol. The vault backend

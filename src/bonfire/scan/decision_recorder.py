@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """DecisionRecorder — extract architectural decisions from markdown documents.
 
 Scans markdown files for decision patterns (ADR format, "Use X not Y",

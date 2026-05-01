@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Extension point protocols for Bonfire's pluggable architecture.
 
 This module defines the four core protocols that third-party code (and Bonfire's

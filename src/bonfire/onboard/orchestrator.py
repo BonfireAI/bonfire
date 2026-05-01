@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Scan Orchestrator — composition root for all 6 Front Door scanners.
 
 Runs every scanner in parallel via ``asyncio.gather``, emits lifecycle

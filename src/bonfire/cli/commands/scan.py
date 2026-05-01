@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Scan command — launch The Front Door browser onboarding.
 
 Starts the WebSocket server, opens the browser, runs the full

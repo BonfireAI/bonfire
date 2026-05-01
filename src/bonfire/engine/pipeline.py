@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Pipeline execution engine -- the heart of Bonfire.
 
 Executes a WorkflowPlan as a DAG of stages using TopologicalSorter.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """XP pipeline consumer — connects pipeline events to the XP system."""
 
 from __future__ import annotations

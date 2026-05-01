@@ -58,50 +58,51 @@ _BON_REF = re.compile(r"BON-\d+")
 _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
     {
         # --- BON-345 sweep-guards (post-BON-348 cli/ port) -------------
+        # Note: line numbers updated +3 after SPDX-header insertion landed.
         (
             "cli/app.py",
-            16,
+            19,
             "# BON-345 sweep-guard: avoid the banned default-persona Python literal in",
         ),
         (
             "cli/commands/persona.py",
-            14,
+            17,
             "# BON-345 sweep-guard: avoid emitting the default-persona name as a single",
         ),
         # --- BON-347 analysis port (canonical Sage / Wave citations) --
         (
             "analysis/models.py",
-            44,
+            47,
             '"""Frozen budget of Cartographer tunables (BON-226 §5)."""',
         ),
         (
             "analysis/models.py",
-            64,
+            67,
             "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
         ),
         (
             "analysis/models.py",
-            94,
+            97,
             '"``min_length=1`` so an external caller (BON-231 composition root, "',
         ),
         (
             "analysis/models.py",
-            106,
+            109,
             "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
         ),
         (
             "analysis/models.py",
-            206,
+            209,
             "# BON-303 Wave 3a.4 — discovered gaps for DiscoveredIntentSource.",
         ),
         (
             "analysis/models.py",
-            214,
+            217,
             "# BON-294 Wave 2c.1 A10 — reject v1 cache blobs so Wave 2b cache",
         ),
         (
             "analysis/models.py",
-            222,
+            225,
             '"""Gzip-compressed JSON — BON-231 Wave 2b cache seam.',
         ),
     }
@@ -119,7 +120,11 @@ def _is_allowlisted(rel_path: str, lineno: int, line: str) -> bool:
     """True iff the offender matches an allowlist entry."""
     stripped = line.lstrip()
     for allowed_path, allowed_line, allowed_prefix in _ALLOWLIST:
-        if allowed_path == rel_path and allowed_line == lineno and stripped.startswith(allowed_prefix):
+        if (
+            allowed_path == rel_path
+            and allowed_line == lineno
+            and stripped.startswith(allowed_prefix)
+        ):
             return True
     return False
 
@@ -171,7 +176,9 @@ def test_allowlist_entries_still_resolve() -> None:
             continue
         actual = lines[lineno - 1].lstrip()
         if not actual.startswith(expected_prefix):
-            stale.append((rel_path, lineno, f"<expected prefix {expected_prefix!r}, got {actual!r}>"))
+            stale.append(
+                (rel_path, lineno, f"<expected prefix {expected_prefix!r}, got {actual!r}>")
+            )
 
     assert not stale, (
         "Allowlist entries no longer match source — refactor drift detected:\n"

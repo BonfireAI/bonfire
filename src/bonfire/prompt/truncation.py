@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Prompt block truncation and positional ordering.
 
 Provides token estimation, budget calculation, priority-based block

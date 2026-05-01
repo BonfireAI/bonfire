@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Reviewer pipeline stage handler -- automated code review.
 
 Reads the PR diff, dispatches a review agent, parses the verdict, and posts

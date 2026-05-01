@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Incremental knowledge ingestion with content-hash dedup.
 
 Standalone async functions for ingesting markdown files and session logs

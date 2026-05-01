@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Frozen Pydantic model capturing the outcome of an agent dispatch."""
 
 from __future__ import annotations

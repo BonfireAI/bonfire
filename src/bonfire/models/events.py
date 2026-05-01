@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Bonfire event types — 28 events across 9 categories.
 
 Explicit, hand-built, zero magic. Every event class defined by hand.

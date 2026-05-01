@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Front Door session flow — composition root for the three-act onboarding.
 
 Wires the scan orchestrator, narration engine, conversation engine, and

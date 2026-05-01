@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Knowledge ingest consumer — subscribes to pipeline events and stores knowledge.
 
 Listens for StageCompleted, StageFailed, DispatchFailed, and SessionEnded

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """StageExecutor -- stage execution with strategy-based dispatch.
 
 Separates stage execution from the pipeline loop into a reusable, testable

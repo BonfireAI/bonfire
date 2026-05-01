@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """In-memory vault backend for testing.
 
 Stores entries in a list. Query uses substring matching on content.

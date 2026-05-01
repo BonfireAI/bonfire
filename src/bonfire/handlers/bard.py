@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Publisher pipeline stage handler (gamified display: Bard).
 
 Creates feature branches, stages listed artifacts, commits, verifies the

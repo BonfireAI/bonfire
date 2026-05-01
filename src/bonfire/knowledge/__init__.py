@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Knowledge persistence — storage-agnostic interface.
 
 Factory function ``get_vault_backend()`` returns the configured backend.

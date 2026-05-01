@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """PersonaLoader — two-tier discovery and loading of TOML-based personas.
 
 Discovers persona directories from:

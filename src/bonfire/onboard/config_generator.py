@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Config generator — bonfire.toml from scan results + conversation profile.
 
 Builds a well-formatted TOML string from collected scan events and the

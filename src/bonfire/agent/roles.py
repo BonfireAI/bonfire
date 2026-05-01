@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Canonical agent role definitions for Bonfire.
 
 The StrEnum value IS the serialized form IS the config key IS the grep target.

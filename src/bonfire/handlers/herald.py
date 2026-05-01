@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Closer pipeline stage handler.
 
 Merges approved PRs and closes associated issues. Not an LLM caller --

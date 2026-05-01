@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Deterministic classifier for warrior-failure / sage-decision-log pairs.
 
 Pure-function classifier of the (warrior verdict, sage decision log) pair.

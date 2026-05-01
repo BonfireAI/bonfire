@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """CLI composition root for the public ``bonfire`` command.
 
 This package is the Typer entry point: the ``[project.scripts]`` mapping

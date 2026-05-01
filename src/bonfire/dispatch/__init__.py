@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Agent execution with retry, timeout, and tier gating.
 
 This package owns the seam between Bonfire's stages and the underlying

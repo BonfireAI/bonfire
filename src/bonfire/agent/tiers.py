@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Model tier vocabulary and role-aware resolver.
 
 Three-tier capability axis (reasoning/fast/balanced) decoupled from the

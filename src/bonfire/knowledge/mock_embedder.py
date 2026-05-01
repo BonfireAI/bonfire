@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Deterministic mock embedder for testing.
 
 Produces reproducible vectors by hashing input text. No external deps.

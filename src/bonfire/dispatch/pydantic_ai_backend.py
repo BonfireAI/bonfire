@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """PydanticAIBackend — AgentBackend wrapper around ``pydantic_ai.Agent``.
 
 Wraps ``pydantic_ai.Agent.run()`` behind Bonfire's ``AgentBackend``

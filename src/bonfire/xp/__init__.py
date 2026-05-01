@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """XP system — progression, levels, tracking."""
 
 from bonfire.xp.calculator import XPCalculator, XPResult

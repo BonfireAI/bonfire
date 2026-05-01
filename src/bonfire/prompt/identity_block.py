@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Identity-block frontmatter validation model.
 
 Pydantic model for validating the cognitive identity frontmatter of an

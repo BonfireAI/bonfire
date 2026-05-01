@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Init command — scaffold a new Bonfire project."""
 
 from __future__ import annotations

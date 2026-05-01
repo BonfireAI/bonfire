@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Pre-execution security hook for the Bonfire dispatcher.
 
 Public surface (via ``__all__``):
@@ -32,7 +35,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from bonfire.dispatch.security_patterns import (
     DEFAULT_DENY_PATTERNS,
     DEFAULT_WARN_PATTERNS,
-    DenyRule,
 )
 from bonfire.models.events import SecurityDenied
 
@@ -64,16 +66,57 @@ logger = logging.getLogger(__name__)
 # the command is almost certainly safe and we skip the regex pool. Both
 # DENY and WARN categories feed into this list.
 _PREFILTER_KEYWORDS: tuple[str, ...] = (
-    "rm", "dd", "mkfs", "shred", "chmod", "chown", "git", "curl", "wget",
-    "sudo", "su", "eval", "base64", "crontab", "iptables", "ufw",
-    "systemctl", "apt", "shutdown", "halt", "reboot", "poweroff", "init",
-    "mv", ">", "nc", "scp", "rsync", "sftp", "ncat", "find", "fd", "xargs",
-    "visudo", "usermod", "alias", "cat", "bash", "sh ", "zsh", "dash",
-    "$IFS", "${IFS}",
-    "fetch", "fork", ":|:",
+    "rm",
+    "dd",
+    "mkfs",
+    "shred",
+    "chmod",
+    "chown",
+    "git",
+    "curl",
+    "wget",
+    "sudo",
+    "su",
+    "eval",
+    "base64",
+    "crontab",
+    "iptables",
+    "ufw",
+    "systemctl",
+    "apt",
+    "shutdown",
+    "halt",
+    "reboot",
+    "poweroff",
+    "init",
+    "mv",
+    ">",
+    "nc",
+    "scp",
+    "rsync",
+    "sftp",
+    "ncat",
+    "find",
+    "fd",
+    "xargs",
+    "visudo",
+    "usermod",
+    "alias",
+    "cat",
+    "bash",
+    "sh ",
+    "zsh",
+    "dash",
+    "$IFS",
+    "${IFS}",
+    "fetch",
+    "fork",
+    ":|:",
     ".env",
     # C6 obfuscation keywords that don't appear in other lists.
-    "{", "?", "*",
+    "{",
+    "?",
+    "*",
     # Continuation escapes.
     "\\",
 )
@@ -154,8 +197,16 @@ _BASH_SH_C_RE = re.compile(
 
 
 _UNWRAPPER_PREFIXES: tuple[str, ...] = (
-    "sudo ", "bash ", "sh ", "timeout ", "nohup ", "watch ", "env ",
-    "xargs ", "find ", "fd ",
+    "sudo ",
+    "bash ",
+    "sh ",
+    "timeout ",
+    "nohup ",
+    "watch ",
+    "env ",
+    "xargs ",
+    "find ",
+    "fd ",
 )
 
 
@@ -246,7 +297,7 @@ def _extract_substitutions(segment: str) -> list[str]:
                 elif c == ")":
                     depth -= 1
                     if depth == 0:
-                        inner = segment[i + 2:j]
+                        inner = segment[i + 2 : j]
                         out.append(inner)
                         # Recurse into inner for nested subs.
                         out.extend(_extract_substitutions(inner))
@@ -260,7 +311,7 @@ def _extract_substitutions(segment: str) -> list[str]:
             while j < n and segment[j] != "`":
                 j += 1
             if j < n:
-                inner = segment[i + 1:j]
+                inner = segment[i + 1 : j]
                 out.append(inner)
                 out.extend(_extract_substitutions(inner))
             i = j + 1
@@ -645,7 +696,9 @@ def build_preexec_hook(
                         SecurityDenied(
                             session_id=sid,
                             sequence=0,
-                            tool_name=str(input_data.get("tool_name", "")) if isinstance(input_data, dict) else "",
+                            tool_name=str(input_data.get("tool_name", ""))
+                            if isinstance(input_data, dict)
+                            else "",
                             reason=reason,
                             pattern_id="_infra.error",
                             agent_name=aname,
@@ -678,8 +731,7 @@ def _build_security_hooks_dict(
         return None
     if HookMatcher is None:  # pragma: no cover
         raise RuntimeError(
-            "claude_agent_sdk.types.HookMatcher is not importable — "
-            "cannot wire security hooks"
+            "claude_agent_sdk.types.HookMatcher is not importable — cannot wire security hooks"
         )
     hook = build_preexec_hook(
         config,

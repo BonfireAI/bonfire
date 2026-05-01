@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Prompt compilation: blocks, templates, and the compile pipeline.
 
 This module provides the core prompt engineering primitives for Bonfire:

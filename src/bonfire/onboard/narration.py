@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Passelewe narration engine for scan discoveries.
 
 Generates deadpan commentary lines that Passelewe speaks between scan

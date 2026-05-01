@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Tier gating for agent dispatch.
 
 Public v0.1 is a personal-tool baseline — all tiers return True.

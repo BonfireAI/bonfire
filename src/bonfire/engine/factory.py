@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Settings factory for engine + handler composition.
 
 Thin factory that builds a ``BonfireSettings`` instance for a pipeline

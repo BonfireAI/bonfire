@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Built-in quality gates and GateChain composition.
 
 Six gate classes implementing the QualityGate protocol, plus GateChain for

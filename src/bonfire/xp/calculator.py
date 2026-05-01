@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """XP calculator — pure-math module for pipeline quality signals."""
 
 from __future__ import annotations

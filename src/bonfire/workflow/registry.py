@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Workflow registry — a named catalog of workflow factories.
 
 The registry maps string names to factory callables, enabling

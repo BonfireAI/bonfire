@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Workflow definitions — pure data factories.
 
 This package provides pre-built workflow plans for common patterns:

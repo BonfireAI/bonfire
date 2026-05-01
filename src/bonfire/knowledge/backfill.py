@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Batch backfill for session handoffs and memory files.
 
 Scans directories for matching markdown files and ingests them into the

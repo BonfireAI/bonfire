@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Analyst pipeline stage handler.
 
 Scans a project, extracts module signatures, chunks content, and stores

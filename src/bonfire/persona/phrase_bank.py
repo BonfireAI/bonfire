@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """PhraseBank — anti-repeat phrase selection with variant support.
 
 Categorised phrase lists, consecutive-repeat avoidance, safe string

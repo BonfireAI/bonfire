@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Dispatch-site model resolver helper.
 
 Pure synchronous primitive that collapses the three-tier ``or`` chain used

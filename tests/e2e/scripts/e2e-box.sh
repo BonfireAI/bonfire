@@ -29,6 +29,11 @@ RUN_ID="e2e-$(date +%Y%m%d-%H%M%S)"
 OUT_DIR="$REPO_ROOT/.e2e-runs/$RUN_ID"
 
 mkdir -p "$OUT_DIR"
+# Lock OUT_DIR to the operator only — it holds the per-run OAuth credentials
+# copy (mode 0600 file inside) plus claude-stream artifacts. Default umask
+# (0022) leaves the directory listing world-readable; tighten to 0700 so the
+# directory contents can't be enumerated by other host users.
+chmod 0700 "$OUT_DIR"
 
 # ---------------------------------------------------------------------
 # Auth-mode detection. Build the docker auth args into AUTH_ARGS.

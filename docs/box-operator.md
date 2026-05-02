@@ -9,17 +9,21 @@ Five minutes to first verdict.
 - SSH access to `BonfireAI/bonfire-e2e-fixture` (private until v0.1.0)
 - A Pop!_OS / Ubuntu / macOS host with bash 5+, git, jq
 - **One** of the two auth modes below:
-  - **Path A (preferred): Claude Max OAuth.** Claude Code logged in on the host
-    (`~/.claude/.credentials.json` present). The box driver auto-mounts your
-    credentials into the container; cost is counted against your Claude Max
-    plan allocation, not against your Anthropic console billing.
-  - **Path B: Anthropic console API key.** A `sk-ant-api03-…` key from
-    <https://console.anthropic.com/settings/keys>, staged in `.env`. Cost
+  - **Path A — Claude Max OAuth (auto-detected default).** Claude Code logged
+    in on the host (`~/.claude/.credentials.json` present). The box driver
+    auto-mounts your credentials into the container; cost is counted against
+    your Claude Max plan allocation, not against your Anthropic console
+    billing. No `.env` staging required.
+  - **Path B — Anthropic console API key (explicit override).** A
+    `sk-ant-api03-…` key from <https://console.anthropic.com/settings/keys>,
+    staged in `.env` with the `ANTHROPIC_API_KEY=` line uncommented. Cost
     lands on console billing — typical run is **~$0.10–$1.00** per fire.
 
-The driver detects the available mode at startup and uses the first match in
-the order above. If neither is present, the driver exits 2 with a message
-listing both options.
+Precedence: an active `.env` line ALWAYS wins. The driver checks `.env` first;
+if `.env` is absent or has only commented-out lines, the driver falls through
+to the OAuth path. If neither is available, the driver exits 2 with a message
+listing both options. In short: stage `.env` only when you deliberately want
+to bill against your Anthropic console rather than your Claude Max plan.
 
 ## First-run setup
 

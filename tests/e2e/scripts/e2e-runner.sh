@@ -16,11 +16,14 @@ set -euo pipefail
 # present. The bare-cli flag was dropped from the claude invocation precisely
 # so that claude-cli can fall back to OAuth when the env var is absent. See
 # docs/box-operator.md for the operator-side path-selection logic.
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]] && [[ ! -f "$HOME/.claude/.credentials.json" ]]; then
+# Use the literal mount path rather than $HOME/.claude/...: under USER box,
+# HOME resolves to /home/box today, but a future `docker run --user <other>`
+# would silently change HOME and route the check to the wrong path.
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]] && [[ ! -f "/home/box/.claude/.credentials.json" ]]; then
     echo "FAIL: no auth available." >&2
     echo "  Provide ONE of:" >&2
     echo "    - ANTHROPIC_API_KEY env var (Anthropic console API key path)" >&2
-    echo "    - ~/.claude/.credentials.json mount (Claude Max OAuth path)" >&2
+    echo "    - /home/box/.claude/.credentials.json mount (Claude Max OAuth path)" >&2
     exit 6
 fi
 

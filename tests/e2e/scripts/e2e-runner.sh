@@ -11,7 +11,19 @@
 
 set -euo pipefail
 
-: "${ANTHROPIC_API_KEY:?required}"
+# Auth mode is operator-selected: at least one of (a) ANTHROPIC_API_KEY env var
+# or (b) mounted OAuth credentials at ~/.claude/.credentials.json must be
+# present. The bare-cli flag was dropped from the claude invocation precisely
+# so that claude-cli can fall back to OAuth when the env var is absent. See
+# docs/box-operator.md for the operator-side path-selection logic.
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]] && [[ ! -f "$HOME/.claude/.credentials.json" ]]; then
+    echo "FAIL: no auth available." >&2
+    echo "  Provide ONE of:" >&2
+    echo "    - ANTHROPIC_API_KEY env var (Anthropic console API key path)" >&2
+    echo "    - ~/.claude/.credentials.json mount (Claude Max OAuth path)" >&2
+    exit 6
+fi
+
 : "${RUN_ID:?required}"
 : "${WAVE:?required}"
 : "${FIXTURE_REF:=main}"
@@ -133,7 +145,7 @@ echo "$START_TS"   > "$OUT_DIR/start-timestamp.txt"
 set +e
 timeout --signal=TERM --kill-after=30s 1800s \
     stdbuf -oL -eL \
-    claude --bare -p "$(cat /usr/local/bin/e2e-prompt.txt)" \
+    claude -p "$(cat /usr/local/bin/e2e-prompt.txt)" \
         --session-id "$SESSION_ID" \
         --permission-mode bypassPermissions \
         --output-format stream-json \

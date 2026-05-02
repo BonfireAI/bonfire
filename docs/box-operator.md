@@ -7,10 +7,42 @@ Five minutes to first verdict.
 
 - Docker 24+
 - SSH access to `BonfireAI/bonfire-e2e-fixture` (private until v0.1.0)
-- `ANTHROPIC_API_KEY` from <https://console.anthropic.com/settings/keys>
 - A Pop!_OS / Ubuntu / macOS host with bash 5+, git, jq
+- **One** of the two auth modes below:
+  - **Path A (preferred): Claude Max OAuth.** Claude Code logged in on the host
+    (`~/.claude/.credentials.json` present). The box driver auto-mounts your
+    credentials into the container; cost is counted against your Claude Max
+    plan allocation, not against your Anthropic console billing.
+  - **Path B: Anthropic console API key.** A `sk-ant-api03-…` key from
+    <https://console.anthropic.com/settings/keys>, staged in `.env`. Cost
+    lands on console billing — typical run is **~$0.10–$1.00** per fire.
+
+The driver detects the available mode at startup and uses the first match in
+the order above. If neither is present, the driver exits 2 with a message
+listing both options.
 
 ## First-run setup
+
+### Path A — Claude Max OAuth (preferred)
+
+If you have Claude Code installed and signed in on this host, you're done —
+skip ahead to **Run a gate**. The driver finds your credentials at
+`~/.claude/.credentials.json` and bind-mounts a per-run RW copy into the
+container at `/home/box/.claude/.credentials.json`. The per-run copy isolates
+in-container token refreshes from your host file.
+
+If `~/.claude/.credentials.json` is missing, log in:
+
+```bash
+claude login
+```
+
+That writes `~/.claude/.credentials.json`. Re-run the box.
+
+### Path B — Anthropic console API key
+
+Use this when you do **not** have Claude Max, or when you want to bound cost
+explicitly per fire.
 
 1. `cp .env.example .env`
 2. Edit `.env`, paste your `ANTHROPIC_API_KEY`. Format: `sk-ant-api03-…`
@@ -22,12 +54,18 @@ Five minutes to first verdict.
         https://api.anthropic.com/v1/models | head
    ```
 
+4. Set a daily-spend cap on the Anthropic console
+   (`Settings → Limits → Daily spend limit`).
+
 ## Run a gate
 
 ```bash
 tests/e2e/scripts/e2e-box.sh <wave> [fixture-ref]
 # example: tests/e2e/scripts/e2e-box.sh 9 main
 ```
+
+The driver prints `==> Auth mode: …` at startup so you can confirm which
+path was selected.
 
 ## Read the verdict
 
@@ -40,25 +78,34 @@ The script exits:
 
 - 0 on PASS
 - 1 on FAIL (`verdict.json::verdict == "FAIL"`)
-- 2 if `.env` missing
+- 2 if no auth available (neither `.env` with `ANTHROPIC_API_KEY=sk-…` nor
+  `~/.claude/.credentials.json` found)
 - 3 if no verdict emitted (should be impossible with the runner trap;
   if it happens, runner crashed before trap registered — inspect Docker
   logs)
 - 4 if fixture not mounted
+- 6 if the runner found neither auth source inside the container (driver
+  failed to wire either an env var or the credentials mount)
 
 ## Cost expectations
 
-A typical gate run consumes **~$0.10–$1.00** of API. Set a low daily cap
-on the Anthropic console to bound surprises (`Settings → Limits →
-Daily spend limit`).
+- **Claude Max OAuth path:** counted against your Claude Max plan
+  allocation. No out-of-pocket per fire. If you saturate the plan limit,
+  fall back to the API-key path.
+- **API-key path:** a typical gate run consumes **~$0.10–$1.00** per fire
+  on Anthropic console billing. Set a low daily cap to bound surprises
+  (`Settings → Limits → Daily spend limit`).
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Exit 2 — `.env not found` | Missing or misnamed env file | `cp .env.example .env` and fill in |
+| Exit 2 — `no auth available on host` | Neither `.env` nor `~/.claude/.credentials.json` present | Either `cp .env.example .env` and fill in a key, or run `claude login` to create `~/.claude/.credentials.json` |
+| Exit 6 — `no auth available` (inside container) | Driver did not wire either auth path; mount or env-file failed | Check docker run output; verify `~/.claude/.credentials.json` is readable, or `.env` line-format matches `ANTHROPIC_API_KEY=sk-…` |
+| OAuth credentials missing on host | Claude Code never logged in | Run `claude login` on the host to create `~/.claude/.credentials.json`, then re-run the box |
+| OAuth path exhausts Claude Max allocation | Plan limit reached | Stage a `.env` with a console API key — driver auto-falls back when `.env` is present |
 | Exit 3 — `no verdict emitted` | Should be impossible with the runner trap. If it happens, runner crashed before the trap registered. | `docker run` with `-it` and re-execute the entrypoint to debug |
-| Verdict FAIL, `failure_reasons: ["claude_cli_auth_error"]` | API key invalid | Check `.env`; verify key on console.anthropic.com |
+| Verdict FAIL, `failure_reasons: ["claude_cli_auth_error"]` | API key invalid OR OAuth token expired | API-key path: check `.env`, verify key on console.anthropic.com. OAuth path: re-run `claude login` on host. |
 | Verdict FAIL, `failure_reasons: ["claude_cli_rate_limited"]` | Sustained 429s from Anthropic | Wait 5 min, re-run. Check usage dashboard. |
 | Verdict FAIL, `failure_reasons: ["claude_cli_timeout"]` | Box ran > 30 min | Likely a model loop. Inspect `claude-stream.jsonl` for repetition; consider lowering `--max-turns` |
 | Verdict FAIL, `failure_reasons: ["broken_test_now_passes"]` | Agent's fix didn't actually pass the test | Inspect `evidence/pytest-broken.log` |

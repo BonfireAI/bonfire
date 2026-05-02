@@ -44,9 +44,11 @@ RUN chmod +x /usr/local/bin/e2e-runner
 COPY prompts/runner-prompt.md /usr/local/bin/e2e-prompt.txt
 
 # Defense in depth: drop privileges before the runner executes.
+# /home/box/.claude is the OAuth credential mount target — operators on Claude
+# Max bind-mount their host's ~/.claude/.credentials.json into this directory.
 RUN useradd -m -u 1000 box \
-    && mkdir -p /workspace/out /workspace/target \
-    && chown -R box:box /workspace
+    && mkdir -p /workspace/out /workspace/target /home/box/.claude \
+    && chown -R box:box /workspace /home/box/.claude
 
 USER box
 

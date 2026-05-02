@@ -18,6 +18,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 RUNNER = REPO_ROOT / "tests" / "e2e" / "scripts" / "e2e-runner.sh"
+BOX_DRIVER = REPO_ROOT / "tests" / "e2e" / "scripts" / "e2e-box.sh"
 DOCKERFILE = REPO_ROOT / "tests" / "e2e" / "Dockerfile"
 PROMPT = REPO_ROOT / "tests" / "e2e" / "prompts" / "runner-prompt.md"
 SCHEMA = REPO_ROOT / "tests" / "e2e" / "schemas" / "verdict.schema.json"
@@ -40,13 +41,37 @@ def test_runner_passes_shellcheck() -> None:
 
 def test_runner_declares_required_env_vars() -> None:
     body = RUNNER.read_text()
-    for var in ("ANTHROPIC_API_KEY", "RUN_ID", "WAVE", "FIXTURE_REF"):
+    # ANTHROPIC_API_KEY is no longer unconditionally required: operators may
+    # mount OAuth credentials (Claude Max) instead. The runner asserts at least
+    # one auth mode is available; see test_runner_supports_oauth_or_api_key_auth.
+    for var in ("RUN_ID", "WAVE", "FIXTURE_REF"):
         assert f': "${{{var}' in body, f"runner must require {var}"
+
+
+def test_runner_supports_oauth_or_api_key_auth() -> None:
+    """Runner accepts either ANTHROPIC_API_KEY env var OR mounted OAuth credentials.
+
+    Per `claude --help`, `--bare` strictly requires ANTHROPIC_API_KEY or
+    apiKeyHelper — it never reads OAuth credentials. Without `--bare`,
+    claude-cli falls back to OAuth from `~/.claude/.credentials.json` when
+    the env var is absent. The runner must accept either path.
+    """
+    body = RUNNER.read_text()
+    # API key path: env-var name still referenced (assertion or fallback)
+    assert "ANTHROPIC_API_KEY" in body, "API-key auth path must remain supported"
+    # OAuth path: credential file path referenced
+    assert ".credentials.json" in body, (
+        "OAuth path via mounted credentials must be detected by the runner"
+    )
 
 
 def test_runner_invokes_claude_with_locked_flags() -> None:
     body = RUNNER.read_text()
-    assert "--bare" in body
+    # --bare strictly requires ANTHROPIC_API_KEY or apiKeyHelper auth
+    # (never reads OAuth or keychain). Dropped to allow Claude Max OAuth fallback.
+    assert "--bare" not in body, (
+        "Runner must NOT use --bare: it blocks OAuth and forces API-key-only auth"
+    )
     assert "--permission-mode bypassPermissions" in body
     assert "--output-format stream-json" in body
     assert "--max-turns 50" in body
@@ -77,9 +102,59 @@ def test_runner_uses_timeout_on_claude_cli() -> None:
     assert "1800" in body  # 30 min
 
 
+def test_box_driver_exists_and_is_executable() -> None:
+    assert BOX_DRIVER.exists()
+    assert BOX_DRIVER.stat().st_mode & stat.S_IXUSR
+
+
+def test_box_driver_detects_auth_mode() -> None:
+    """Host driver auto-detects auth mode: API key (.env) OR OAuth (Claude Max).
+
+    Operators on Claude Max do not stage an API key; the driver finds their
+    OAuth credentials at ~/.claude/.credentials.json and mounts them. Operators
+    using an Anthropic console API key continue to stage .env as before.
+    """
+    body = BOX_DRIVER.read_text()
+    # API key path: still supported via .env file
+    assert ".env" in body, "API-key auth via .env must remain supported"
+    # OAuth path: detect Claude Max credentials on host
+    assert ".credentials.json" in body, (
+        "Driver must detect OAuth credentials at the host's ~/.claude/.credentials.json"
+    )
+
+
+def test_box_driver_mounts_oauth_credentials() -> None:
+    """When OAuth path is selected, driver bind-mounts credentials into the container.
+
+    Mount target inside container is /home/box/.claude/.credentials.json
+    (matches USER box). The mount uses a per-run RW copy: tokens may refresh
+    during the run, and we don't want to corrupt the host's credentials file.
+    """
+    body = BOX_DRIVER.read_text()
+    assert "/home/box/.claude/.credentials.json" in body, (
+        "Driver must mount OAuth credentials into the container's box-user .claude dir"
+    )
+    # Per-run copy under OUT_DIR (avoid host-file corruption on token refresh)
+    assert "OUT_DIR" in body, (
+        "Driver must use a per-run copy path inside OUT_DIR for the mounted credential"
+    )
+
+
 def test_dockerfile_pins_claude_cli_version() -> None:
     body = DOCKERFILE.read_text()
     assert "@anthropic-ai/claude-code@2.1.123" in body
+
+
+def test_dockerfile_creates_claude_credentials_dir() -> None:
+    """Container's /home/box/.claude/ must exist as a mount target for OAuth credentials.
+
+    Without this directory, the credential bind-mount fails at docker run on
+    operators using the OAuth path.
+    """
+    body = DOCKERFILE.read_text()
+    assert "/home/box/.claude" in body, (
+        "Dockerfile must prepare /home/box/.claude/ as OAuth credential mount target"
+    )
 
 
 def test_dockerfile_installs_jq_and_uuidgen() -> None:
@@ -121,6 +196,12 @@ def test_env_example_exists_at_repo_root() -> None:
     assert ENV_EXAMPLE.exists()
     body = ENV_EXAMPLE.read_text()
     assert "ANTHROPIC_API_KEY=" in body
+    # .env is now optional when OAuth credentials are present. The example
+    # must document OAuth as the alternate primary path so operators on
+    # Claude Max know they can skip .env staging.
+    assert "OAuth" in body or "Claude Max" in body or "credentials.json" in body, (
+        ".env.example must document OAuth as the alternate primary auth path"
+    )
 
 
 def test_gitignore_includes_env_glob() -> None:
@@ -137,6 +218,10 @@ def test_box_operator_playbook_exists() -> None:
     assert "Box Operator Playbook" in body
     assert "Troubleshooting" in body
     assert "Cost expectations" in body
+    # Playbook must document both auth modes (API key + Claude Max OAuth).
+    assert "Claude Max" in body or "OAuth" in body, (
+        "Playbook must document the Claude Max OAuth path"
+    )
 
 
 def test_release_gates_doc_updated_for_v01_caveat() -> None:

@@ -28,6 +28,7 @@ Spec: ``docs/specs/ism-v1.md`` §7, §8.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path  # noqa: TC003 — runtime constructor type
 
 import yaml
@@ -39,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 _ISM_SUFFIX = ".ism.md"
 _FRONTMATTER_DELIMITER = "---"
+# Mirrors ``ISMDocument.name``'s validator. Rejects path-traversal and
+# cross-platform escape sequences (``..``, ``/``, ``\\``, drive letters)
+# before the loader ever touches the filesystem.
+_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 class ISMLoader:
@@ -110,6 +115,10 @@ class ISMLoader:
         (missing file, malformed YAML, missing frontmatter, schema
         violation, IO error).
         """
+        if not _NAME_PATTERN.match(name):
+            raise ISMSchemaError(
+                f"ISM {name!r}: name is not a valid slug (must match ^[a-z][a-z0-9_-]*$)"
+            )
         path = self._find_ism_file(name)
         if path is None:
             raise ISMSchemaError(f"ISM {name!r} not found in user_dir or builtin_dir")
@@ -162,7 +171,14 @@ class ISMLoader:
     # ------------------------------------------------------------------
 
     def _find_ism_file(self, name: str) -> Path | None:
-        """Return the first ``{name}.ism.md`` found; user-dir wins."""
+        """Return the first ``{name}.ism.md`` found; user-dir wins.
+
+        Returns ``None`` if ``name`` is not a valid slug (rejects path
+        traversal and cross-platform escapes), so the loader cannot read
+        files outside its configured directories.
+        """
+        if not _NAME_PATTERN.match(name):
+            return None
         filename = f"{name}{_ISM_SUFFIX}"
         for base in (self._user_dir, self._builtin_dir):
             candidate = base / filename

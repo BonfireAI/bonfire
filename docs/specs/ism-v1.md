@@ -139,7 +139,7 @@ list, describing the bonfire pipeline behavior the capability unlocks.
 Optional. Common error messages and the fix.
 ```
 
-The body is informational in v1. The welcomer ticket (BON-729) defines a stricter contract for the `## Setup` section.
+The body is informational in v1. A follow-up change to the welcomer defines a stricter contract for the `## Setup` section.
 
 ## 7. Validation rules
 
@@ -272,9 +272,9 @@ tickets when a PR merges and posts comments at stage transitions.
 
 ## 11. Non-goals for v1
 
-- **Detection-rule execution.** The scanner that actually runs `command` / `env_var` / `file_match` / `python_import` rules ships in BON-727. v1 defines the schema; the runner ships separately so its security model (subprocess sandboxing, timeouts, privilege boundaries) gets its own review.
-- **Welcomer step semantics.** The body's `## Setup` section is informational in v1. BON-729 defines the interactive contract.
-- **Handler binding.** Bard, Herald, and future stage handlers do not yet read the configured ISM out of `bonfire.toml`. BON-730 adds that wiring.
+- **Detection-rule execution.** The scanner that actually runs `command` / `env_var` / `file_match` / `python_import` rules ships in a separate change. v1 defines the schema; the runner ships separately so its security model (subprocess sandboxing, timeouts, privilege boundaries) gets its own review.
+- **Welcomer step semantics.** The body's `## Setup` section is informational in v1. A follow-up change to the welcomer defines the interactive contract.
+- **Handler binding.** Bard, Herald, and future stage handlers do not yet read the configured ISM out of `bonfire.toml`. A follow-up change adds that wiring.
 - **ISM v2.** New detection kinds, capability vocabulary, schema fields, and welcomer step types are deliberately out of scope. v2 will be additive over v1.
 
 ## 12. Versioning policy

@@ -256,3 +256,47 @@ class TestExtensionDiscipline:
         (builtin_dir / "github.md").write_text(_frontmatter("github"))
         assert loader.load("github") is None
         assert "github" not in loader.available()
+
+
+# ===========================================================================
+# Slug guard — reject path-traversal and other non-slug names
+# ===========================================================================
+
+
+class TestNameSlugGuard:
+    """The loader rejects any ``name`` that is not a valid slug.
+
+    Names matching ``^[a-z][a-z0-9_-]*$`` are accepted; anything else
+    (path-traversal sequences, absolute paths, uppercase, etc.) returns
+    ``None`` from :meth:`load` and raises
+    :class:`ISMSchemaError` from :meth:`validate`.
+    """
+
+    def test_load_rejects_path_traversal_name(
+        self, loader, tmp_path: Path, builtin_dir: Path, user_dir: Path
+    ) -> None:
+        """``../secret`` cannot escape configured directories."""
+        # Place a target file OUTSIDE the loader's configured dirs.
+        # Both user_dir and builtin_dir are children of tmp_path; a name
+        # of "../secret" would resolve to ``tmp_path/secret.ism.md``.
+        outside = tmp_path / "secret.ism.md"
+        outside.write_text(_frontmatter("secret"))
+        # Sanity: confirm the would-be traversal target really exists.
+        assert outside.is_file()
+        # Loader rejects the slug; never reads the outside file.
+        assert loader.load("../secret") is None
+
+    def test_load_rejects_absolute_path_name(self, loader) -> None:
+        """An absolute path as a name is rejected as a non-slug."""
+        assert loader.load("/etc/passwd") is None
+
+    def test_load_rejects_uppercase_name(self, loader) -> None:
+        """Names with uppercase letters are not valid slugs."""
+        assert loader.load("GitHub") is None
+
+    def test_validate_raises_on_invalid_slug_name(self, loader) -> None:
+        """``validate`` raises :class:`ISMSchemaError` on a non-slug name."""
+        from bonfire.integrations.document import ISMSchemaError
+
+        with pytest.raises(ISMSchemaError):
+            loader.validate("../secret")

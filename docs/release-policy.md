@@ -7,13 +7,19 @@ to PyPI during the pre-release and v0.1 development periods.
 
 ## Current Status
 
-The pre-release and release-candidate phases are complete. Version
-`0.1.0` shipped on 2026-04-28; see [`CHANGELOG.md`](../CHANGELOG.md) for
-the release entry. The two sections immediately below ("Pre-release
-Period" and "Release Candidate Period") describe phases that have
-already concluded and are retained as historical reference. The
-"v0.1.0 Release" section captures the gates that were cleared to cut
-the tag.
+`bonfire-ai` is in alpha at version `0.1.0a1`. The original `0.1.0`
+tag shipped on 2026-04-28; on 2026-05-03 the version label was reverted
+to `0.1.0a1` to honestly reflect that the release-gate items in
+[`docs/release-gates.md`](release-gates.md) remain open. Stable
+`v0.1.0` is the future tag once they all clear. See
+[`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.
+
+The two sections below ("Pre-release Period" and "Release Candidate
+Period") describe earlier alpha-numbering phases (`0.0.0a1`, `0.0.0a2`,
+…) that ran during v0.1 development. They are retained as historical
+reference. The current alpha series uses the `0.1.0aN` form. The
+"v0.1.0 Release" section captures the gates that govern cutting the
+stable tag.
 
 ## Pre-release Period
 
@@ -25,7 +31,7 @@ the tag.
 
 During this period:
 
-- **Versions followed PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ... (the pre-release period ended at the `0.1.0` bump.)
+- **Versions followed PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ... (this earlier pre-release phase ran during v0.1 development; the current alpha series is `0.1.0aN`.)
 - **PyPI publications are name-reservation only.** Each published wheel
   is a stub whose `bonfire` command prints a pre-release notice and
   exits. No functional features ship to PyPI.

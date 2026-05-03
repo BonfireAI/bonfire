@@ -4,13 +4,20 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — 2026-04-28
+## [0.1.0a1] — 2026-05-03
 
-First public functional release. Bonfire ships pipeline primitives, BYOK
-model routing, persona-driven CLI output, the browser-based onboarding
-scan, and a deterministic merge-preflight stage. Knowledge-graph storage
-("the vault") and the end-to-end project workflow remain in progress and
-will ship in subsequent 0.1.x releases.
+> Renamed from `[0.1.0]` to `[0.1.0a1]` 2026-05-03. The original `0.1.0`
+> tag shipped on 2026-04-28; the alpha label is restored to honestly
+> reflect that release-gate items in [`docs/release-gates.md`](docs/release-gates.md)
+> remain open. Stable `v0.1.0` is the future tag once they all clear.
+
+Frame shipped, operations deferred. Bonfire ships the pipeline engine,
+the nine-role cadre, the four extension protocols, the persona system
+(default + minimal + an optional example), the browser-based `bonfire
+scan` onboarding, the cost ledger, and a deterministic merge-preflight
+stage. Knowledge-graph storage ("the vault") and the `bonfire run`
+end-to-end CLI verb are still in progress and ship in subsequent
+0.1.x alpha releases.
 
 ### Added
 
@@ -99,9 +106,9 @@ will ship in subsequent 0.1.x releases.
 
 ### Notes
 
-- Pre-v0.1.0 commit history on the `v0.1` branch contains internal-tracker
+- Pre-v0.1.0a1 commit history on the `v0.1` branch contains internal-tracker
   references (e.g., `BON-NNN`) in commit subjects. This is accepted as
-  historical for the v0.1.0 release. New commits comply with
+  historical for the v0.1.0a1 alpha release. New commits comply with
   [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
 
-[0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0
+[0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1

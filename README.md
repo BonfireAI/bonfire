@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
 
-> ### Beta — `v0.1.0`
+> ### Alpha — `v0.1.0a1`
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
 > primitives, BYOK model routing, and `bonfire scan` onboarding are
@@ -53,7 +53,7 @@ bonfire cost
 bonfire persona list
 ```
 
-Available subcommands in `v0.1.0`: `init`, `scan`, `status`, `resume`,
+Available subcommands in `v0.1.0a1`: `init`, `scan`, `status`, `resume`,
 `handoff`, `persona`, `cost`. Run `bonfire --help` for the full surface
 or `bonfire <command> --help` for any single command.
 

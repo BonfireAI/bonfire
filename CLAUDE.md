@@ -279,7 +279,7 @@ A `v0.1.0` tag is BLOCKED until ALL of:
 10. `pip install bonfire-ai==0.1.0` succeeds in a fresh venv
     ([`docs/release-gates.md`](docs/release-gates.md) line 112).
 
-Until all ten clear, the version stays alpha (`0.0.0aN`). When all ten clear, the
+Until all ten clear, the version stays alpha (`0.1.0aN`). When all ten clear, the
 classifier in `pyproject.toml` advances from `Development Status :: 3 - Alpha`
 to `Development Status :: 4 - Beta` and the GitHub release tag `v0.1.0` is
 published.

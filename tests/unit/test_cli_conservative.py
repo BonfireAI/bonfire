@@ -15,7 +15,7 @@ Adopted innovations (2 drift-guards over floor):
     Sage §D2 + v1 cli/app.py:54-63.
 
   * test_version_flag_format_stability — asserts the exact format
-    `bonfire 0.1.0` after strip(). Guards against capitalization/prefix drift
+    `bonfire 0.1.0a1` after strip(). Guards against capitalization/prefix drift
     that the substring floor test would miss. Cites Sage §D8 + v1 cli/app.py:20-23.
 
 Imports are RED — `bonfire.cli.app` does not exist as a package until Warriors
@@ -320,5 +320,5 @@ class TestRegistrationSurface:
         assert result.exit_code == 0
         # Strip trailing newline only — content must match verbatim
         assert result.output.strip() == "bonfire 0.1.0a1", (
-            f"Expected exact format 'bonfire 0.1.0'; got {result.output.strip()!r}"
+            f"Expected exact format 'bonfire 0.1.0a1'; got {result.output.strip()!r}"
         )

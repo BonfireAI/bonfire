@@ -195,31 +195,27 @@ class TestMinimalPersonaShips:
 
 
 # ---------------------------------------------------------------------------
-# Falcor — optional named example; if present, must pass schema
+# Falcor — Bonfire's shipped runtime companion; must always be schema-valid
 # ---------------------------------------------------------------------------
 
 
-class TestFalcorIfPresent:
-    """If ``falcor`` ships, it MUST be schema-valid."""
+class TestFalcorBuiltin:
+    """``falcor`` ships unconditionally as Bonfire's runtime companion.
 
-    def _falcor_present(self) -> bool:
-        return (_builtin_dir() / "falcor").is_dir()
+    Falcor is the ``Config.persona`` default as of v0.1.0a1. The
+    builtin must always be present and schema-valid; the prior
+    if-present skip-guard pattern is gone with the predecessor.
+    """
 
-    def test_falcor_loads_if_present(self, loader: PersonaLoader) -> None:
-        if not self._falcor_present():
-            pytest.skip("falcor not shipped in this build")
+    def test_falcor_loads(self, loader: PersonaLoader) -> None:
         persona = loader.load("falcor")
         assert isinstance(persona, PersonaProtocol)
         assert persona.name == "falcor"
 
     def test_falcor_passes_schema(self, loader: PersonaLoader) -> None:
-        if not self._falcor_present():
-            pytest.skip("falcor not shipped in this build")
         loader.validate("falcor")
 
     def test_falcor_covers_all_agent_roles(self) -> None:
-        if not self._falcor_present():
-            pytest.skip("falcor not shipped in this build")
         data = _load_persona_toml("falcor")
         display_names = data.get("display_names", {})
         for role in AgentRole:

@@ -1,27 +1,40 @@
-"""RED tests for the built-in ``default``, ``minimal``, and ``falcor`` personas.
+"""Tests for the built-in ``default``, ``minimal``, and ``falcor`` personas.
 
-Pins the rename split:
+Two-layer default model — read this carefully before editing:
 
-  * ``default`` — the implicit persona returned by ``PersonaLoader.load()``
-    with no argument. Professional/neutral tone. Uses
-    ``ROLE_DISPLAY[role].professional`` values in [display_names].
-  * ``minimal`` — safety net + discoverable built-in (Sage D5).
-    Structural output only. Exactly one phrase per event type. No
-    personality markers.
-  * ``falcor`` — optional example persona. Chamberlain voice.
-    Must ship an explanatory one-liner (description field or leading
-    comment). Not the default — ``load()`` with no argument must never
-    return a persona named ``falcor``.
+  * **Loader layer.** ``PersonaLoader.load()`` with no argument returns
+    the built-in named ``"default"``. This is a safety fallback at the
+    persona-machinery layer; it does NOT change between v0 alphas.
+  * **Runtime layer.** ``Config.persona`` (``bonfire.toml`` /
+    ``BonfireSettings``) defaults to ``"falcor"`` as of v0.1.0a1 --
+    Bonfire ships with Falcor (the luckdragon) as the user-facing
+    companion. ``Config.persona`` feeds ``loader.load(name=...)`` at
+    runtime; the loader-layer no-arg default is the floor when no
+    config is supplied at all.
+
+The three shipped built-ins:
+
+  * ``default`` — neutral/professional persona; uses
+    ``ROLE_DISPLAY[role].professional`` values in [display_names]. Also
+    the loader-layer no-arg fallback.
+  * ``minimal`` — sparse safety-net persona (Sage D5). Structural
+    output only. Exactly one phrase per event type. No personality
+    markers.
+  * ``falcor`` — Bonfire's shipped runtime companion (gentle,
+    encouraging, the luckdragon at your shoulder). The Config-layer
+    runtime default; user-selectable via ``bonfire persona set <name>``.
 
 All three must satisfy PersonaProtocol and ship a complete
 ``[display_names]`` map covering every AgentRole value.
 
-Falcor distinctness (Sage D6)
---------------------------------
-The distinctness test compares raw phrase banks by reading each
-persona's phrases.toml directly. No RNG sampling. The symmetric
-difference of the two phrase sets must be non-empty, proving falcor
-is not an alias of default.
+Distinctness guard (Sage D6)
+----------------------------
+Even though Falcor is the runtime default, ``default`` and ``falcor``
+must remain SEPARATE phrase banks (no aliasing). The distinctness
+test compares raw phrase banks by reading each persona's phrases.toml
+directly. No RNG sampling. The symmetric difference of the two phrase
+sets must be non-empty, proving Falcor is a distinct voice rather
+than an alias of default.
 """
 
 from __future__ import annotations
@@ -57,7 +70,13 @@ def loader() -> PersonaLoader:
 
 
 class TestDefaultPersona:
-    """The ``default`` built-in replaces ``falcor`` as the loader default."""
+    """The ``default`` built-in is the loader-layer no-arg fallback.
+
+    Note the layering: ``PersonaLoader.load()`` with no name returns
+    ``default`` (loader-layer floor). The Config-layer runtime default
+    (``Config.persona``) is ``"falcor"``, NOT ``"default"`` -- those
+    are different concepts; tests below cover the loader layer only.
+    """
 
     def test_default_ships_as_builtin(self, loader: PersonaLoader) -> None:
         """``default`` appears in available()."""
@@ -83,7 +102,7 @@ class TestDefaultPersona:
         assert persona.name != "falcor"
 
     def test_default_toml_has_full_display_names(self) -> None:
-        """default/persona.toml [display_names] covers all 8 AgentRole values."""
+        """default/persona.toml [display_names] covers all 9 AgentRole values."""
         toml_path = _BUILTIN_DIR / "default" / "persona.toml"
         assert toml_path.is_file(), f"{toml_path} must exist"
         with toml_path.open("rb") as f:
@@ -115,7 +134,7 @@ class TestMinimalPersona:
         assert isinstance(persona, PersonaProtocol)
 
     def test_minimal_toml_has_full_display_names(self) -> None:
-        """minimal/persona.toml [display_names] covers all 8 AgentRole values."""
+        """minimal/persona.toml [display_names] covers all 9 AgentRole values."""
         toml_path = _BUILTIN_DIR / "minimal" / "persona.toml"
         assert toml_path.is_file(), f"{toml_path} must exist"
         with toml_path.open("rb") as f:
@@ -126,12 +145,19 @@ class TestMinimalPersona:
 
 
 # ---------------------------------------------------------------------------
-# "falcor" — optional example, never the default
+# "falcor" — Bonfire's shipped runtime companion (Config.persona default)
 # ---------------------------------------------------------------------------
 
 
-class TestFalcorAsOptionalExample:
-    """``falcor`` is an optional example persona, not the default."""
+class TestFalcorAsShippedCompanion:
+    """``falcor`` is Bonfire's shipped runtime companion persona.
+
+    These tests run at the loader layer: they verify Falcor is
+    discoverable, loads cleanly, satisfies the protocol, ships a
+    distinct phrase bank, and carries a full display-name map. The
+    fact that ``Config.persona`` defaults to ``"falcor"`` is enforced
+    separately in ``test_persona_rename_sweep.py``.
+    """
 
     def test_falcor_ships_as_builtin(self, loader: PersonaLoader) -> None:
         """``falcor`` is discoverable via available()."""
@@ -225,12 +251,12 @@ class TestFalcorAsOptionalExample:
         assert description or has_leading_comment, (
             "falcor/persona.toml must ship an explanatory one-liner — "
             "either a [persona].description field or a leading # comment. "
-            "falcor is an optional example persona; its reason for "
-            "existing must be on the record."
+            "Falcor is the shipped runtime companion; its character "
+            "(luckdragon -- gentle, encouraging) must be on the record."
         )
 
     def test_falcor_toml_has_full_display_names(self) -> None:
-        """falcor/persona.toml [display_names] covers all 8 AgentRole values."""
+        """falcor/persona.toml [display_names] covers all 9 AgentRole values."""
         toml_path = _BUILTIN_DIR / "falcor" / "persona.toml"
         assert toml_path.is_file(), f"{toml_path} must exist"
         with toml_path.open("rb") as f:

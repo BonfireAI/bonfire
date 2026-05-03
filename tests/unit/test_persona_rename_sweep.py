@@ -15,7 +15,7 @@ Enforces the negative-space contract for BON-345:
      with Falcor (the luckdragon) as the companion persona; ``default``
      and ``minimal`` remain user-selectable alternates.
   6. Every built-in persona TOML in ``src/bonfire/persona/builtins/``
-     must include a ``[display_names]`` map covering ALL 8 AgentRole
+     must include a ``[display_names]`` map covering ALL 9 AgentRole
      values, with no extra keys.
   7. ``hookspec.py`` / ``PersonaHookSpec`` / the stale hookspec comment
      MUST NOT appear — hookspec is deferred for v0.1.
@@ -72,12 +72,12 @@ def _builtin_personas() -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# AgentRole cross-check — guard against upstream rename of the 8 roles
+# AgentRole cross-check — guard against upstream rename of the 9 roles
 # ---------------------------------------------------------------------------
 
 
 def test_canonical_roles_match_agent_role_enum() -> None:
-    """Our frozenset of 8 roles must match ``bonfire.agent.roles.AgentRole``.
+    """Our frozenset of 9 roles must match ``bonfire.agent.roles.AgentRole``.
 
     If AgentRole evolves, this fires first so we know the TOML
     assertions below are checking the right vocabulary.
@@ -245,7 +245,7 @@ class TestConfigPersonaDefault:
 
 
 # ---------------------------------------------------------------------------
-# Built-in TOML shape — all 8 roles required, no extras
+# Built-in TOML shape — all 9 roles required, no extras
 # ---------------------------------------------------------------------------
 
 
@@ -341,7 +341,7 @@ class TestBuiltinPersonaTomlShape:
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
     def test_each_builtin_display_names_has_no_extra_keys(self, persona_dir: Path) -> None:
-        """[display_names] must not contain keys outside the 8 AgentRole values.
+        """[display_names] must not contain keys outside the 9 AgentRole values.
 
         Sage D1 — strict rejection of unknown role keys. This is the
         built-in-TOML mirror of the runtime schema check.

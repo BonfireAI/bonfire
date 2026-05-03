@@ -220,8 +220,17 @@ class TestPersonaLoaderLoadNoArg:
         persona = loader.load("default")
         assert persona.name == "default"
 
-    def test_falcor_is_not_the_default_name(self, loader: PersonaLoader, builtin_dir: Path) -> None:
-        """``load()`` with no argument MUST NOT return a persona named 'falcor'."""
+    def test_falcor_is_not_the_loader_default_name(
+        self, loader: PersonaLoader, builtin_dir: Path
+    ) -> None:
+        """``PersonaLoader.load()`` with no argument returns ``"default"``, NOT ``"falcor"``.
+
+        Layering note: this guards the LOADER LAYER. The Config-layer
+        runtime default (``Config.persona``) IS ``"falcor"`` -- those
+        are different concepts. Do not "fix" this assertion backwards
+        without reading the persona-machinery layering docs in
+        ``test_persona_defaults.py``.
+        """
         _create_persona_dir(
             builtin_dir,
             "default",

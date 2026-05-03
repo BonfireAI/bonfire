@@ -267,7 +267,7 @@ class TestPipelineRatchetBackendObserved:
             ("sage", ["Read", "Write", "Grep"]),
             ("bard", ["Read", "Write", "Grep", "Glob"]),
             ("wizard", ["Read", "Grep", "Glob"]),
-            ("herald", ["Read", "Grep"]),
+            ("steward", ["Read", "Grep"]),
         ],
     )
     async def test_all_mapped_roles_pipeline(

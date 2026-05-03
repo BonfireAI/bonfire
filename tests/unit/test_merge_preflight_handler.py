@@ -10,7 +10,7 @@ and §D10 surface map (lines 725-801).
 Decisions ratified by Anta:
 - Q1 PATH β: handler at bonfire.handlers.merge_preflight with module-level
   ROLE = AgentRole.VERIFIER. NOT in HANDLER_ROLE_MAP. The map currently
-  binds {bard, wizard, herald, architect, sage_correction_bounce}; the
+  binds {bard, wizard, steward, architect, sage_correction_bounce}; the
   merge_preflight verifier remains absent regardless of map growth.
 - Q6 ALLOW-WITH-ANNOTATION for pre_existing_debt (gate test file).
 """
@@ -173,11 +173,11 @@ class TestProtocolConformance:
         assert list(sig.parameters.keys()) == ["self", "stage", "envelope", "prior_results"]
 
 
-# --- TestPRNumberExtraction (Sage §D-CL.1 lines 820-821, Herald-pattern) ----
+# --- TestPRNumberExtraction (Sage §D-CL.1 lines 820-821, Steward-pattern) ----
 
 
 class TestPRNumberExtraction:
-    """Mirror Herald's PR extraction chain (Sage §D-CL.1 line 820-821)."""
+    """Mirror Steward's PR extraction chain (Sage §D-CL.1 line 820-821)."""
 
     @pytest.mark.asyncio
     async def test_reads_pr_from_prior_results_meta_key(self, preflight_stage: StageSpec) -> None:
@@ -190,7 +190,7 @@ class TestPRNumberExtraction:
 
     @pytest.mark.asyncio
     async def test_reads_pr_from_bard_pull_url_fallback(self, preflight_stage: StageSpec) -> None:
-        """prior_results['bard'] URL fallback -> handler proceeds (Herald-mirror)."""
+        """prior_results['bard'] URL fallback -> handler proceeds (Steward-mirror)."""
         envelope = Envelope(task="t")
         prior = {"bard": "https://github.com/org/repo/pull/404", META_REVIEW_VERDICT: "approve"}
         handler = _make_handler()
@@ -397,7 +397,7 @@ class TestModuleRoleConstant:
         assert keys == {
             "bard",
             "wizard",
-            "herald",
+            "steward",
             "architect",
             "sage_correction_bounce",
         }
@@ -416,8 +416,8 @@ class TestModuleRoleConstant:
 
         assert "MergePreflightHandler" in getattr(handlers_pkg, "__all__", [])
 
-    def test_role_display_has_verifier_assayer(self) -> None:
-        """Sage §D10 line 755: ROLE_DISPLAY['verifier'].gamified == 'Assayer'.
+    def test_role_display_has_verifier_cleric(self) -> None:
+        """Sage §D10 line 755: ROLE_DISPLAY['verifier'].gamified == 'Cleric'.
 
         Surface map states this entry already exists per docstring at
         roles.py:25; this test pins it as part of the BON-519 contract so any
@@ -426,7 +426,7 @@ class TestModuleRoleConstant:
         from bonfire.naming import ROLE_DISPLAY
 
         assert "verifier" in ROLE_DISPLAY
-        assert ROLE_DISPLAY["verifier"].gamified == "Assayer"
+        assert ROLE_DISPLAY["verifier"].gamified == "Cleric"
         assert ROLE_DISPLAY["verifier"].professional == "Verify Agent"
 
 

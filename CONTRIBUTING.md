@@ -74,10 +74,10 @@ must match that file exactly. If you change one, change the other.
 | researcher     | Research Agent         | Scout              |
 | tester         | Test Agent             | Knight             |
 | implementer    | Build Agent            | Warrior            |
-| verifier       | Verify Agent           | Assayer            |
+| verifier       | Verify Agent           | Cleric             |
 | publisher      | Publish Agent          | Bard               |
 | reviewer       | Review Agent           | Wizard             |
-| closer         | Release Agent          | Herald             |
+| closer         | Release Agent          | Steward            |
 | synthesizer    | Synthesis Agent        | Sage               |
 | analyst        | Analysis Agent         | Architect          |
 

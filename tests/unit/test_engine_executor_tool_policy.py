@@ -39,7 +39,6 @@ from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 from bonfire.protocols import DispatchOptions
 
-
 # ---------------------------------------------------------------------------
 # Mocks — aligned with test_engine_executor.py style
 # ---------------------------------------------------------------------------
@@ -121,14 +120,10 @@ class TestConstructorAcceptsToolPolicy:
         from bonfire.engine.executor import StageExecutor
 
         policy = DefaultToolPolicy()
-        ex = StageExecutor(
-            backend=_MockBackend(), bus=bus, config=config, tool_policy=policy
-        )
+        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config, tool_policy=policy)
         assert ex._tool_policy is policy
 
-    def test_accepts_tool_policy_none_explicit(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    def test_accepts_tool_policy_none_explicit(self, bus: EventBus, config: PipelineConfig) -> None:
         """Sage D5 — explicit ``tool_policy=None`` still valid."""
         from bonfire.engine.executor import StageExecutor
 
@@ -283,9 +278,7 @@ class TestThreeTierRatchetBackendObserved:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="anyone", role="")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -302,9 +295,7 @@ class TestThreeTierRatchetBackendObserved:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="x", role="gardener")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -322,9 +313,7 @@ class TestThreeTierRatchetBackendObserved:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="warrior-agent", role="warrior")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -342,7 +331,7 @@ class TestThreeTierRatchetBackendObserved:
             ("sage", ["Read", "Write", "Grep"]),
             ("bard", ["Read", "Write", "Grep", "Glob"]),
             ("wizard", ["Read", "Grep", "Glob"]),
-            ("herald", ["Read", "Grep"]),
+            ("steward", ["Read", "Grep"]),
         ],
     )
     async def test_all_mapped_roles_yield_floor_tools(
@@ -357,9 +346,7 @@ class TestThreeTierRatchetBackendObserved:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name=f"{role}-agent", role=role)
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -398,9 +385,7 @@ class TestThreeTierRatchetRunnerObserved:
                 cost_usd=0.0,
             )
 
-        monkeypatch.setattr(
-            "bonfire.engine.executor.execute_with_retry", fake_execute_with_retry
-        )
+        monkeypatch.setattr("bonfire.engine.executor.execute_with_retry", fake_execute_with_retry)
 
         ex = StageExecutor(
             backend=_MockBackend(),
@@ -438,9 +423,7 @@ class TestThreeTierRatchetRunnerObserved:
                 cost_usd=0.0,
             )
 
-        monkeypatch.setattr(
-            "bonfire.engine.executor.execute_with_retry", fake_execute_with_retry
-        )
+        monkeypatch.setattr("bonfire.engine.executor.execute_with_retry", fake_execute_with_retry)
 
         ex = StageExecutor(
             backend=_MockBackend(),
@@ -455,7 +438,11 @@ class TestThreeTierRatchetRunnerObserved:
         )
 
         assert captured["options"].tools == [
-            "Read", "Write", "Grep", "WebSearch", "WebFetch",
+            "Read",
+            "Write",
+            "Grep",
+            "WebSearch",
+            "WebFetch",
         ]
         assert captured["options"].role == "scout"
 
@@ -479,9 +466,7 @@ class TestCustomToolPolicyImpl:
                 return ["OnlyRead"] if role == "warrior" else []
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=_CustomPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=_CustomPolicy())
         stage = _stage(name="s1", agent_name="w", role="warrior")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -525,9 +510,7 @@ class TestCustomToolPolicyImpl:
                 return ["Read"]
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=_CountingPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=_CountingPolicy())
         stage = _stage(name="s1", agent_name="x", role="")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -625,9 +608,7 @@ class TestAdversarialStageRoleAtExecutor:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="x", role="   ")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -644,9 +625,7 @@ class TestAdversarialStageRoleAtExecutor:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="x", role="knight ")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -663,9 +642,7 @@ class TestAdversarialStageRoleAtExecutor:
         from bonfire.engine.executor import StageExecutor
 
         backend = _MockBackend()
-        ex = StageExecutor(
-            backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy()
-        )
+        ex = StageExecutor(backend=backend, bus=bus, config=config, tool_policy=DefaultToolPolicy())
         stage = _stage(name="s1", agent_name="x", role="ニンジャ")
         await ex.execute_single(
             stage=stage, prior_results={}, total_cost=0.0, plan=_plan(stage), session_id="sid"
@@ -698,9 +675,7 @@ class TestDispatchOptionsContract:
         _, opts = backend.calls[0]
         assert isinstance(opts, DispatchOptions)
 
-    async def test_dispatch_options_is_frozen(
-        self, bus: EventBus, config: PipelineConfig
-    ) -> None:
+    async def test_dispatch_options_is_frozen(self, bus: EventBus, config: PipelineConfig) -> None:
         """The options object is frozen — mutation attempts raise."""
         from bonfire.engine.executor import StageExecutor
 

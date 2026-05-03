@@ -50,7 +50,7 @@ end-to-end CLI verb are still in progress and ship in subsequent
   first-match-wins ordering: `green`, `pre_existing_debt` (allow with
   annotation), `cross_wave_interaction`, `pure_warrior_bug`,
   `pytest_collection_error`, `merge_conflict`. Wired into
-  `standard_build()` between `wizard` and `herald` via
+  `standard_build()` between `wizard` and `steward` via
   `MergePreflightGate`. Backed by the new
   `bonfire.git.scratch.ScratchWorktreeFactory` primitive. See
   `docs/pipeline-stages.md` and `docs/product/discipline.md`.
@@ -70,6 +70,30 @@ end-to-end CLI verb are still in progress and ship in subsequent
 
 ### Changed
 
+- **Cadre display rename (BREAKING).** The verifier role's gamified
+  display name moves from `"Assayer"` to `"Cleric"`; the closer role's
+  from `"Herald"` to `"Steward"`. Generic identifiers (`verifier`,
+  `closer`) and professional names (`Verify Agent`, `Release Agent`)
+  are unchanged. The workflow alias key `"assayer"` in
+  `GAMIFIED_TO_GENERIC` becomes `"cleric"`; `"herald"` becomes
+  `"steward"`. The closer pipeline-stage name in `standard_build()` is
+  now `"steward"` (was `"herald"`). Update any code that pinned the
+  prior strings; no backward-compatibility alias ships.
+- **Closer handler module rename (BREAKING).** `bonfire.handlers.herald`
+  is renamed to `bonfire.handlers.steward`; the class `HeraldHandler`
+  becomes `StewardHandler`. Envelope metadata keys `"herald_verdict"`
+  and `"herald_pr"` are renamed to `"steward_verdict"` and
+  `"steward_pr"` respectively. Imports update from
+  `from bonfire.handlers.herald import HeraldHandler` to
+  `from bonfire.handlers.steward import StewardHandler`. Git history
+  for the file is preserved through `git mv`. A lineage breadcrumb in
+  the new module's docstring records the predecessor name.
+- **Wizard PR review heading.** The fail-safe review-body H1 emitted
+  by the reviewer handler is now plain `## Code Review` (was
+  `## Wizard Code Review`). Bonfire does not stamp its cadre vocabulary
+  onto a downstream repo's PR surface. The matching source-scan
+  exemption in the test suite is removed; the assertion now holds
+  without special-casing.
 - Default `base_branch` value updated from `"master"` to `"main"`
   across the git layer and pipeline configuration.
 - `Development Status` PyPI classifier advanced from `3 - Alpha` to

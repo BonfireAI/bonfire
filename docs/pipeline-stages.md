@@ -13,12 +13,12 @@ Bonfire's standard build is the eight-stage pipeline produced by
 `bonfire.workflows.standard.standard_build()`:
 
 ```
-scout -> knight -> warrior -> prover -> bard -> wizard -> merge_preflight -> herald
+scout -> knight -> warrior -> prover -> bard -> wizard -> merge_preflight -> steward
 ```
 
 The first four stages (scout, knight, warrior, prover) are LLM-driven and
 route through the dispatch backend. The last four (bard, wizard,
-merge_preflight, herald) are deterministic stage handlers that wrap
+merge_preflight, steward) are deterministic stage handlers that wrap
 external tools (`gh` CLI, git, pytest) and never invoke an LLM.
 
 ## Stages reference
@@ -43,7 +43,7 @@ Runs full-suite pytest against a *simulated merged tip* before
 `gh pr merge`. Detects cross-wave interactions between sibling PRs
 targeting the same base.
 
-**Trigger.** Between `wizard` approve and `herald` merge. Skipped when
+**Trigger.** Between `wizard` approve and `steward` merge. Skipped when
 the wizard verdict is not `approve` (returns COMPLETED with a `skipped`
 result string).
 
@@ -55,7 +55,7 @@ branch (`master` by default), optional sibling-batch detection toggle.
 verdict-value is recorded under
 [`META_PREFLIGHT_CLASSIFICATION`](../src/bonfire/models/envelope.py).
 `PRE_EXISTING_DEBT` additionally sets `META_PREFLIGHT_TEST_DEBT_NOTED=True`
-so Herald (or a future debt-annotation feature) can post a notice on the
+so Steward (or a future debt-annotation feature) can post a notice on the
 PR.
 
 **Failure classification.** Six deterministic verdicts; first-match-wins
@@ -96,7 +96,7 @@ in the same session amortise the baseline run.
 pytest-xdist parallelization are filed as out-of-scope D-FTs in the
 merge-preflight PR body (Sage memo §B lines 184-192).
 
-### `herald` (closer)
+### `steward` (closer)
 
 Merges the PR via `gh pr merge --merge` once preflight is green (or
 ALLOW-WITH-ANNOTATION on debt). Closes referenced issues. Reads
@@ -139,7 +139,7 @@ _stage(
 )
 ```
 
-and `herald.depends_on = ["merge_preflight"]`. The
+and `steward.depends_on = ["merge_preflight"]`. The
 `merge_preflight_passed` gate (see
 [`engine/gates.py`](../src/bonfire/engine/gates.py)) reads the envelope
 status:

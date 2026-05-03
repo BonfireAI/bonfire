@@ -282,13 +282,13 @@ class TestStandardBuild:
     """standard_build() returns a valid 9-stage STANDARD WorkflowPlan.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
-    bard -> wizard -> merge_preflight -> herald.
+    bard -> wizard -> merge_preflight -> steward.
     Knight writes RED, Warrior makes GREEN (max 3 iterations, no self-bounce).
     Prover bounces to Warrior on gate failure; on prover pass, the
     sage_correction_bounce stage runs (synthesizer-correction handler) and
     on gate failure also bounces to Warrior. Bard publishes, Wizard reviews
     (bounces to Warrior on rejection), MergePreflight runs full-suite
-    pytest against the simulated merged tip, and Herald announces.
+    pytest against the simulated merged tip, and Steward announces.
     """
 
     @pytest.fixture()
@@ -315,7 +315,7 @@ class TestStandardBuild:
             "bard",
             "wizard",
             "merge_preflight",
-            "herald",
+            "steward",
         ]
 
     def test_scout_role(self, plan: WorkflowPlan) -> None:
@@ -441,18 +441,18 @@ class TestStandardBuild:
         preflight = plan.stages[7]
         assert "wizard" in preflight.depends_on
 
-    def test_herald_role(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[8]
-        assert herald.role == "herald"
+    def test_steward_role(self, plan: WorkflowPlan) -> None:
+        steward = plan.stages[8]
+        assert steward.role == "steward"
 
-    def test_herald_handler_name(self, plan: WorkflowPlan) -> None:
-        herald = plan.stages[8]
-        assert herald.handler_name == "herald"
+    def test_steward_handler_name(self, plan: WorkflowPlan) -> None:
+        steward = plan.stages[8]
+        assert steward.handler_name == "steward"
 
-    def test_herald_depends_on_merge_preflight(self, plan: WorkflowPlan) -> None:
-        """herald.depends_on stays rewired to ['merge_preflight']."""
-        herald = plan.stages[8]
-        assert "merge_preflight" in herald.depends_on
+    def test_steward_depends_on_merge_preflight(self, plan: WorkflowPlan) -> None:
+        """steward.depends_on stays rewired to ['merge_preflight']."""
+        steward = plan.stages[8]
+        assert "merge_preflight" in steward.depends_on
 
     def test_plan_is_frozen(self, plan: WorkflowPlan) -> None:
         with pytest.raises(ValidationError):

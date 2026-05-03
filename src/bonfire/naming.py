@@ -44,10 +44,10 @@ ROLE_DISPLAY: dict[str, DisplayNames] = {
     "researcher": DisplayNames("Research Agent", "Scout"),
     "tester": DisplayNames("Test Agent", "Knight"),
     "implementer": DisplayNames("Build Agent", "Warrior"),
-    "verifier": DisplayNames("Verify Agent", "Assayer"),
+    "verifier": DisplayNames("Verify Agent", "Cleric"),
     "publisher": DisplayNames("Publish Agent", "Bard"),
     "reviewer": DisplayNames("Review Agent", "Wizard"),
-    "closer": DisplayNames("Release Agent", "Herald"),
+    "closer": DisplayNames("Release Agent", "Steward"),
     "synthesizer": DisplayNames("Synthesis Agent", "Sage"),
     "analyst": DisplayNames("Analysis Agent", "Architect"),
 }

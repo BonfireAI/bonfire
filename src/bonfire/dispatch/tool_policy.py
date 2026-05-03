@@ -52,7 +52,7 @@ class DefaultToolPolicy:
         "sage": ["Read", "Write", "Grep"],
         "bard": ["Read", "Write", "Grep", "Glob"],
         "wizard": ["Read", "Grep", "Glob"],
-        "herald": ["Read", "Grep"],
+        "steward": ["Read", "Grep"],
     }
 
     def tools_for(self, role: str) -> list[str]:

@@ -9,9 +9,9 @@ Sage §D8 file 2 / 4 — locks the two frozen tables shipped by
     function).
   * §D-CL.7 — Implementation uses ``MappingProxyType`` (immutable).
   * §D2 — ``GAMIFIED_TO_GENERIC: Mapping[str, AgentRole]`` exposes ten
-    workflow-emitted aliases (scout/knight/warrior/assayer/prover/bard/
-    wizard/herald/sage/architect) → canonical ``AgentRole``.
-  * §D-CL.1 — Both ``prover`` AND ``assayer`` map to ``AgentRole.VERIFIER``
+    workflow-emitted aliases (scout/knight/warrior/cleric/prover/bard/
+    wizard/steward/sage/architect) → canonical ``AgentRole``.
+  * §D-CL.1 — Both ``prover`` AND ``cleric`` map to ``AgentRole.VERIFIER``
     (workflow alias retention).
 
 Drift-guards (cross-vocabulary parametrize, no-canonical-gamified-collision,
@@ -26,7 +26,6 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # DEFAULT_ROLE_TIER — shape over all nine canonical roles
@@ -155,11 +154,11 @@ class TestGamifiedAliasMap:
             "scout",
             "knight",
             "warrior",
-            "assayer",
+            "cleric",
             "prover",
             "bard",
             "wizard",
-            "herald",
+            "steward",
             "sage",
             "architect",
         }
@@ -184,12 +183,12 @@ class TestGamifiedAliasMap:
             assert alias == alias.lower(), f"alias {alias!r} is not lowercase"
 
     def test_prover_aliases_to_verifier(self) -> None:
-        """``prover`` AND ``assayer`` both map to ``AgentRole.VERIFIER`` (§D-CL.1)."""
+        """``prover`` AND ``cleric`` both map to ``AgentRole.VERIFIER`` (§D-CL.1)."""
         from bonfire.agent.roles import AgentRole
         from bonfire.agent.tiers import GAMIFIED_TO_GENERIC
 
         assert GAMIFIED_TO_GENERIC["prover"] is AgentRole.VERIFIER
-        assert GAMIFIED_TO_GENERIC["assayer"] is AgentRole.VERIFIER
+        assert GAMIFIED_TO_GENERIC["cleric"] is AgentRole.VERIFIER
 
     def test_alias_mapping_is_immutable(self) -> None:
         """``GAMIFIED_TO_GENERIC`` rejects assignment (MappingProxyType)."""
@@ -211,11 +210,11 @@ _GAMIFIED_RESOLUTION_CASES: list[tuple[str, str]] = [
     ("scout", "researcher"),
     ("knight", "tester"),
     ("warrior", "implementer"),
-    ("assayer", "verifier"),
+    ("cleric", "verifier"),
     ("prover", "verifier"),
     ("bard", "publisher"),
     ("wizard", "reviewer"),
-    ("herald", "closer"),
+    ("steward", "closer"),
     ("sage", "synthesizer"),
     ("architect", "analyst"),
 ]

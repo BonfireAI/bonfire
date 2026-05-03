@@ -133,7 +133,7 @@ persona-emitted role names in CLI output.
 > roles above. The persona is what speaks for them at the CLI surface.
 > See [Personality](#personality-optional) below.
 
-### The Vault
+## The Vault
 
 Alongside the cadre, the **Vault** is the named knowledge store of
 Bonfire's world — capitalized, personified in display vocabulary,
@@ -218,11 +218,10 @@ Bonfire ships persona-driven CLI output. The persona affects
 quality standards. The cadre is what runs; the persona is what
 speaks.
 
-The default persona for `v0.1.0a1` is **Falcor** — the luckdragon
-from *The Neverending Story*. Gentle, encouraging, warm; the friend
-who tells you not to let it end. Falcor narrates pipeline events,
-greets you on `bonfire scan`, and names lifecycle moments of the
-Vault.
+The default persona for `v0.1.0a1` is **Falcor** — gentle,
+encouraging, warm. The friend who tells you not to let it
+end.[^falcor] Falcor narrates pipeline events, greets you on
+`bonfire scan`, and names lifecycle moments of the Vault.
 
 Two other personas ship for users who want neutral output:
 `default` (professional) and `minimal` (terse, CI-friendly).
@@ -245,6 +244,8 @@ it in the directory.
 A breadcrumb: Falcor refactors a slot earlier occupied by a
 predecessor named Passelewe. History is sacred — see
 `docs/_lore/passelewe.md` if you want the lineage.
+
+[^falcor]: Yes, that Falcor — the luckdragon, *The Neverending Story* (1984).
 
 ## Extension Points
 

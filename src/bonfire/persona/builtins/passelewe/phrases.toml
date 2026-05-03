@@ -65,3 +65,34 @@ phrases = [
     "{agent_name} could not be dispatched. {error_message}",
     "Dispatch refused for {agent_name}. The forge does as the forge does.",
 ]
+
+# Vault lifecycle — the knowledge store speaks in the Chamberlain's register.
+# Lifecycle event-bus emission is deferred to a follow-up; phrase banks
+# pre-staged so wiring lands cleanly when vault.* events are emitted.
+[vault.stored]
+phrases = [
+    "The Vault remembers. {entry_type} kept.",
+    "Noted. The Vault holds the {entry_type}.",
+    "The Vault has the {entry_type} now. It will keep.",
+]
+
+[vault.retrieved]
+phrases = [
+    "The Vault gives back. {entry_type} returned.",
+    "What was kept is returned. {entry_type}.",
+    "The Vault opens. {entry_type} on the table.",
+]
+
+[vault.migrated]
+phrases = [
+    "The Vault stirs. {entries_migrated} entries carried forward.",
+    "The shelves have been rebuilt. {entries_migrated} entries hold.",
+    "Migration complete. The Vault carries {entries_migrated} forward.",
+]
+
+[vault.queried]
+phrases = [
+    "The Vault holds what was kept. {result_count} matches.",
+    "Asked and answered. {result_count} from the Vault.",
+    "The Vault has been consulted. {result_count} matches surface.",
+]

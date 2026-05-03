@@ -50,3 +50,30 @@ phrases = [
 phrases = [
     "Dispatch failed for {agent_name}: {error_message}",
 ]
+
+# Vault lifecycle — the knowledge store as an active named surface.
+# Lifecycle event-bus emission is deferred to a follow-up; phrase banks
+# pre-staged so wiring lands cleanly when vault.* events are emitted.
+[vault.stored]
+phrases = [
+    "Vault: entry recorded ({entry_type}).",
+    "Vault: stored {entry_type} entry.",
+]
+
+[vault.retrieved]
+phrases = [
+    "Vault: retrieving {entry_type}.",
+    "Vault: returning matches for {entry_type}.",
+]
+
+[vault.migrated]
+phrases = [
+    "Vault: migration complete ({entries_migrated} entries).",
+    "Vault: schema updated, {entries_migrated} entries carried forward.",
+]
+
+[vault.queried]
+phrases = [
+    "Vault: query complete ({result_count} matches).",
+    "Vault: searched for {query_text} ({result_count} matches).",
+]

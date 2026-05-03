@@ -90,9 +90,7 @@ class TestDefaultPersona:
             data = tomllib.load(f)
         display_names = data.get("display_names", {})
         missing = _CANONICAL_ROLES - set(display_names.keys())
-        assert not missing, (
-            f"default/persona.toml [display_names] missing roles: {sorted(missing)}"
-        )
+        assert not missing, f"default/persona.toml [display_names] missing roles: {sorted(missing)}"
 
 
 # ---------------------------------------------------------------------------
@@ -124,9 +122,7 @@ class TestMinimalPersona:
             data = tomllib.load(f)
         display_names = data.get("display_names", {})
         missing = _CANONICAL_ROLES - set(display_names.keys())
-        assert not missing, (
-            f"minimal/persona.toml [display_names] missing roles: {sorted(missing)}"
-        )
+        assert not missing, f"minimal/persona.toml [display_names] missing roles: {sorted(missing)}"
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +171,7 @@ class TestPasseleweAsOptionalExample:
             with phrases_path.open("rb") as f:
                 raw = tomllib.load(f)
             collected: set[str] = set()
+
             # phrases.toml has nested shape: [stage.started] -> phrases = [...]
             # We flatten any list[str] value found anywhere in the tree.
             def _walk(node: object) -> None:
@@ -185,6 +182,7 @@ class TestPasseleweAsOptionalExample:
                     for item in node:
                         if isinstance(item, str):
                             collected.add(item)
+
             _walk(raw)
             return collected
 
@@ -221,8 +219,7 @@ class TestPasseleweAsOptionalExample:
 
         first_lines = raw_text.splitlines()[:3]
         has_leading_comment = any(
-            line.lstrip().startswith("#") and len(line.strip()) > 2
-            for line in first_lines
+            line.lstrip().startswith("#") and len(line.strip()) > 2 for line in first_lines
         )
 
         assert description or has_leading_comment, (
@@ -243,6 +240,32 @@ class TestPasseleweAsOptionalExample:
         assert not missing, (
             f"passelewe/persona.toml [display_names] missing roles: {sorted(missing)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Vault active-character phrases — every persona pre-stages vault lifecycle
+# entries. Event-bus emission is deferred; the phrase banks ship now so the
+# wiring lands cleanly later.
+# ---------------------------------------------------------------------------
+
+
+class TestVaultPhrasesShipped:
+    """Every built-in persona pre-stages phrases for the four vault lifecycle keys."""
+
+    _VAULT_KEYS = ("vault.stored", "vault.retrieved", "vault.migrated", "vault.queried")
+
+    @pytest.mark.parametrize("persona_name", ["default", "minimal", "passelewe"])
+    def test_persona_has_vault_phrases(self, loader: PersonaLoader, persona_name: str) -> None:
+        """Each built-in persona ships at least one phrase per vault lifecycle key."""
+        persona = loader.load(persona_name)
+        bank = persona._bank  # noqa: SLF001 — direct read for schema check
+        phrases_map = bank._phrases  # noqa: SLF001 — direct read for schema check
+
+        for key in self._VAULT_KEYS:
+            assert key in phrases_map, (
+                f"persona {persona_name!r}: phrase bank missing vault key {key!r}"
+            )
+            assert phrases_map[key], f"persona {persona_name!r}: vault key {key!r} has no phrases"
 
 
 # ---------------------------------------------------------------------------

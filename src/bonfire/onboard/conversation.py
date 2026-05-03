@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Passelewe conversation engine — scripted 3-question profiling.
+"""Falcor conversation engine — scripted 3-question profiling.
 
 Three questions map user responses to profile dimensions via keyword/pattern
 matching. Reflections invite correction; short answers are acknowledged
@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 from bonfire.onboard.protocol import (
     ConversationStart,
+    FalcorMessage,
     FrontDoorMessage,
-    PasseleweMessage,
 )
 
 if TYPE_CHECKING:
@@ -392,7 +392,7 @@ class ConversationEngine:
     ) -> None:
         """Emit ConversationStart + first question."""
         await emit(ConversationStart())
-        await emit(PasseleweMessage(text=_QUESTIONS[0], subtype="question"))
+        await emit(FalcorMessage(text=_QUESTIONS[0], subtype="question"))
         self._turn = 1
 
     async def handle_answer(
@@ -423,7 +423,7 @@ class ConversationEngine:
 
         # Emit reflection
         await emit(
-            PasseleweMessage(
+            FalcorMessage(
                 text=reflection_text,
                 subtype="reflection",
             )
@@ -439,7 +439,7 @@ class ConversationEngine:
         # Ask next question if not done
         if self._turn <= 3:
             await emit(
-                PasseleweMessage(
+                FalcorMessage(
                     text=_QUESTIONS[self._turn - 1],
                     subtype="question",
                 )

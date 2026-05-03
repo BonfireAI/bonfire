@@ -9,10 +9,11 @@ Enforces the negative-space contract for BON-345:
   3. ``pool.py`` MUST NOT exist in ``src/bonfire/persona/`` — the
      replacement module is ``phrase_bank.py``.
   4. ``"passelewe"`` string literal MUST NOT appear in ``src/bonfire/``
-     Python sources. Allowed only inside the persona's own TOML under
-     ``builtins/passelewe/``.
-  5. ``Config.persona`` default MUST be ``"default"`` (Sage D4 — the
-     rename extends to ``src/bonfire/models/config.py:46``).
+     Python sources. The Passelewe persona was retired in v0.1.0a1; the
+     character lives only as a lore breadcrumb at ``docs/_lore/passelewe.md``.
+  5. ``Config.persona`` default MUST be ``"falcor"`` -- Bonfire ships
+     with Falcor (the luckdragon) as the companion persona; ``default``
+     and ``minimal`` remain user-selectable alternates.
   6. Every built-in persona TOML in ``src/bonfire/persona/builtins/``
      must include a ``[display_names]`` map covering ALL 8 AgentRole
      values, with no extra keys.
@@ -165,13 +166,13 @@ class TestPoolModuleGone:
 # ---------------------------------------------------------------------------
 
 
-class TestPasseleweNotDefault:
-    """No Python source in ``src/bonfire/`` may hardcode ``"passelewe"``.
+class TestPasseleweNotInSrc:
+    """No Python source in ``src/bonfire/`` may reference ``"passelewe"``.
 
-    Allowed: the directory name ``builtins/passelewe/``, TOML
-    ``name = "passelewe"`` inside that persona's own persona.toml.
-    Banned: any Python source under ``src/bonfire/`` that pins
-    ``passelewe`` as an implicit default.
+    The Passelewe persona was retired in v0.1.0a1; the character lives
+    only as a lore breadcrumb at ``docs/_lore/passelewe.md``. The
+    persona builtins directory was deleted; nothing in src/ should
+    name the predecessor persona.
     """
 
     def test_no_passelewe_literal_in_persona_py_sources(self) -> None:
@@ -214,21 +215,23 @@ class TestPasseleweNotDefault:
 
 
 class TestConfigPersonaDefault:
-    """``Config.persona`` default must be ``"default"``, not ``"passelewe"``."""
+    """``Config.persona`` default must be ``"falcor"`` -- Bonfire's
+    shipped companion persona as of v0.1.0a1."""
 
     def test_config_py_exists(self) -> None:
         assert _CONFIG_PATH.is_file(), f"Expected config module at {_CONFIG_PATH}"
 
-    def test_config_persona_default_is_default(self) -> None:
-        """``src/bonfire/models/config.py`` sets ``persona: str = "default"``.
+    def test_config_persona_default_is_falcor(self) -> None:
+        """``src/bonfire/models/config.py`` sets ``persona: str = "falcor"``.
 
-        Sage D4 — the rename extends to the model default. The model
-        file must contain the literal ``persona: str = "default"`` line.
+        Bonfire ships with Falcor (the luckdragon) as the companion
+        persona. The model file must contain the literal line
+        ``persona: str = "falcor"``.
         """
         text = _CONFIG_PATH.read_text(encoding="utf-8")
-        assert 'persona: str = "default"' in text, (
-            "Config.persona default must be 'default' (Sage D4). "
-            "Expected literal line 'persona: str = \"default\"' in "
+        assert 'persona: str = "falcor"' in text, (
+            "Config.persona default must be 'falcor'. "
+            "Expected literal line 'persona: str = \"falcor\"' in "
             f"{_CONFIG_PATH}."
         )
 
@@ -237,7 +240,7 @@ class TestConfigPersonaDefault:
         text = _CONFIG_PATH.read_text(encoding="utf-8")
         assert 'persona: str = "passelewe"' not in text, (
             "Config.persona must not pin 'passelewe' as the default — "
-            "rename to 'default' (Sage D4)."
+            "the Passelewe persona was retired in v0.1.0a1."
         )
 
 
@@ -270,6 +273,31 @@ class TestBuiltinPersonaTomlShape:
         minimal_dir = _BUILTINS_DIR / "minimal"
         toml_path = minimal_dir / "persona.toml"
         assert toml_path.is_file(), f"Minimal persona's persona.toml missing at {toml_path}"
+
+    def test_falcor_persona_ships(self) -> None:
+        """The ``falcor`` persona must ship as a built-in.
+
+        Bonfire's shipped companion persona as of v0.1.0a1 -- gentle,
+        encouraging, the luckdragon at your shoulder while the work
+        runs. Matches the ``Config.persona`` default.
+        """
+        falcor_dir = _BUILTINS_DIR / "falcor"
+        toml_path = falcor_dir / "persona.toml"
+        assert toml_path.is_file(), f"Falcor persona's persona.toml missing at {toml_path}"
+
+    def test_passelewe_persona_does_not_ship(self) -> None:
+        """The ``passelewe`` persona was retired in v0.1.0a1.
+
+        The character lives only as a lore breadcrumb at
+        ``docs/_lore/passelewe.md``. Its builtins directory must not
+        exist.
+        """
+        passelewe_dir = _BUILTINS_DIR / "passelewe"
+        assert not passelewe_dir.exists(), (
+            f"Stale passelewe persona directory found at {passelewe_dir}. "
+            "The Passelewe persona was retired in v0.1.0a1; its character "
+            "lives only as a lore breadcrumb at docs/_lore/passelewe.md."
+        )
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
     def test_each_builtin_has_display_names_section(self, persona_dir: Path) -> None:

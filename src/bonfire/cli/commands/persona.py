@@ -14,11 +14,9 @@ import typer
 
 from bonfire.persona.loader import PersonaLoader
 
-# BON-345 sweep-guard: avoid emitting the default-persona name as a single
-# Python string literal (the rename-sweep test bans the bare-quoted form
-# from src/bonfire/ Python sources). Concatenate from fragments —
-# semantically identical to the v1 verbatim default per Sage §D8.
-_DEFAULT_PERSONA = "passe" + "lewe"
+# Bonfire ships with Falcor as the companion persona; users can swap
+# via `bonfire persona set <name>`.
+_DEFAULT_PERSONA = "falcor"
 
 persona_app = typer.Typer(name="persona", help="Discover and configure CLI personas.")
 

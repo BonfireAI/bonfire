@@ -57,18 +57,10 @@ _BON_REF = re.compile(r"BON-\d+")
 # a change to the ref-bearing line itself forces a fresh review.
 _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
     {
-        # --- BON-345 sweep-guards (post-BON-348 cli/ port) -------------
-        # Note: line numbers updated +3 after SPDX-header insertion landed.
-        (
-            "cli/app.py",
-            19,
-            "# BON-345 sweep-guard: avoid the banned default-persona Python literal in",
-        ),
-        (
-            "cli/commands/persona.py",
-            17,
-            "# BON-345 sweep-guard: avoid emitting the default-persona name as a single",
-        ),
+        # --- BON-345 sweep-guards retired in v0.1.0a1 ----------------
+        # Falcor became the shipped default persona; the literal was no
+        # longer banned, so the obfuscation hack was removed and these
+        # allowlist entries with it.
         # --- BON-347 analysis port (canonical Sage / Wave citations) --
         (
             "analysis/models.py",

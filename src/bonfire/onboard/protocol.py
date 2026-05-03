@@ -21,7 +21,7 @@ __all__ = [
     "ConfigGenerated",
     "ConversationStart",
     "FrontDoorMessage",
-    "PasseleweMessage",
+    "FalcorMessage",
     "ScanCallback",
     "ScanComplete",
     "ScanStart",
@@ -90,10 +90,10 @@ class ConversationStart(FrontDoorMessage):
     type: Literal["conversation_start"] = "conversation_start"
 
 
-class PasseleweMessage(FrontDoorMessage):
-    """A message from Passelewe -- narration, question, or reflection."""
+class FalcorMessage(FrontDoorMessage):
+    """A message from Falcor -- narration, question, or reflection."""
 
-    type: Literal["passelewe_message"] = "passelewe_message"
+    type: Literal["falcor_message"] = "falcor_message"
     text: str
     subtype: Literal["narration", "question", "reflection"]
 
@@ -128,7 +128,7 @@ _SERVER_TYPES: dict[str, type[FrontDoorMessage]] = {
     "scan_complete": ScanComplete,
     "all_scans_complete": AllScansComplete,
     "conversation_start": ConversationStart,
-    "passelewe_message": PasseleweMessage,
+    "falcor_message": FalcorMessage,
     "config_generated": ConfigGenerated,
 }
 

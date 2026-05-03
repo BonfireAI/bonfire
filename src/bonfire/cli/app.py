@@ -16,11 +16,10 @@ from bonfire.cli.commands.resume import resume
 from bonfire.cli.commands.scan import scan
 from bonfire.cli.commands.status import status
 
-# BON-345 sweep-guard: avoid the banned default-persona Python literal in
-# src/bonfire/ (rename-sweep test bans the bare-quoted form). Concatenate
-# from fragments — semantically identical to the v1 verbatim Typer default
-# per Sage §D8.
-_DEFAULT_PERSONA = "passe" + "lewe"
+# Bonfire ships with Falcor as the companion persona; users can swap
+# via `bonfire persona set <name>`. The `default` and `minimal` builtins
+# remain available as user-selectable alternates.
+_DEFAULT_PERSONA = "falcor"
 
 
 def _version_callback(value: bool) -> None:

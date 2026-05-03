@@ -190,42 +190,41 @@ class TestMinimalPersonaShips:
                 lower = phrase.lower()
                 for marker in personality_markers:
                     assert marker not in lower, (
-                        f"Personality marker '{marker}' in minimal "
-                        f"{event_type}: {phrase!r}"
+                        f"Personality marker '{marker}' in minimal {event_type}: {phrase!r}"
                     )
 
 
 # ---------------------------------------------------------------------------
-# Passelewe — optional named example; if present, must pass schema
+# Falcor — optional named example; if present, must pass schema
 # ---------------------------------------------------------------------------
 
 
-class TestPasseleweIfPresent:
-    """If ``passelewe`` ships, it MUST be schema-valid."""
+class TestFalcorIfPresent:
+    """If ``falcor`` ships, it MUST be schema-valid."""
 
-    def _passelewe_present(self) -> bool:
-        return (_builtin_dir() / "passelewe").is_dir()
+    def _falcor_present(self) -> bool:
+        return (_builtin_dir() / "falcor").is_dir()
 
-    def test_passelewe_loads_if_present(self, loader: PersonaLoader) -> None:
-        if not self._passelewe_present():
-            pytest.skip("passelewe not shipped in this build")
-        persona = loader.load("passelewe")
+    def test_falcor_loads_if_present(self, loader: PersonaLoader) -> None:
+        if not self._falcor_present():
+            pytest.skip("falcor not shipped in this build")
+        persona = loader.load("falcor")
         assert isinstance(persona, PersonaProtocol)
-        assert persona.name == "passelewe"
+        assert persona.name == "falcor"
 
-    def test_passelewe_passes_schema(self, loader: PersonaLoader) -> None:
-        if not self._passelewe_present():
-            pytest.skip("passelewe not shipped in this build")
-        loader.validate("passelewe")
+    def test_falcor_passes_schema(self, loader: PersonaLoader) -> None:
+        if not self._falcor_present():
+            pytest.skip("falcor not shipped in this build")
+        loader.validate("falcor")
 
-    def test_passelewe_covers_all_agent_roles(self) -> None:
-        if not self._passelewe_present():
-            pytest.skip("passelewe not shipped in this build")
-        data = _load_persona_toml("passelewe")
+    def test_falcor_covers_all_agent_roles(self) -> None:
+        if not self._falcor_present():
+            pytest.skip("falcor not shipped in this build")
+        data = _load_persona_toml("falcor")
         display_names = data.get("display_names", {})
         for role in AgentRole:
             assert role.value in display_names, (
-                f"passelewe missing display name for role '{role.value}'"
+                f"falcor missing display name for role '{role.value}'"
             )
 
 
@@ -250,21 +249,13 @@ class TestEveryShippedBuiltinPassesSchema:
 
     def test_at_least_default_and_minimal_ship(self) -> None:
         shipped = self._discover_shipped()
-        assert "default" in shipped, (
-            f"'default' must ship as a built-in persona; got {shipped}"
-        )
-        assert "minimal" in shipped, (
-            f"'minimal' must ship as a built-in persona; got {shipped}"
-        )
+        assert "default" in shipped, f"'default' must ship as a built-in persona; got {shipped}"
+        assert "minimal" in shipped, f"'minimal' must ship as a built-in persona; got {shipped}"
 
-    def test_every_shipped_builtin_passes_schema(
-        self, loader: PersonaLoader
-    ) -> None:
+    def test_every_shipped_builtin_passes_schema(self, loader: PersonaLoader) -> None:
         """Any built-in that ships is schema-valid."""
         for name in self._discover_shipped():
             try:
                 loader.validate(name)
             except PersonaSchemaError as exc:
-                pytest.fail(
-                    f"Built-in persona '{name}' failed schema validation: {exc}"
-                )
+                pytest.fail(f"Built-in persona '{name}' failed schema validation: {exc}")

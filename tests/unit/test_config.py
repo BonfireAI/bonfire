@@ -78,7 +78,7 @@ class TestPipelineConfig:
         assert p.model == "claude-sonnet-4-6"
         assert p.max_turns == 10
         assert p.max_budget_usd == 5.0
-        assert p.persona == "default"
+        assert p.persona == "falcor"
 
     def test_custom_values(self):
         p = PipelineConfig(
@@ -247,7 +247,7 @@ class TestBonfireSettingsTomlLoading:
         assert s.bonfire.tier == "partial"
         # Not set in TOML — falls back to defaults
         assert s.bonfire.max_budget_usd == 5.0
-        assert s.bonfire.persona == "default"
+        assert s.bonfire.persona == "falcor"
 
 
 # ---------------------------------------------------------------------------
@@ -415,9 +415,7 @@ class TestModelsConfig:
     def test_models_section_loaded_from_toml(self, tmp_path, monkeypatch):
         """Sage §D5: ``[models]`` partial TOML merges with defaults."""
         toml_path = tmp_path / "bonfire.toml"
-        toml_path.write_text(
-            '[models]\nreasoning = "opus-from-toml"\nfast = "haiku-from-toml"\n'
-        )
+        toml_path.write_text('[models]\nreasoning = "opus-from-toml"\nfast = "haiku-from-toml"\n')
         monkeypatch.chdir(tmp_path)
         s = BonfireSettings()
         assert s.models.reasoning == "opus-from-toml"

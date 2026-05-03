@@ -94,6 +94,31 @@ end-to-end CLI verb are still in progress and ship in subsequent
   onto a downstream repo's PR surface. The matching source-scan
   exemption in the test suite is removed; the assertion now holds
   without special-casing.
+- **Default persona becomes Falcor (BREAKING wire-protocol change).**
+  Bonfire now ships **Falcor**, the luckdragon — gentle, encouraging,
+  the friendly voice at your shoulder while the work runs. The
+  predecessor persona (Passelewe, the Chamberlain) was retired; the
+  character lives only as a lore breadcrumb at
+  `docs/_lore/passelewe.md`. The persona builtins directory
+  `src/bonfire/persona/builtins/passelewe/` was deleted; a new
+  `src/bonfire/persona/builtins/falcor/` ships with a distinct phrase
+  bank in the gentle/encouraging register. `Config.persona` default
+  flips from `"default"` to `"falcor"`. The Front Door wire-protocol
+  message class `PasseleweMessage` is renamed to `FalcorMessage`; the
+  WebSocket type literal `"passelewe_message"` becomes
+  `"falcor_message"`. **No backward-compatibility alias ships** -- v0
+  consumers update in lockstep. The `default` and `minimal` builtins
+  remain available as user-selectable alternates via
+  `bonfire persona set <name>`. The scan-narration line library at
+  `src/bonfire/onboard/narration.py` retains its existing wry
+  observational tone; a re-tone pass to match Falcor's register is
+  deferred to a follow-up.
+- **CLI sweep-guard hack removed.** The `_DEFAULT_PERSONA = "passe" +
+  "lewe"` string-concatenation hack in `src/bonfire/cli/app.py` and
+  `src/bonfire/cli/commands/persona.py` is gone -- `_DEFAULT_PERSONA`
+  is now the bare literal `"falcor"`. The rename-sweep test continues
+  to ban `"passelewe"` in src/ (the predecessor persona is gone, so
+  any reference is stale).
 - Default `base_branch` value updated from `"master"` to `"main"`
   across the git layer and pipeline configuration.
 - `Development Status` PyPI classifier advanced from `3 - Alpha` to

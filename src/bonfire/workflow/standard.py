@@ -41,7 +41,7 @@ def standard_build() -> WorkflowPlan:
     """The reference 9-stage TDD build pipeline.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
-    bard -> wizard -> merge_preflight -> herald.
+    bard -> wizard -> merge_preflight -> steward.
 
     Three on_gate_failure bounces target the warrior (from prover,
     sage_correction_bounce, and wizard). MergePreflight runs full-suite
@@ -51,7 +51,7 @@ def standard_build() -> WorkflowPlan:
     return WorkflowPlan(
         name="standard_build",
         workflow_type=WorkflowType.STANDARD,
-        description="Full TDD build pipeline: scout through herald with quality gates.",
+        description="Full TDD build pipeline: scout through steward with quality gates.",
         stages=[
             _stage("scout", "scout"),
             _stage("knight", "knight", gates=["completion"]),
@@ -99,9 +99,9 @@ def standard_build() -> WorkflowPlan:
                 depends_on=["wizard"],
             ),
             _stage(
-                "herald",
-                "herald",
-                handler_name="herald",
+                "steward",
+                "steward",
+                handler_name="steward",
                 depends_on=["merge_preflight"],
             ),
         ],

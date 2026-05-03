@@ -21,9 +21,9 @@ Dispatch discipline:
 
 The module exposes ``ROLE: AgentRole = AgentRole.REVIEWER`` for generic-
 vocabulary discipline. Display translation (reviewer -> "Wizard") happens
-in the display layer via ``ROLE_DISPLAY[ROLE].gamified``; the one
-exemption in this module is the review-body H1 heading ``"Wizard Code
-Review"`` -- a user-facing markdown token rendered by GitHub's UI.
+in the display layer via ``ROLE_DISPLAY[ROLE].gamified``; the review-body
+H1 heading is plain ``"Code Review"`` -- bonfire does not stamp its own
+cadre vocabulary onto another repo's PR surface.
 """
 
 from __future__ import annotations
@@ -88,9 +88,9 @@ _SEVERITY_TAG_RE: re.Pattern[str] = re.compile(
 _META_VERDICT_SOURCE: str = "review_verdict_source"
 _META_PARSE_FAILURE_REASON: str = "review_parse_failure_reason"
 
-# Review-body H1 heading (D3 single exemption -- user-facing markdown
-# rendered by GitHub's UI).
-FAIL_SAFE_BODY_TEMPLATE = """## Wizard Code Review -- CHANGES REQUESTED (parse-failure fallback)
+# Review-body H1 heading -- plain "Code Review" so bonfire does not
+# stamp its cadre vocabulary onto a downstream repo's PR surface.
+FAIL_SAFE_BODY_TEMPLATE = """## Code Review -- CHANGES REQUESTED (parse-failure fallback)
 
 > **Parser fallback engaged.** The review agent did not emit a parseable `<verdict>` tag.
 > This PR is blocked by fail-safe policy. This is NOT a substantive rejection

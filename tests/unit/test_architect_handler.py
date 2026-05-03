@@ -34,7 +34,6 @@ from bonfire.models.envelope import Envelope, TaskStatus
 from bonfire.models.plan import StageSpec
 from bonfire.naming import ROLE_DISPLAY
 
-
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -448,7 +447,7 @@ class TestScanAndStore:
 
 
 # ---------------------------------------------------------------------------
-# Error handling (contract parity with Bard/Herald/Wizard)
+# Error handling (contract parity with Bard/Steward/Wizard)
 # ---------------------------------------------------------------------------
 
 

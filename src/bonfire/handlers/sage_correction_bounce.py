@@ -217,7 +217,7 @@ def _warrior_reports_green(prior_results: dict[str, Any]) -> bool:
 
     Tolerant: if ``META_REVIEW_VERDICT == "approve"`` AND the ``warrior``
     string contains "passed" with no failure indicators, treat as green.
-    Mirrors :py:func:`bonfire.handlers.herald._extract_verdict` discipline.
+    Mirrors :py:func:`bonfire.handlers.steward._extract_verdict` discipline.
     """
     review = str(prior_results.get(META_REVIEW_VERDICT, "")).lower()
     warrior = str(prior_results.get("warrior", "")).lower()

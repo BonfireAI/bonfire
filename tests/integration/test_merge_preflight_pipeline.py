@@ -3,12 +3,12 @@
 Per Sage memo bon-519-sage-20260428T033101Z.md:
 - §D-CL.2 (lines 911-916) — Knight B integration contract.
 - §D6 (lines 526-565) — composition-root integration (standard_build()
-  inserts merge_preflight stage; herald.depends_on rewired).
+  inserts merge_preflight stage; steward.depends_on rewired).
 - §A Q6 line 156 — pre_existing_debt ALLOW-WITH-ANNOTATION (ratified).
 - §D8 lines 660-669 — integration test classes + counts.
 
 Scenarios locked:
-1. TestSinglePRHappyPath — preflight green -> pipeline reaches Herald.
+1. TestSinglePRHappyPath — preflight green -> pipeline reaches Steward.
 2. TestSinglePRBlocksOnFailure — preflight returns FAILED with
    error_type='pure_warrior_bug' -> pipeline halts at merge_preflight.
 3. TestSiblingBatchEnumWidening — THE S007 reproduction. Two synthetic
@@ -16,17 +16,15 @@ Scenarios locked:
    pipeline halts.
 4. TestPreExistingDebtAllowed — Q6 ALLOW-WITH-ANNOTATION; preflight
    returns COMPLETED with META_PREFLIGHT_TEST_DEBT_NOTED=True; pipeline
-   reaches Herald (does NOT halt).
+   reaches Steward (does NOT halt).
 5. TestStandardWorkflowRegistersPreflight — standard_build() plan
-   contains the new stage; herald.depends_on == ['merge_preflight'].
+   contains the new stage; steward.depends_on == ['merge_preflight'].
 
 All tests MUST FAIL on first run: MergePreflightHandler does not yet
 exist on disk; standard_build() does not yet register the stage.
 """
 
 from __future__ import annotations
-
-import pytest
 
 from bonfire.engine.pipeline import PipelineEngine
 from bonfire.events.bus import EventBus
@@ -39,7 +37,6 @@ from bonfire.models.envelope import (
 from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 from bonfire.protocols import DispatchOptions
 
-
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
@@ -50,7 +47,7 @@ class _CompletingBackend:
 
     Pipeline stages without a handler_name route through the backend; this
     fake just returns a successful envelope so the pipeline can progress
-    to the merge_preflight + herald stages where the actual contract lives.
+    to the merge_preflight + steward stages where the actual contract lives.
     """
 
     def __init__(self, *, cost: float = 0.001) -> None:
@@ -87,8 +84,8 @@ class _StubWizardHandler:
         )
 
 
-class _StubHeraldHandler:
-    """Stub Herald that records that it ran (used to assert pipeline
+class _StubStewardHandler:
+    """Stub Steward that records that it ran (used to assert pipeline
     reached this stage when preflight is green or test-debt-only)."""
 
     def __init__(self) -> None:
@@ -170,11 +167,11 @@ def _make_engine(handlers: dict[str, object]) -> PipelineEngine:
 
 
 def _build_plan_with_preflight() -> WorkflowPlan:
-    """Mini plan: bard -> wizard -> merge_preflight -> herald.
+    """Mini plan: bard -> wizard -> merge_preflight -> steward.
 
     Drops scout/knight/warrior/prover (pure backend stages) for test
     speed; the contract is preserved at the wizard->merge_preflight->
-    herald slice which is what BON-519 introduces.
+    steward slice which is what BON-519 introduces.
     """
     return WorkflowPlan(
         name="preflight_integration",
@@ -196,10 +193,10 @@ def _build_plan_with_preflight() -> WorkflowPlan:
                 depends_on=["wizard"],
             ),
             StageSpec(
-                name="herald",
-                agent_name="herald",
-                handler_name="herald",
-                role="herald",
+                name="steward",
+                agent_name="steward",
+                handler_name="steward",
+                role="steward",
                 depends_on=["merge_preflight"],
             ),
         ],
@@ -213,19 +210,19 @@ def _build_plan_with_preflight() -> WorkflowPlan:
 
 
 class TestSinglePRHappyPath:
-    """One PR, no siblings, all tests pass -> pipeline reaches Herald."""
+    """One PR, no siblings, all tests pass -> pipeline reaches Steward."""
 
-    async def test_pipeline_progresses_to_herald_when_preflight_green(self) -> None:
+    async def test_pipeline_progresses_to_steward_when_preflight_green(self) -> None:
         """Sage §D-CL.2 line 911: assert result.success is True, all stages
         in result.stages, result.stages['merge_preflight'].status == COMPLETED,
-        result.stages['herald'].status == COMPLETED."""
-        herald = _StubHeraldHandler()
+        result.stages['steward'].status == COMPLETED."""
+        steward = _StubStewardHandler()
         engine = _make_engine(
             handlers={
                 "bard": _StubBardHandler(),
                 "wizard": _StubWizardHandler(verdict="approve"),
                 "merge_preflight": _CannedPreflightHandler(mode="green"),
-                "herald": herald,
+                "steward": steward,
             }
         )
         result = await engine.run(_build_plan_with_preflight())
@@ -233,9 +230,9 @@ class TestSinglePRHappyPath:
         assert result.success is True, f"pipeline failed: {result.error}"
         assert "merge_preflight" in result.stages
         assert result.stages["merge_preflight"].status == TaskStatus.COMPLETED
-        assert "herald" in result.stages
-        assert result.stages["herald"].status == TaskStatus.COMPLETED
-        assert herald.ran is True
+        assert "steward" in result.stages
+        assert result.stages["steward"].status == TaskStatus.COMPLETED
+        assert steward.ran is True
 
 
 # ---------------------------------------------------------------------------
@@ -245,26 +242,26 @@ class TestSinglePRHappyPath:
 
 class TestSinglePRBlocksOnFailure:
     """Preflight FAILED with error_type='pure_warrior_bug' -> pipeline halts;
-    herald NOT called."""
+    steward NOT called."""
 
     async def test_pipeline_halts_on_pure_warrior_bug(self) -> None:
         """Sage §D-CL.2 line 912: result.success is False,
-        result.failed_stage == 'merge_preflight', 'herald' not in result.stages."""
-        herald = _StubHeraldHandler()
+        result.failed_stage == 'merge_preflight', 'steward' not in result.stages."""
+        steward = _StubStewardHandler()
         engine = _make_engine(
             handlers={
                 "bard": _StubBardHandler(),
                 "wizard": _StubWizardHandler(verdict="approve"),
                 "merge_preflight": _CannedPreflightHandler(mode="pure_warrior_bug"),
-                "herald": herald,
+                "steward": steward,
             }
         )
         result = await engine.run(_build_plan_with_preflight())
 
         assert result.success is False
         assert result.failed_stage == "merge_preflight"
-        assert "herald" not in result.stages
-        assert herald.ran is False
+        assert "steward" not in result.stages
+        assert steward.ran is False
         # Error detail surfaces via the failed envelope on merge_preflight.
         preflight_env = result.stages["merge_preflight"]
         assert preflight_env.status == TaskStatus.FAILED
@@ -292,23 +289,23 @@ class TestSiblingBatchEnumWidening:
         handler (the unit-level classifier tests cover the algorithmic
         verdict). What this test asserts is the PIPELINE behavior: a
         CROSS_WAVE_INTERACTION FAILED envelope halts the run and does NOT
-        proceed to Herald.
+        proceed to Steward.
         """
-        herald = _StubHeraldHandler()
+        steward = _StubStewardHandler()
         engine = _make_engine(
             handlers={
                 "bard": _StubBardHandler(),
                 "wizard": _StubWizardHandler(verdict="approve"),
                 "merge_preflight": _CannedPreflightHandler(mode="cross_wave"),
-                "herald": herald,
+                "steward": steward,
             }
         )
         result = await engine.run(_build_plan_with_preflight())
 
         assert result.success is False
         assert result.failed_stage == "merge_preflight"
-        assert "herald" not in result.stages
-        assert herald.ran is False
+        assert "steward" not in result.stages
+        assert steward.ran is False
         preflight_env = result.stages["merge_preflight"]
         assert preflight_env.error is not None
         assert preflight_env.error.error_type == "cross_wave_interaction"
@@ -322,20 +319,20 @@ class TestSiblingBatchEnumWidening:
 class TestPreExistingDebtAllowed:
     """Q6 ALLOW-WITH-ANNOTATION — baseline already failing; preflight
     returns COMPLETED with META_PREFLIGHT_TEST_DEBT_NOTED=True; pipeline
-    reaches Herald (does NOT halt)."""
+    reaches Steward (does NOT halt)."""
 
     async def test_pipeline_completes_with_debt_annotation(self) -> None:
         """Sage §D-CL.2 line 914 + §A Q6 line 156: COMPLETED status with
-        META_PREFLIGHT_TEST_DEBT_NOTED=True; herald runs."""
+        META_PREFLIGHT_TEST_DEBT_NOTED=True; steward runs."""
         from bonfire.models.envelope import META_PREFLIGHT_TEST_DEBT_NOTED
 
-        herald = _StubHeraldHandler()
+        steward = _StubStewardHandler()
         engine = _make_engine(
             handlers={
                 "bard": _StubBardHandler(),
                 "wizard": _StubWizardHandler(verdict="approve"),
                 "merge_preflight": _CannedPreflightHandler(mode="pre_existing_debt"),
-                "herald": herald,
+                "steward": steward,
             }
         )
         result = await engine.run(_build_plan_with_preflight())
@@ -345,10 +342,10 @@ class TestPreExistingDebtAllowed:
         preflight_env = result.stages["merge_preflight"]
         assert preflight_env.status == TaskStatus.COMPLETED
         assert preflight_env.metadata.get(META_PREFLIGHT_TEST_DEBT_NOTED) is True
-        # Herald MUST run -- debt is annotated, not blocked.
-        assert "herald" in result.stages
-        assert result.stages["herald"].status == TaskStatus.COMPLETED
-        assert herald.ran is True
+        # Steward MUST run -- debt is annotated, not blocked.
+        assert "steward" in result.stages
+        assert result.stages["steward"].status == TaskStatus.COMPLETED
+        assert steward.ran is True
 
 
 # ---------------------------------------------------------------------------
@@ -358,8 +355,8 @@ class TestPreExistingDebtAllowed:
 
 
 class TestStandardWorkflowRegistersPreflight:
-    """standard_build() inserts merge_preflight between wizard and herald;
-    herald.depends_on rewired to ['merge_preflight']."""
+    """standard_build() inserts merge_preflight between wizard and steward;
+    steward.depends_on rewired to ['merge_preflight']."""
 
     def test_plan_contains_preflight_stage(self) -> None:
         """Sage §D-CL.2 line 915: stage with name='merge_preflight',
@@ -376,23 +373,23 @@ class TestStandardWorkflowRegistersPreflight:
         assert preflight_stage.role == "verifier"
         assert preflight_stage.depends_on == ["wizard"]
 
-    def test_herald_depends_on_preflight(self) -> None:
-        """Sage §D-CL.2 line 916 + §D6 line 542: herald.depends_on ==
+    def test_steward_depends_on_preflight(self) -> None:
+        """Sage §D-CL.2 line 916 + §D6 line 542: steward.depends_on ==
         ['merge_preflight'] (NOT ['wizard'])."""
         from bonfire.workflow.standard import standard_build
 
         plan = standard_build()
-        herald_stage = next(s for s in plan.stages if s.name == "herald")
-        assert herald_stage.depends_on == ["merge_preflight"]
+        steward_stage = next(s for s in plan.stages if s.name == "steward")
+        assert steward_stage.depends_on == ["merge_preflight"]
 
-    def test_preflight_inserted_between_wizard_and_herald(self) -> None:
+    def test_preflight_inserted_between_wizard_and_steward(self) -> None:
         """Order discipline: in the stage list, merge_preflight appears
-        AFTER wizard and BEFORE herald."""
+        AFTER wizard and BEFORE steward."""
         from bonfire.workflow.standard import standard_build
 
         plan = standard_build()
         names = [s.name for s in plan.stages]
         wizard_idx = names.index("wizard")
         preflight_idx = names.index("merge_preflight")
-        herald_idx = names.index("herald")
-        assert wizard_idx < preflight_idx < herald_idx
+        steward_idx = names.index("steward")
+        assert wizard_idx < preflight_idx < steward_idx

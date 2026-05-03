@@ -30,7 +30,7 @@ are stages, not advice.
 > not discovered post-merge.
 
 **Where it lives.** The `merge_preflight` stage of `standard_build()`,
-between `wizard` (review approval) and `herald` (the merge button). See
+between `wizard` (review approval) and `steward` (the merge button). See
 [`docs/pipeline-stages.md`](../pipeline-stages.md) for the full
 reference.
 

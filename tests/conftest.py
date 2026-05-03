@@ -32,7 +32,7 @@ _AUTOUSE_TEST_MODULE_PREFIXES: tuple[str, ...] = (
     "test_engine_",
     "test_architect_handler",
     "test_bard_handler",
-    "test_herald_handler",
+    "test_steward_handler",
     "test_merge_preflight_handler",
     "test_sage_correction_handler",
     "test_wizard_handler",

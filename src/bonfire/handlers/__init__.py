@@ -11,7 +11,7 @@ handler implements lives in ``HANDLER_ROLE_MAP`` and as a module-level
 |-------------------------|--------------------------------|--------------|------------------|
 | bard                    | BardHandler                    | publisher    | Bard             |
 | wizard                  | WizardHandler                  | reviewer     | Wizard           |
-| herald                  | HeraldHandler                  | closer       | Herald           |
+| steward                 | StewardHandler                 | closer       | Steward          |
 | architect               | ArchitectHandler               | analyst      | Architect        |
 | sage_correction_bounce  | SageCorrectionBounceHandler    | synthesizer  | Sage             |
 
@@ -30,15 +30,15 @@ from __future__ import annotations
 from bonfire.agent.roles import AgentRole
 from bonfire.handlers.architect import ArchitectHandler
 from bonfire.handlers.bard import BardHandler
-from bonfire.handlers.herald import HeraldHandler
 from bonfire.handlers.merge_preflight import MergePreflightHandler
 from bonfire.handlers.sage_correction_bounce import SageCorrectionBounceHandler
+from bonfire.handlers.steward import StewardHandler
 from bonfire.handlers.wizard import WizardHandler
 
 HANDLER_ROLE_MAP: dict[str, AgentRole] = {
     "bard": AgentRole.PUBLISHER,
     "wizard": AgentRole.REVIEWER,
-    "herald": AgentRole.CLOSER,
+    "steward": AgentRole.CLOSER,
     "sage_correction_bounce": AgentRole.SYNTHESIZER,
     "architect": AgentRole.ANALYST,
 }
@@ -47,7 +47,7 @@ __all__ = [
     "HANDLER_ROLE_MAP",
     "ArchitectHandler",
     "BardHandler",
-    "HeraldHandler",
+    "StewardHandler",
     "MergePreflightHandler",
     "SageCorrectionBounceHandler",
     "WizardHandler",

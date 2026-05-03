@@ -21,7 +21,7 @@ v0.1 ships exactly four handlers:
 
 - ``BardHandler``       (gamified) -> ``publisher`` (generic)
 - ``WizardHandler``     (gamified) -> ``reviewer``  (generic)
-- ``HeraldHandler``     (gamified) -> ``closer``    (generic)
+- ``StewardHandler``     (gamified) -> ``closer``    (generic)
 - ``ArchitectHandler``  (gamified) -> ``analyst``   (generic, D1)
 """
 
@@ -69,9 +69,9 @@ class TestRoleDisplayMapping:
         assert "reviewer" in ROLE_DISPLAY
         assert ROLE_DISPLAY["reviewer"].gamified == "Wizard"
 
-    def test_closer_maps_to_herald(self) -> None:
+    def test_closer_maps_to_steward(self) -> None:
         assert "closer" in ROLE_DISPLAY
-        assert ROLE_DISPLAY["closer"].gamified == "Herald"
+        assert ROLE_DISPLAY["closer"].gamified == "Steward"
 
     def test_analyst_maps_to_architect(self) -> None:
         """D1: Sage-locked — analyst -> Architect (Layer 3)."""
@@ -111,7 +111,7 @@ class TestHandlerRoleMap:
             )
 
     def test_handler_role_map_has_five_entries(self) -> None:
-        """Exactly five keys: bard, wizard, herald, architect, sage_correction_bounce.
+        """Exactly five keys: bard, wizard, steward, architect, sage_correction_bounce.
 
         The fifth entry binds the synthesizer-correction stage stem to the
         generic ``AgentRole.SYNTHESIZER`` so the display layer can resolve
@@ -122,12 +122,12 @@ class TestHandlerRoleMap:
         assert set(m.keys()) == {
             "bard",
             "wizard",
-            "herald",
+            "steward",
             "architect",
             "sage_correction_bounce",
         }, (
             f"HANDLER_ROLE_MAP must have exactly "
-            f"{{bard, wizard, herald, architect, sage_correction_bounce}}; "
+            f"{{bard, wizard, steward, architect, sage_correction_bounce}}; "
             f"got {sorted(m.keys())}. Strategist remains OUT OF SCOPE."
         )
 
@@ -137,8 +137,8 @@ class TestHandlerRoleMap:
     def test_wizard_maps_to_reviewer(self) -> None:
         assert handlers_pkg.HANDLER_ROLE_MAP["wizard"] is AgentRole.REVIEWER
 
-    def test_herald_maps_to_closer(self) -> None:
-        assert handlers_pkg.HANDLER_ROLE_MAP["herald"] is AgentRole.CLOSER
+    def test_steward_maps_to_closer(self) -> None:
+        assert handlers_pkg.HANDLER_ROLE_MAP["steward"] is AgentRole.CLOSER
 
     def test_architect_maps_to_analyst(self) -> None:
         """D1-locked: architect stem -> AgentRole.ANALYST."""
@@ -165,7 +165,7 @@ class TestHandlerRoleMap:
 class TestPackageExports:
     def test_all_contains_four_handler_classes(self) -> None:
         """__all__ exports exactly the four gamified handler classes."""
-        expected = {"ArchitectHandler", "BardHandler", "HeraldHandler", "WizardHandler"}
+        expected = {"ArchitectHandler", "BardHandler", "StewardHandler", "WizardHandler"}
         actual = set(getattr(handlers_pkg, "__all__", []))
         missing = expected - actual
         assert not missing, f"__all__ missing: {missing}"
@@ -180,7 +180,7 @@ class TestPackageExports:
 
     def test_handler_classes_importable_from_package(self) -> None:
         """All four classes available at bonfire.handlers.<Name>."""
-        for name in ("BardHandler", "WizardHandler", "HeraldHandler", "ArchitectHandler"):
+        for name in ("BardHandler", "WizardHandler", "StewardHandler", "ArchitectHandler"):
             assert hasattr(handlers_pkg, name), f"{name} missing from package"
 
 
@@ -197,7 +197,7 @@ class TestPackageDocstring:
     def test_docstring_lists_four_gamified_names(self) -> None:
         """Docstring mentions all four gamified handler names."""
         doc = handlers_pkg.__doc__ or ""
-        for name in ("Bard", "Wizard", "Herald", "Architect"):
+        for name in ("Bard", "Wizard", "Steward", "Architect"):
             assert name in doc, (
                 f"bonfire.handlers docstring must mention the gamified name {name!r}"
             )
@@ -227,7 +227,7 @@ class TestPackageDocstring:
 class TestMappingSelfConsistency:
     def test_map_roundtrips_through_role_display(self) -> None:
         """For every (stem, AgentRole) in HANDLER_ROLE_MAP, ROLE_DISPLAY has
-        an entry. For single-word handler stems (bard/wizard/herald/architect)
+        an entry. For single-word handler stems (bard/wizard/steward/architect)
         the gamified name (lower-cased) must equal the stem; multi-word
         stage stems (e.g. ``sage_correction_bounce``) are stage names, not
         gamified handler names, and are exempt from the title-case round-trip.
@@ -288,8 +288,8 @@ class TestFilenameDiscipline:
         strict=False,
     )
     def test_filenames_stay_gamified(self) -> None:
-        """Gamified filenames stay: bard.py / wizard.py / herald.py / architect.py."""
+        """Gamified filenames stay: bard.py / wizard.py / steward.py / architect.py."""
         importlib.import_module("bonfire.handlers.bard")
         importlib.import_module("bonfire.handlers.wizard")
-        importlib.import_module("bonfire.handlers.herald")
+        importlib.import_module("bonfire.handlers.steward")
         importlib.import_module("bonfire.handlers.architect")

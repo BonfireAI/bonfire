@@ -33,10 +33,10 @@ Display is a presentation concern, not a data concern.
 | researcher | Research Agent | Scout | Investigates, produces reports |
 | tester | Test Agent | Knight | Writes failing tests (RED) |
 | implementer | Build Agent | Warrior | Writes code to pass tests (GREEN) |
-| verifier | Verify Agent | Assayer | Independent quality verification |
+| verifier | Verify Agent | Cleric | Independent quality verification |
 | publisher | Publish Agent | Bard | Branch, commit, PR |
 | reviewer | Review Agent | Wizard | Code review |
-| closer | Release Agent | Herald | Merge, close, announce |
+| closer | Release Agent | Steward | Merge, close, announce |
 | synthesizer | Synthesis Agent | Sage | Multi-report synthesis |
 | analyst | Analysis Agent | Architect | Architectural and structural analysis |
 

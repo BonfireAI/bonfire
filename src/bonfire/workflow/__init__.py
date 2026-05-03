@@ -5,7 +5,7 @@
 
 This package provides pre-built workflow plans for common patterns:
 
-- **standard_build**: Full 7-stage TDD pipeline (scout through herald)
+- **standard_build**: Full 7-stage TDD pipeline (scout through steward)
 - **debug**: Minimal 2-stage quick iteration loop
 - **dual_scout**: Two parallel scouts + sage synthesis
 - **triple_scout**: Three parallel scouts + sage synthesis

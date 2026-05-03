@@ -93,15 +93,15 @@ lookup.
 | Investigates the task and gathers context         | `researcher`               | `scout`                   |
 | Writes failing tests (TDD RED)                    | `tester`                   | `knight`                  |
 | Writes code to pass the tests (TDD GREEN)         | `implementer`              | `warrior`                 |
-| Independent quality verification                  | `verifier`                 | `assayer`                 |
+| Independent quality verification                  | `verifier`                 | `cleric`                  |
 | Creates branches, commits, opens PRs              | `publisher`                | `bard`                    |
 | Code review with structured verdicts              | `reviewer`                 | `wizard`                  |
-| Merges approved PRs and announces completion      | `closer`                   | `herald`                  |
+| Merges approved PRs and announces completion      | `closer`                   | `steward`                 |
 | Combines multiple reports into unified analysis   | `synthesizer`              | `sage`                    |
 | Architectural and structural analysis             | `analyst`                  | `architect`               |
 
 The string `prover` appears in the `standard_build` pipeline as a stage
-label; that stage dispatches to the `verifier` role. `Assayer` is the
+label; that stage dispatches to the `verifier` role. `Cleric` is the
 verifier's only display alias — stage labels name DAG nodes inside a
 workflow plan, while display names are the persona-emitted role names
 in CLI output.

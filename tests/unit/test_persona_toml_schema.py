@@ -54,10 +54,10 @@ _FULL_DISPLAY_NAMES_BLOCK = """\
 researcher = "Scout"
 tester = "Knight"
 implementer = "Warrior"
-verifier = "Assayer"
+verifier = "Cleric"
 publisher = "Bard"
 reviewer = "Wizard"
-closer = "Herald"
+closer = "Steward"
 synthesizer = "Sage"
 analyst = "Analysis Agent"
 """
@@ -108,10 +108,10 @@ def _persona_toml_missing_role(missing: AgentRole) -> str:
         AgentRole.RESEARCHER: "Scout",
         AgentRole.TESTER: "Knight",
         AgentRole.IMPLEMENTER: "Warrior",
-        AgentRole.VERIFIER: "Assayer",
+        AgentRole.VERIFIER: "Cleric",
         AgentRole.PUBLISHER: "Bard",
         AgentRole.REVIEWER: "Wizard",
-        AgentRole.CLOSER: "Herald",
+        AgentRole.CLOSER: "Steward",
         AgentRole.SYNTHESIZER: "Sage",
         AgentRole.ANALYST: "Analysis Agent",
     }
@@ -399,10 +399,10 @@ class TestDisplayNamesCoverage:
             "researcher = 42\n"
             'tester = "Knight"\n'
             'implementer = "Warrior"\n'
-            'verifier = "Assayer"\n'
+            'verifier = "Cleric"\n'
             'publisher = "Bard"\n'
             'reviewer = "Wizard"\n'
-            'closer = "Herald"\n'
+            'closer = "Steward"\n'
             'synthesizer = "Sage"\n'
             'analyst = "Analysis Agent"\n'
         )

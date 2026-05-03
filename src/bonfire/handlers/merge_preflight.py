@@ -29,7 +29,7 @@ Per Sage memo bon-519-sage-20260428T033101Z.md:
       ``parse_pytest_stdout_fallback``, ``detect_sibling_prs``).
 
 The module exposes ``ROLE: AgentRole = AgentRole.VERIFIER`` for generic-
-vocabulary discipline. Display translation (verifier -> "Assayer") happens
+vocabulary discipline. Display translation (verifier -> "Cleric") happens
 in the display layer via ``ROLE_DISPLAY[ROLE].gamified``; this module
 never hardcodes the gamified name in code.
 """
@@ -192,7 +192,7 @@ _FAILED_LINE_RE = re.compile(r"^FAILED\s+(\S+?\.py)::(\S+?)(?:\s|$)", re.MULTILI
 
 
 # ---------------------------------------------------------------------------
-# PR-number extraction (Herald-mirror chain, Sage §D-CL.1 lines 820-821)
+# PR-number extraction (Steward-mirror chain, Sage §D-CL.1 lines 820-821)
 # ---------------------------------------------------------------------------
 
 
@@ -235,7 +235,7 @@ def _extract_pr_number(
 def _extract_verdict(prior_results: dict[str, Any]) -> str:
     """Extract review verdict from prior_results (case-insensitive).
 
-    Mirrors :py:func:`bonfire.handlers.herald._extract_verdict`.
+    Mirrors :py:func:`bonfire.handlers.steward._extract_verdict`.
     """
     verdict = prior_results.get(META_REVIEW_VERDICT, "")
     if verdict:
@@ -507,7 +507,7 @@ async def detect_sibling_prs(
 class MergePreflightHandler:
     """Pipeline stage handler for the verifier role -- pre-merge pytest.
 
-    Runs between Wizard approve and Herald merge. Creates a scratch
+    Runs between Wizard approve and Steward merge. Creates a scratch
     worktree at ``origin/<base>``, applies the PR diff (and any open
     sibling PR diffs), runs pytest, classifies failures deterministically,
     and blocks merge on cross-wave interaction or pure-warrior-bug.
@@ -562,7 +562,7 @@ class MergePreflightHandler:
         Any uncaught exception returns a FAILED envelope.
         """
         try:
-            # Step 1: PR-number extraction (Herald-mirror chain).
+            # Step 1: PR-number extraction (Steward-mirror chain).
             pr_number = _extract_pr_number(prior_results, envelope)
             if pr_number is None:
                 return envelope.with_error(
@@ -938,7 +938,7 @@ class MergePreflightHandler:
             - PRE_EXISTING_DEBT
                 -> COMPLETED with ``META_PREFLIGHT_TEST_DEBT_NOTED=True``
                    + ``META_PREFLIGHT_CLASSIFICATION``; pipeline proceeds
-                   to Herald (Q6 ALLOW-WITH-ANNOTATION)
+                   to Steward (Q6 ALLOW-WITH-ANNOTATION)
             - CROSS_WAVE_INTERACTION
                 -> FAILED, ErrorDetail(error_type="cross_wave_interaction")
             - PURE_WARRIOR_BUG

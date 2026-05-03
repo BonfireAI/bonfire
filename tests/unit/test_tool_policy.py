@@ -25,7 +25,7 @@ Sage ambiguity locks merged from both Knights:
 Knight-A adversarial tests (elevated to mandatory, not xfail):
     whitespace/case/unicode/prefix/adversarial-role-name /
     concurrency-immutability / return-type lockdown / Bard-Bash-omission /
-    wizard-herald strictness / scout web-access.
+    wizard-steward strictness / scout web-access.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _require_module() -> None:
         pytest.fail(f"bonfire.dispatch.tool_policy not importable: {_IMPORT_ERROR}")
 
 
-_ALL_ROLES = ("scout", "knight", "warrior", "prover", "sage", "bard", "wizard", "herald")
+_ALL_ROLES = ("scout", "knight", "warrior", "prover", "sage", "bard", "wizard", "steward")
 
 
 # ===========================================================================
@@ -232,7 +232,7 @@ class TestDefaultToolPolicyFloorMatrix:
             ("sage", ["Read", "Write", "Grep"]),
             ("bard", ["Read", "Write", "Grep", "Glob"]),
             ("wizard", ["Read", "Grep", "Glob"]),
-            ("herald", ["Read", "Grep"]),
+            ("steward", ["Read", "Grep"]),
         ],
     )
     def test_floor_row(self, role: str, expected: list[str]) -> None:
@@ -306,7 +306,12 @@ class TestDefaultToolPolicyEdges:
         policy = DefaultToolPolicy()
         for _ in range(3):
             assert policy.tools_for("warrior") == [
-                "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+                "Read",
+                "Write",
+                "Edit",
+                "Bash",
+                "Grep",
+                "Glob",
             ]
 
     def test_instances_share_same_floor(self) -> None:
@@ -608,11 +613,11 @@ class TestBardBashOmission:
 
 
 class TestReadMostlyRolesAreStrict:
-    """Wizard / Herald / Sage are review-time roles; lock their restricted floors."""
+    """Wizard / Steward / Sage are review-time roles; lock their restricted floors."""
 
-    def test_herald_is_strictly_read_only(self) -> None:
-        """Herald has ONLY Read + Grep (no Write, no Bash, no Edit)."""
-        tools = set(DefaultToolPolicy().tools_for("herald"))
+    def test_steward_is_strictly_read_only(self) -> None:
+        """Steward has ONLY Read + Grep (no Write, no Bash, no Edit)."""
+        tools = set(DefaultToolPolicy().tools_for("steward"))
         assert "Write" not in tools
         assert "Edit" not in tools
         assert "Bash" not in tools

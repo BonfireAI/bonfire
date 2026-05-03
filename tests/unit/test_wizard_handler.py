@@ -6,9 +6,9 @@ Sage-synthesized from Knight A (Conservative Porter) + Knight B
 Decisions locked here:
 
 - D2 ADOPT: module-level ``ROLE: AgentRole = AgentRole.REVIEWER``.
-- D3 ADOPT_WITH_EXEMPTION: no gamified ``"Wizard"`` string literal in code,
-  with one exemption — the ``"Wizard Code Review"`` H1 heading in the
-  review-body template (user-facing markdown rendered by GitHub's UI).
+- D3 ADOPT: no gamified ``"Wizard"`` string literal in code body. The
+  review-body H1 is plain ``"Code Review"`` -- bonfire does not stamp
+  its cadre vocabulary onto downstream PR surfaces (cadre rename, S025).
 - D4 DEFER: META_REVIEW_VERDICT_SOURCE / META_REVIEW_PARSE_FAILURE_REASON /
   WizardReviewCompleted / VerdictParseFailed not in v0.1 — xfail-gated.
 - D5 DEFER: DispatchOptions.setting_sources + PipelineConfig.dispatch_timeout_seconds
@@ -340,8 +340,9 @@ class TestGenericVocabularyDiscipline:
     def test_handler_source_does_not_hardcode_gamified_display(self) -> None:
         """D3 guard: no ``"Wizard"`` literal in code body.
 
-        Exemption: ``"Wizard Code Review"`` — the review-body H1 heading
-        constant, a user-visible markdown token rendered by GitHub's UI.
+        After the cadre rename (S025), the review-body H1 is plain
+        ``"Code Review"`` -- the prior ``"Wizard Code Review"`` exemption
+        is gone, and the assertion below holds without special-casing.
         """
         import bonfire.handlers.wizard as wizard_mod
 
@@ -355,8 +356,6 @@ class TestGenericVocabularyDiscipline:
                 in_docstring = not in_docstring
                 continue
             if in_docstring or stripped.startswith("#"):
-                continue
-            if "Wizard Code Review" in line:
                 continue
             if '"Wizard"' in line or "'Wizard'" in line:
                 offenders.append((idx, line))
@@ -705,7 +704,7 @@ class TestFailSafeBodyTemplate:
     async def test_success_body_is_agent_verbatim(self) -> None:
         """Success: agent output posted verbatim (no re-template)."""
         agent_body = (
-            "## Wizard Code Review\n\n### Findings\nAll checks pass.\n\n<verdict>APPROVE</verdict>"
+            "## Code Review\n\n### Findings\nAll checks pass.\n\n<verdict>APPROVE</verdict>"
         )
         handler, _, gh = _make_handler(canned=agent_body)
         await handler.handle(_make_stage(), _make_envelope(), {})

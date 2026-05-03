@@ -9,9 +9,13 @@ pure GitHub orchestration: read prior verdict + PR number, merge on
 ``ticket_ref`` was carried on the envelope metadata.
 
 The module exposes ``ROLE: AgentRole = AgentRole.CLOSER`` for generic-
-vocabulary discipline. Display translation (closer -> "Herald") happens
+vocabulary discipline. Display translation (closer -> "Steward") happens
 in the display layer via ``ROLE_DISPLAY[ROLE].gamified``; this module
 never hardcodes the gamified name in code.
+
+Lineage: this handler module was ``herald.py`` (class ``HeraldHandler``)
+prior to v0.1.0a1; the cadre display rename to "Steward" landed in the
+2026-05-03 cascade. Git history preserves the rename.
 """
 
 from __future__ import annotations
@@ -105,7 +109,7 @@ def _extract_ticket_ref(envelope: Any) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-class HeraldHandler:
+class StewardHandler:
     """Pipeline stage handler for the closer role.
 
     Merges an approved PR, posts a completion comment, and closes the
@@ -149,8 +153,8 @@ class HeraldHandler:
 
             new_metadata = {
                 **envelope.metadata,
-                "herald_verdict": verdict,
-                "herald_pr": str(pr_number) if pr_number else "",
+                "steward_verdict": verdict,
+                "steward_pr": str(pr_number) if pr_number else "",
             }
             return envelope.model_copy(
                 update={

@@ -21,7 +21,7 @@ fills that gap. Read it once on day one, then come back for the
 
 Bonfire is **a pipeline of role-bound agents over a typed event bus**.
 Each stage of a run is owned by an agent that plays a specific role
-(scout, knight, sage, warrior, bard, wizard, herald, architect); each
+(scout, knight, sage, warrior, bard, wizard, steward, architect); each
 stage emits typed events on a shared bus; cross-cutting observers — cost
 tracking, session logging, knowledge ingest, display — subscribe to
 those events without ever calling stages back.
@@ -55,7 +55,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 | Package | One-line purpose |
 |---|---|
 | `bonfire.agent` | Canonical `AgentRole` enum and the role↔display vocabulary. |
-| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Herald`, `Architect`) — the bespoke logic for stages that aren't a plain agent dispatch. |
+| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Steward`, `Architect`) — the bespoke logic for stages that aren't a plain agent dispatch. |
 | `bonfire.persona` | CLI display translation only — turns events into character-voiced lines via TOML-defined personas. Never touches prompts. |
 | `bonfire.prompt` | Prompt compiler with priority-based truncation, identity blocks, and U-shape ordering. |
 
@@ -111,7 +111,7 @@ A single `bonfire run` follows the same path top-to-bottom every time:
 5. **Handler.** A handler is either a plain agent dispatch (the
    default for scouts, knights, warriors, sages) or one of the bespoke
    handlers under `bonfire.handlers` (`Bard` for PR publication,
-   `Wizard` for review, `Herald` for closure, `Architect` for analysis).
+   `Wizard` for review, `Steward` for closure, `Architect` for analysis).
 6. **Dispatch backend.** Plain-dispatch handlers call into
    `bonfire.dispatch` — by default `ClaudeSDKBackend`, optionally
    `PydanticAIBackend` — through the `execute_with_retry` runner. The

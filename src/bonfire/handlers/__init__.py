@@ -47,8 +47,8 @@ __all__ = [
     "HANDLER_ROLE_MAP",
     "ArchitectHandler",
     "BardHandler",
-    "StewardHandler",
     "MergePreflightHandler",
     "SageCorrectionBounceHandler",
+    "StewardHandler",
     "WizardHandler",
 ]

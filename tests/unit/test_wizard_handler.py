@@ -8,7 +8,7 @@ Decisions locked here:
 - D2 ADOPT: module-level ``ROLE: AgentRole = AgentRole.REVIEWER``.
 - D3 ADOPT: no gamified ``"Wizard"`` string literal in code body. The
   review-body H1 is plain ``"Code Review"`` -- bonfire does not stamp
-  its cadre vocabulary onto downstream PR surfaces (cadre rename, S025).
+  its cadre vocabulary onto downstream PR surfaces.
 - D4 DEFER: META_REVIEW_VERDICT_SOURCE / META_REVIEW_PARSE_FAILURE_REASON /
   WizardReviewCompleted / VerdictParseFailed not in v0.1 — xfail-gated.
 - D5 DEFER: DispatchOptions.setting_sources + PipelineConfig.dispatch_timeout_seconds
@@ -340,7 +340,7 @@ class TestGenericVocabularyDiscipline:
     def test_handler_source_does_not_hardcode_gamified_display(self) -> None:
         """D3 guard: no ``"Wizard"`` literal in code body.
 
-        After the cadre rename (S025), the review-body H1 is plain
+        After the cadre rename (2026-05-03 cascade), the review-body H1 is plain
         ``"Code Review"`` -- the prior ``"Wizard Code Review"`` exemption
         is gone, and the assertion below holds without special-casing.
         """

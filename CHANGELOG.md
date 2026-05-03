@@ -50,7 +50,7 @@ end-to-end CLI verb are still in progress and ship in subsequent
   first-match-wins ordering: `green`, `pre_existing_debt` (allow with
   annotation), `cross_wave_interaction`, `pure_warrior_bug`,
   `pytest_collection_error`, `merge_conflict`. Wired into
-  `standard_build()` between `wizard` and `herald` via
+  `standard_build()` between `wizard` and `steward` via
   `MergePreflightGate`. Backed by the new
   `bonfire.git.scratch.ScratchWorktreeFactory` primitive. See
   `docs/pipeline-stages.md` and `docs/product/discipline.md`.

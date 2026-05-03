@@ -1,18 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Passelewe narration engine for scan discoveries.
+"""Falcor narration engine for scan discoveries.
 
-Generates deadpan commentary lines that Passelewe speaks between scan
-discoveries during the Front Door onboarding theater. Frequency, tone,
-and escalation follow the Bastion narrator pattern.
+Emits commentary lines as ``FalcorMessage`` between scan discoveries
+during the Front Door onboarding theater. Frequency and escalation
+follow the Bastion narrator pattern.
+
+Lineage: this engine was named the Passelewe narration engine prior to
+v0.1.0a1; the cadre / persona reorientation moved Bonfire's shipped
+companion to Falcor (the luckdragon -- gentle, encouraging). The line
+library below still carries its original wry observational tone; a
+re-tone pass to match Falcor's register is deferred to a follow-up.
 """
 
 from __future__ import annotations
 
 import random
 
-from bonfire.onboard.protocol import PasseleweMessage, ScanUpdate
+from bonfire.onboard.protocol import FalcorMessage, ScanUpdate
 
 __all__ = ["NarrationEngine"]
 
@@ -194,7 +200,7 @@ def _category_key(event: ScanUpdate) -> str:
 
 
 class NarrationEngine:
-    """Generates Passelewe narration for scan discoveries.
+    """Generates Falcor narration for scan discoveries.
 
     Stateful per session: tracks used lines, discovery count, and
     repeated categories to follow the Bastion narrator pattern.
@@ -235,12 +241,12 @@ class NarrationEngine:
         # Tier 1
         return self._discovery_count % 4 == 0
 
-    def get_narration(self, event: ScanUpdate) -> PasseleweMessage | None:
+    def get_narration(self, event: ScanUpdate) -> FalcorMessage | None:
         """Get narration for a discovery, or None if skipping.
 
         Increments discovery count, checks tier frequency, selects a
         line, tracks used lines, and handles escalation on repeated
-        categories.  Returns ``PasseleweMessage`` with
+        categories.  Returns ``FalcorMessage`` with
         ``subtype="narration"``.
         """
         self._discovery_count += 1
@@ -259,7 +265,7 @@ class NarrationEngine:
             return None  # pragma: no cover — defensive
 
         self._used.add(line)
-        return PasseleweMessage(text=line, subtype="narration")
+        return FalcorMessage(text=line, subtype="narration")
 
     def _select_line(self, category: str, is_repeat: bool) -> str | None:
         """Pick an unused line from the category, escalation, or fallback."""

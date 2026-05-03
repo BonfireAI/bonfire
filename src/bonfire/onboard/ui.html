@@ -194,7 +194,7 @@
     background: var(--bg-panel); border: 1px solid var(--green-dim); border-radius: 2px;
   }
   .chat-msg { margin-bottom: 8px; padding: 4px 0; }
-  .chat-msg.passelewe { color: var(--green-bright); font-style: italic; }
+  .chat-msg.falcor { color: var(--green-bright); font-style: italic; }
   .chat-msg.user { color: var(--green); }
   #chat-input { display: flex; gap: 8px; }
   #chat-input input {
@@ -295,7 +295,7 @@
   var typing = false;
 
   /**
-   * Typing effect for Passelewe narration and chat messages.
+   * Typing effect for Falcor narration and chat messages.
    * Reveals text character-by-character at ~35ms per character.
    * Falls back to instant display when prefers-reduced-motion is set.
    */
@@ -321,7 +321,7 @@
   }
 
   /**
-   * Queue-based typing to prevent overlapping Passelewe messages.
+   * Queue-based typing to prevent overlapping Falcor messages.
    * Each message waits for the previous to finish before starting.
    */
   function enqueueType(element, text, speed) {
@@ -351,9 +351,9 @@
       case 'scan_complete': markPanelComplete(msg.panel, msg.item_count); break;
       case 'all_scans_complete': statusEl.textContent = msg.total_items + ' findings catalogued'; break;
       case 'conversation_start': activateChat(); break;
-      case 'passelewe_message':
+      case 'falcor_message':
         if (msg.subtype === 'narration') { setNarration(msg.text); }
-        else { addChatMessage('passelewe', msg.text); }
+        else { addChatMessage('falcor', msg.text); }
         break;
       case 'config_generated': statusEl.textContent = 'config generated'; break;
     }
@@ -415,14 +415,14 @@
     var div = document.createElement('div');
     div.className = 'chat-msg ' + role;
     chatLog.appendChild(div);
-    if (role === 'passelewe') {
+    if (role === 'falcor') {
       enqueueType(div, text, 35);
     } else {
       div.textContent = text;
     }
     chatLog.scrollTop = chatLog.scrollHeight;
     // Keep scroll pinned as typing progresses
-    if (role === 'passelewe') {
+    if (role === 'falcor') {
       var scrollInterval = setInterval(function() {
         chatLog.scrollTop = chatLog.scrollHeight;
       }, 100);

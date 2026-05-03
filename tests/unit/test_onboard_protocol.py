@@ -47,8 +47,8 @@ from bonfire.onboard.protocol import (
     AllScansComplete,
     ConfigGenerated,
     ConversationStart,
+    FalcorMessage,
     FrontDoorMessage,
-    PasseleweMessage,
     ScanComplete,
     ScanStart,
     ScanUpdate,
@@ -106,20 +106,20 @@ class TestServerMessages:
         msg = ConversationStart()
         assert msg.type == "conversation_start"
 
-    def test_passelewe_message_narration(self) -> None:
-        msg = PasseleweMessage(text="The collection grows.", subtype="narration")
-        assert msg.type == "passelewe_message"
+    def test_falcor_message_narration(self) -> None:
+        msg = FalcorMessage(text="The collection grows.", subtype="narration")
+        assert msg.type == "falcor_message"
         assert msg.text == "The collection grows."
         assert msg.subtype == "narration"
 
-    def test_passelewe_message_subtypes(self) -> None:
+    def test_falcor_message_subtypes(self) -> None:
         for subtype in ("narration", "question", "reflection"):
-            msg = PasseleweMessage(text="Test.", subtype=subtype)
+            msg = FalcorMessage(text="Test.", subtype=subtype)
             assert msg.subtype == subtype
 
     def test_config_generated(self) -> None:
         msg = ConfigGenerated(
-            config_toml="[bonfire]\npersona = 'passelewe'\n",
+            config_toml="[bonfire]\npersona = 'falcor'\n",
             annotations={"persona": "Derived from conversation Q1"},
         )
         assert msg.type == "config_generated"
@@ -211,8 +211,8 @@ def _make_message_instances() -> list[tuple[str, FrontDoorMessage]]:
         ("AllScansComplete", AllScansComplete(total_items=9)),
         ("ConversationStart", ConversationStart()),
         (
-            "PasseleweMessage",
-            PasseleweMessage(text="hello", subtype="narration"),
+            "FalcorMessage",
+            FalcorMessage(text="hello", subtype="narration"),
         ),
         (
             "ConfigGenerated",

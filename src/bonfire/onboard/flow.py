@@ -6,7 +6,7 @@
 Wires the scan orchestrator, narration engine, conversation engine, and
 config generator into a single coherent flow:
 
-- **Act I: Scan Theater** — run all scanners, interleave Passelewe narration
+- **Act I: Scan Theater** — run all scanners, interleave Falcor narration
 - **Act II: Conversation** — three profiling questions via the conversation engine
 - **Act III: Config Generation** — produce bonfire.toml from scan + profile data
 """

@@ -4,13 +4,13 @@ Sage memo: docs/audit/sage-decisions/bon-348-sage-20260426T013845Z.md
 Adoption-filter: docs/audit/sage-decisions/bon-348-contract-lock-*.md
 
 Floor (8 tests, per Sage §D6 Test file 4): port v1 cli test surface verbatim.
-The 3 builtin personas (passelewe, minimal, default) ship in v0.1 — verified
+The 3 builtin personas (falcor, minimal, default) ship in v0.1 — verified
 via `ls src/bonfire/persona/builtins/`.
 
 Adopted innovations (2 drift-guards over floor):
 
   * test_persona_list_shows_all_three_builtins — parametrize over the 3
-    builtins (passelewe / minimal / default). Floor only covers passelewe +
+    builtins (falcor / minimal / default). Floor only covers falcor +
     minimal individually; `default` was uncovered. Cites Sage §D6 +
     v1 cli/commands/persona.py:37-56.
 
@@ -44,10 +44,10 @@ cli_runner = CliRunner()
 
 
 class TestPersonaList:
-    def test_list_shows_passelewe(self) -> None:
+    def test_list_shows_falcor(self) -> None:
         result = cli_runner.invoke(app, ["persona", "list"])
         assert result.exit_code == 0
-        assert "passelewe" in result.output
+        assert "falcor" in result.output
 
     def test_list_shows_minimal(self) -> None:
         result = cli_runner.invoke(app, ["persona", "list"])
@@ -60,7 +60,7 @@ class TestPersonaList:
         result = cli_runner.invoke(app, ["persona", "list"])
         assert result.exit_code == 0
         lines = result.output.splitlines()
-        active_lines = [line for line in lines if "passelewe" in line]
+        active_lines = [line for line in lines if "falcor" in line]
         assert len(active_lines) >= 1
         assert any("active" in line.lower() or "▸" in line for line in active_lines)
 
@@ -107,7 +107,7 @@ class TestPersonaSet:
         """persona set preserves other keys in bonfire.toml."""
         monkeypatch.chdir(tmp_path)
         toml_path = tmp_path / "bonfire.toml"
-        toml_path.write_text('[bonfire]\nmodel = "claude-opus-4"\npersona = "passelewe"\n')
+        toml_path.write_text('[bonfire]\nmodel = "claude-opus-4"\npersona = "falcor"\n')
 
         result = cli_runner.invoke(app, ["persona", "set", "minimal"])
         assert result.exit_code == 0
@@ -124,7 +124,7 @@ class TestPersonaSet:
         monkeypatch.chdir(tmp_path)
         toml_path = tmp_path / "bonfire.toml"
         toml_path.write_text(
-            '[other]\npersona = "should-not-change"\n\n[bonfire]\npersona = "passelewe"\n'
+            '[other]\npersona = "should-not-change"\n\n[bonfire]\npersona = "falcor"\n'
         )
 
         result = cli_runner.invoke(app, ["persona", "set", "minimal"])
@@ -146,7 +146,7 @@ class TestPersonaDiscoverySurface:
 
     @pytest.mark.parametrize(
         "builtin_name",
-        ["passelewe", "minimal", "default"],
+        ["falcor", "minimal", "default"],
     )
     def test_persona_list_shows_all_three_builtins(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, builtin_name: str
@@ -156,8 +156,8 @@ class TestPersonaDiscoverySurface:
         Cites Sage §D6 + v1 cli/commands/persona.py:37-56.
 
         v0.1 ships 3 builtins (verified by `ls src/bonfire/persona/builtins/`
-        returning `default minimal passelewe`). Floor coverage verifies
-        passelewe + minimal individually. `default` is uncovered.
+        returning `default minimal falcor`). Floor coverage verifies
+        falcor + minimal individually. `default` is uncovered.
 
         Guards against:
           - a glob pattern change in `PersonaLoader.available()` that silently
@@ -297,4 +297,4 @@ class TestPersonaTomlFallbackWarning:
             f"warning must name the file; got stderr={captured.err!r}"
         )
         # Default fallback still applies
-        assert result == "passe" + "lewe"
+        assert result == "falcor"

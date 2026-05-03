@@ -16,7 +16,7 @@ Scope of this file
 
 Schema strictness (required fields, per-role coverage, extras policy)
 lives in ``test_persona_toml_schema.py``. Built-in-specific shape
-checks (passelewe/default/minimal) live in ``test_persona_defaults.py``
+checks (falcor/default/minimal) live in ``test_persona_defaults.py``
 and ``test_persona_builtin.py``.
 
 Tests use ``tmp_path`` fixtures — no real ``~/.bonfire/`` is touched.
@@ -80,13 +80,13 @@ name = "broken
 def _make_persona_toml(name: str, display_name: str = "X") -> str:
     """Schema-valid persona.toml with full AgentRole coverage for *name*."""
     return (
-        f'[persona]\n'
+        f"[persona]\n"
         f'name = "{name}"\n'
         f'display_name = "{display_name}"\n'
         f'description = "desc"\n'
         f'version = "1.0.0"\n'
-        f'\n'
-        f'[display_names]\n'
+        f"\n"
+        f"[display_names]\n"
         f'researcher = "Research Agent"\n'
         f'tester = "Test Agent"\n'
         f'implementer = "Build Agent"\n'
@@ -145,9 +145,7 @@ def loader(builtin_dir: Path, user_dir: Path) -> PersonaLoader:
 class TestPersonaLoaderLoad:
     """PersonaLoader.load() discovers and returns PersonaProtocol instances."""
 
-    def test_load_returns_persona_protocol(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_load_returns_persona_protocol(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """``load(name)`` returns a PersonaProtocol instance when the persona exists."""
         _create_persona_dir(builtin_dir, "testbot")
         persona = loader.load("testbot")
@@ -161,9 +159,7 @@ class TestPersonaLoaderLoad:
         persona = loader.load("testbot")
         assert isinstance(persona, BasePersona)
 
-    def test_load_nonexistent_falls_back_to_minimal(
-        self, loader: PersonaLoader
-    ) -> None:
+    def test_load_nonexistent_falls_back_to_minimal(self, loader: PersonaLoader) -> None:
         """Unknown name falls back to the minimal persona (name == 'minimal')."""
         persona = loader.load("nonexistent_persona")
         assert isinstance(persona, PersonaProtocol)
@@ -186,9 +182,7 @@ class TestPersonaLoaderLoad:
         assert isinstance(persona, PersonaProtocol)
         assert persona.name == "minimal"
 
-    def test_malformed_toml_does_not_raise(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_malformed_toml_does_not_raise(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """Malformed TOML must not propagate exceptions."""
         _create_persona_dir(builtin_dir, "broken", persona_toml=_MALFORMED_TOML)
         loader.load("broken")  # must not raise
@@ -226,10 +220,17 @@ class TestPersonaLoaderLoadNoArg:
         persona = loader.load("default")
         assert persona.name == "default"
 
-    def test_passelewe_is_not_the_default_name(
+    def test_falcor_is_not_the_loader_default_name(
         self, loader: PersonaLoader, builtin_dir: Path
     ) -> None:
-        """``load()`` with no argument MUST NOT return a persona named 'passelewe'."""
+        """``PersonaLoader.load()`` with no argument returns ``"default"``, NOT ``"falcor"``.
+
+        Layering note: this guards the LOADER LAYER. The Config-layer
+        runtime default (``Config.persona``) IS ``"falcor"`` -- those
+        are different concepts. Do not "fix" this assertion backwards
+        without reading the persona-machinery layering docs in
+        ``test_persona_defaults.py``.
+        """
         _create_persona_dir(
             builtin_dir,
             "default",
@@ -237,11 +238,11 @@ class TestPersonaLoaderLoadNoArg:
         )
         _create_persona_dir(
             builtin_dir,
-            "passelewe",
-            persona_toml=_make_persona_toml("passelewe", "Passelewe"),
+            "falcor",
+            persona_toml=_make_persona_toml("falcor", "Falcor"),
         )
         persona = loader.load()
-        assert persona.name != "passelewe"
+        assert persona.name != "falcor"
         assert persona.name == "default"
 
 
@@ -270,17 +271,13 @@ class TestDiscoveryPrecedence:
         persona = loader.load("custom")
         assert persona.name == "custom"
 
-    def test_user_only_persona_loads(
-        self, loader: PersonaLoader, user_dir: Path
-    ) -> None:
+    def test_user_only_persona_loads(self, loader: PersonaLoader, user_dir: Path) -> None:
         """A persona installed only in user_dir is discoverable."""
         _create_persona_dir(user_dir, "myuser")
         persona = loader.load("myuser")
         assert persona.name == "myuser"
 
-    def test_builtin_only_persona_loads(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_builtin_only_persona_loads(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         """A persona shipped only in builtin_dir is discoverable."""
         _create_persona_dir(builtin_dir, "shipped")
         persona = loader.load("shipped")
@@ -339,9 +336,7 @@ class TestMinimalSafetyNet:
         assert isinstance(persona, BasePersona)
         assert persona.name == "minimal"
 
-    def test_minimal_hardcoded_has_empty_phrases(
-        self, loader: PersonaLoader
-    ) -> None:
+    def test_minimal_hardcoded_has_empty_phrases(self, loader: PersonaLoader) -> None:
         """Hardcoded fallback is ``BasePersona(name='minimal', phrases={})``."""
         from bonfire.models.events import StageCompleted
 
@@ -393,18 +388,14 @@ class TestPersonaLoaderAvailable:
     def test_available_empty_dirs(self, loader: PersonaLoader) -> None:
         assert loader.available() == []
 
-    def test_available_includes_builtin(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_available_includes_builtin(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         _create_persona_dir(builtin_dir, "alpha")
         _create_persona_dir(builtin_dir, "beta")
         names = loader.available()
         assert "alpha" in names
         assert "beta" in names
 
-    def test_available_includes_user(
-        self, loader: PersonaLoader, user_dir: Path
-    ) -> None:
+    def test_available_includes_user(self, loader: PersonaLoader, user_dir: Path) -> None:
         _create_persona_dir(user_dir, "mypersona")
         assert "mypersona" in loader.available()
 
@@ -483,9 +474,7 @@ phrases = ["{stage_name} done"]
         )
         assert persona.format_event(event) is None
 
-    def test_loaded_persona_format_summary(
-        self, loader: PersonaLoader, builtin_dir: Path
-    ) -> None:
+    def test_loaded_persona_format_summary(self, loader: PersonaLoader, builtin_dir: Path) -> None:
         _create_persona_dir(builtin_dir, "testbot")
         persona = loader.load("testbot")
         result = persona.format_summary({"stages": 3, "cost": 0.42})
@@ -518,9 +507,7 @@ class TestHookspecDeferred:
 
         import bonfire.persona  # noqa: F401 — ensure package is loaded
 
-        persona_modules = [
-            name for name in sys.modules if name.startswith("bonfire.persona")
-        ]
+        persona_modules = [name for name in sys.modules if name.startswith("bonfire.persona")]
         for mod_name in persona_modules:
             mod = sys.modules[mod_name]
             src_file = getattr(mod, "__file__", None)

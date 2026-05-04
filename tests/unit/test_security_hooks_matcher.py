@@ -51,8 +51,7 @@ class TestMatcherRegexString:
         matcher_obj = matchers[0]
         matcher_regex = getattr(matcher_obj, "matcher", None)
         assert matcher_regex == "Bash|Write|Edit", (
-            f"Ambiguity #5: matcher MUST be 'Bash|Write|Edit' unanchored. "
-            f"Got {matcher_regex!r}"
+            f"Ambiguity #5: matcher MUST be 'Bash|Write|Edit' unanchored. Got {matcher_regex!r}"
         )
 
     def test_matcher_is_unanchored(self):
@@ -63,7 +62,9 @@ class TestMatcherRegexString:
         )
 
         result = _build_security_hooks_dict(
-            SecurityHooksConfig(), bus=None, envelope=_make_envelope(),
+            SecurityHooksConfig(),
+            bus=None,
+            envelope=_make_envelope(),
         )
         assert result is not None
         matcher_regex = getattr(result["PreToolUse"][0], "matcher", "")
@@ -81,7 +82,9 @@ class TestMatcherRegexString:
         )
 
         result = _build_security_hooks_dict(
-            SecurityHooksConfig(), bus=None, envelope=_make_envelope(),
+            SecurityHooksConfig(),
+            bus=None,
+            envelope=_make_envelope(),
         )
         assert result is not None
         matcher_regex = getattr(result["PreToolUse"][0], "matcher", None)
@@ -123,8 +126,11 @@ class TestHookBodyNarrow:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": tool_name,
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": tool_name,
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -139,8 +145,11 @@ class TestHookBodyNarrow:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -163,8 +172,11 @@ class TestUnanchoredMatcherSafety:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "BashTool",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "BashTool",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -176,8 +188,11 @@ class TestUnanchoredMatcherSafety:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "echo hi"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hi"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -189,8 +204,11 @@ class TestUnanchoredMatcherSafety:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Write",
-             "tool_input": {"file_path": "/home/user/script.py"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "tool_input": {"file_path": "/home/user/script.py"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -202,8 +220,11 @@ class TestUnanchoredMatcherSafety:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Edit",
-             "tool_input": {"file_path": "/home/user/config.yml"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "/home/user/config.yml"},
+            },
             "tu1",
             {"signal": None},
         )

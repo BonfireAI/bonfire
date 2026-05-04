@@ -85,9 +85,7 @@ class TestMissingDirectories:
         persona = loader.load("alpha")
         assert persona.name == "alpha"
 
-    def test_missing_builtin_dir_does_not_raise_on_load(
-        self, tmp_path: Path
-    ) -> None:
+    def test_missing_builtin_dir_does_not_raise_on_load(self, tmp_path: Path) -> None:
         user_dir = tmp_path / "user"
         user_dir.mkdir()
         _create_persona_dir(user_dir, "alpha")
@@ -96,9 +94,7 @@ class TestMissingDirectories:
         persona = loader.load("alpha")
         assert persona.name == "alpha"
 
-    def test_both_dirs_missing_returns_hardcoded_minimal(
-        self, tmp_path: Path
-    ) -> None:
+    def test_both_dirs_missing_returns_hardcoded_minimal(self, tmp_path: Path) -> None:
         loader = PersonaLoader(
             builtin_dir=tmp_path / "nope_builtin",
             user_dir=tmp_path / "nope_user",
@@ -107,15 +103,11 @@ class TestMissingDirectories:
         assert isinstance(persona, PersonaProtocol)
         assert persona.name == "minimal"
 
-    def test_missing_user_dir_available_returns_builtin_only(
-        self, tmp_path: Path
-    ) -> None:
+    def test_missing_user_dir_available_returns_builtin_only(self, tmp_path: Path) -> None:
         builtin_dir = tmp_path / "builtin"
         builtin_dir.mkdir()
         _create_persona_dir(builtin_dir, "alpha")
-        loader = PersonaLoader(
-            builtin_dir=builtin_dir, user_dir=tmp_path / "missing_user"
-        )
+        loader = PersonaLoader(builtin_dir=builtin_dir, user_dir=tmp_path / "missing_user")
         names = loader.available()
         assert names == ["alpha"]
 
@@ -187,9 +179,7 @@ class TestOptionalPhrases:
         assert persona.name == "alpha"
         assert isinstance(persona, PersonaProtocol)
 
-    def test_no_phrases_toml_unknown_event_returns_none(
-        self, tmp_path: Path
-    ) -> None:
+    def test_no_phrases_toml_unknown_event_returns_none(self, tmp_path: Path) -> None:
         """Without phrases.toml, ``format_event`` returns None for any event."""
         from bonfire.models.events import StageStarted
 

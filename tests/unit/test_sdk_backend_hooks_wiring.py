@@ -47,13 +47,9 @@ else:
 @pytest.fixture(autouse=True)
 def _require_modules():
     if _IMPORT_ERROR_CONFIG is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_hooks not importable: {_IMPORT_ERROR_CONFIG}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_hooks not importable: {_IMPORT_ERROR_CONFIG}")
     if _IMPORT_ERROR_BACKEND is not None:
-        pytest.fail(
-            f"bonfire.dispatch.sdk_backend not importable: {_IMPORT_ERROR_BACKEND}"
-        )
+        pytest.fail(f"bonfire.dispatch.sdk_backend not importable: {_IMPORT_ERROR_BACKEND}")
 
 
 # ---------------------------------------------------------------------------
@@ -119,28 +115,34 @@ class TestHooksKwargWiring:
     async def test_default_config_produces_hooks_dict(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())
 
-        assert "hooks" in captured, (
-            "ClaudeAgentOptions must receive ``hooks`` kwarg."
-        )
+        assert "hooks" in captured, "ClaudeAgentOptions must receive ``hooks`` kwarg."
 
     @pytest.mark.asyncio
     async def test_default_hooks_has_pretooluse_key(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())
@@ -155,16 +157,18 @@ class TestHooksKwargWiring:
     async def test_disabled_config_sends_none_hooks(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
-            options = DispatchOptions(
-                security_hooks=SecurityHooksConfig(enabled=False)
-            )
+            options = DispatchOptions(security_hooks=SecurityHooksConfig(enabled=False))
             await backend.execute(_envelope(), options=options)
 
         assert captured.get("hooks") is None
@@ -180,11 +184,15 @@ class TestHookMatcherShape:
     async def test_matcher_string_is_bash_write_edit(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())
@@ -196,19 +204,22 @@ class TestHookMatcherShape:
         matcher = matchers[0]
         matcher_str = getattr(matcher, "matcher", None)
         assert matcher_str == "Bash|Write|Edit", (
-            f"Ambiguity #5: matcher MUST be 'Bash|Write|Edit' unanchored. "
-            f"Got {matcher_str!r}"
+            f"Ambiguity #5: matcher MUST be 'Bash|Write|Edit' unanchored. Got {matcher_str!r}"
         )
 
     @pytest.mark.asyncio
     async def test_matcher_has_one_hook_callback(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())
@@ -245,7 +256,8 @@ class TestEnvelopeThreadedIntoHook:
             return _stub
 
         with patch(
-            "bonfire.dispatch.security_hooks.build_preexec_hook", _capturing,
+            "bonfire.dispatch.security_hooks.build_preexec_hook",
+            _capturing,
         ):
             result = _build_security_hooks_dict(
                 SecurityHooksConfig(enabled=True),
@@ -283,11 +295,15 @@ class TestNoBON337Leakage:
     async def test_no_disallowed_tools_kwarg(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())
@@ -298,11 +314,15 @@ class TestNoBON337Leakage:
     async def test_no_tool_policy_kwarg(self):
         captured: dict = {}
 
-        with patch(
-            "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
-            _capturing_options_class(captured),
-        ), patch(
-            "bonfire.dispatch.sdk_backend.query", _empty_query,
+        with (
+            patch(
+                "bonfire.dispatch.sdk_backend.ClaudeAgentOptions",
+                _capturing_options_class(captured),
+            ),
+            patch(
+                "bonfire.dispatch.sdk_backend.query",
+                _empty_query,
+            ),
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(_envelope(), options=DispatchOptions())

@@ -28,9 +28,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 CATEGORY_NAME = "system-integrity"

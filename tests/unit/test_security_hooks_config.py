@@ -35,9 +35,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_hooks not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_hooks not importable: {_IMPORT_ERROR}")
 
 
 # ---------------------------------------------------------------------------
@@ -108,9 +106,7 @@ class TestConfigFields:
     def test_field_names_exactly(self):
         fields = set(SecurityHooksConfig.model_fields.keys())
         expected = {"enabled", "extra_deny_patterns", "emit_denial_events"}
-        assert fields == expected, (
-            f"Field inventory mismatch. Expected {expected}, got {fields}"
-        )
+        assert fields == expected, f"Field inventory mismatch. Expected {expected}, got {fields}"
 
     def test_field_count_is_exactly_three(self):
         assert len(SecurityHooksConfig.model_fields) == 3

@@ -37,9 +37,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 # ---------------------------------------------------------------------------
@@ -56,71 +54,75 @@ def _require_module():
 # ---------------------------------------------------------------------------
 
 
-CANONICAL_DENY_RULE_IDS: frozenset[str] = frozenset({
-    # C1 destructive-fs (8)
-    "C1.1-rm-rf-non-temp",
-    "C1.2-dd-to-device",
-    "C1.3-mkfs-on-device",
-    "C1.4-shred",
-    "C1.5-redirect-to-device",
-    "C1.6-mv-root",
-    "C1.7-find-delete",
-    "C1.8-redirect-overwrite-home",
-    # C2 destructive-git (9)
-    "C2.1-git-reset-hard",
-    "C2.2-git-clean-force",
-    "C2.3-git-push-force",
-    "C2.4-git-branch-delete-force",
-    "C2.5-git-checkout-dot",
-    "C2.6-git-restore-worktree",
-    "C2.7-git-stash-drop-clear",
-    "C2.8-git-reflog-expire",
-    "C2.9-git-filter-branch",
-    # C3 pipe-to-shell (5)
-    "C3.1-curl-pipe-shell",
-    "C3.2-wget-output-pipe-shell",
-    "C3.3-bash-process-sub",
-    "C3.4-bash-c-substitution",
-    "C3.5-dot-source-process-sub",
-    # C4 exfiltration (7)
-    "C4.1-cat-ssh-private-key",
-    "C4.2-cat-aws-credentials",
-    "C4.3-cat-credential-dotfile",
-    "C4.4-cat-env-file",
-    "C4.5-curl-data-home-file",
-    "C4.6-scp-credential-dir",
-    "C4.7-nc-send-key",
-    # C7 system-integrity (8)
-    "C7.1-chmod-recursive-777",
-    "C7.2-chown-recursive-root",
-    "C7.3-crontab-remove",
-    "C7.4-fork-bomb",
-    "C7.5-firewall-flush",
-    "C7.6-disable-security-service",
-    "C7.7-purge-python-minimal",
-    "C7.8-shutdown",
-})
+CANONICAL_DENY_RULE_IDS: frozenset[str] = frozenset(
+    {
+        # C1 destructive-fs (8)
+        "C1.1-rm-rf-non-temp",
+        "C1.2-dd-to-device",
+        "C1.3-mkfs-on-device",
+        "C1.4-shred",
+        "C1.5-redirect-to-device",
+        "C1.6-mv-root",
+        "C1.7-find-delete",
+        "C1.8-redirect-overwrite-home",
+        # C2 destructive-git (9)
+        "C2.1-git-reset-hard",
+        "C2.2-git-clean-force",
+        "C2.3-git-push-force",
+        "C2.4-git-branch-delete-force",
+        "C2.5-git-checkout-dot",
+        "C2.6-git-restore-worktree",
+        "C2.7-git-stash-drop-clear",
+        "C2.8-git-reflog-expire",
+        "C2.9-git-filter-branch",
+        # C3 pipe-to-shell (5)
+        "C3.1-curl-pipe-shell",
+        "C3.2-wget-output-pipe-shell",
+        "C3.3-bash-process-sub",
+        "C3.4-bash-c-substitution",
+        "C3.5-dot-source-process-sub",
+        # C4 exfiltration (7)
+        "C4.1-cat-ssh-private-key",
+        "C4.2-cat-aws-credentials",
+        "C4.3-cat-credential-dotfile",
+        "C4.4-cat-env-file",
+        "C4.5-curl-data-home-file",
+        "C4.6-scp-credential-dir",
+        "C4.7-nc-send-key",
+        # C7 system-integrity (8)
+        "C7.1-chmod-recursive-777",
+        "C7.2-chown-recursive-root",
+        "C7.3-crontab-remove",
+        "C7.4-fork-bomb",
+        "C7.5-firewall-flush",
+        "C7.6-disable-security-service",
+        "C7.7-purge-python-minimal",
+        "C7.8-shutdown",
+    }
+)
 
 
-CANONICAL_WARN_RULE_IDS: frozenset[str] = frozenset({
-    # C5 priv-escalation (7)
-    "C5.1-sudo-default",
-    "C5.2-su-root",
-    "C5.3-write-sudoers",
-    "C5.4-chmod-setuid",
-    "C5.5-append-authorized-keys",
-    "C5.6-write-passwd-shadow",
-    "C5.7-usermod-priv-group",
-    # C6 shell-escape (8)
-    "C6.1-eval",
-    "C6.2-base64-decode",
-    "C6.3-ifs-bypass",
-    "C6.4-brace-expansion",
-    "C6.5-wildcard-path",
-    "C6.6-unicode-lookalike",
-    "C6.7-alias-function-redef",
-    "C6.8-newline-escape",
-})
+CANONICAL_WARN_RULE_IDS: frozenset[str] = frozenset(
+    {
+        # C5 priv-escalation (7)
+        "C5.1-sudo-default",
+        "C5.2-su-root",
+        "C5.3-write-sudoers",
+        "C5.4-chmod-setuid",
+        "C5.5-append-authorized-keys",
+        "C5.6-write-passwd-shadow",
+        "C5.7-usermod-priv-group",
+        # C6 shell-escape (8)
+        "C6.1-eval",
+        "C6.2-base64-decode",
+        "C6.3-ifs-bypass",
+        "C6.4-brace-expansion",
+        "C6.5-wildcard-path",
+        "C6.6-unicode-lookalike",
+        "C6.7-alias-function-redef",
+        "C6.8-newline-escape",
+    }
+)
 
 
 CANONICAL_RULE_IDS: frozenset[str] = CANONICAL_DENY_RULE_IDS | CANONICAL_WARN_RULE_IDS
@@ -147,16 +149,11 @@ class TestModuleExports:
         """__all__ includes the three public names (Sage D2 naming lockdown)."""
         names = set(getattr(_mod, "__all__", []) or [])
         expected = {"DEFAULT_DENY_PATTERNS", "DEFAULT_WARN_PATTERNS", "DenyRule"}
-        assert expected.issubset(names), (
-            f"__all__ must include {expected}, got {names}"
-        )
+        assert expected.issubset(names), f"__all__ must include {expected}, got {names}"
 
     def test_all_is_exactly_three(self):
         """Sage D2 + Knight-A: ``__all__`` contains exactly three public names."""
-        public = {
-            name for name in getattr(_mod, "__all__", []) or []
-            if not name.startswith("_")
-        }
+        public = {name for name in getattr(_mod, "__all__", []) or [] if not name.startswith("_")}
         assert public == {
             "DEFAULT_DENY_PATTERNS",
             "DEFAULT_WARN_PATTERNS",
@@ -238,13 +235,9 @@ class TestCatalogueInvariants:
 
     def test_all_entries_are_denyrule(self):
         for r in DEFAULT_DENY_PATTERNS:
-            assert isinstance(r, DenyRule), (
-                f"{r!r} in DEFAULT_DENY_PATTERNS is not a DenyRule"
-            )
+            assert isinstance(r, DenyRule), f"{r!r} in DEFAULT_DENY_PATTERNS is not a DenyRule"
         for r in DEFAULT_WARN_PATTERNS:
-            assert isinstance(r, DenyRule), (
-                f"{r!r} in DEFAULT_WARN_PATTERNS is not a DenyRule"
-            )
+            assert isinstance(r, DenyRule), f"{r!r} in DEFAULT_WARN_PATTERNS is not a DenyRule"
 
     def test_all_patterns_precompiled(self):
         for r in DEFAULT_DENY_PATTERNS + DEFAULT_WARN_PATTERNS:
@@ -263,9 +256,7 @@ class TestCatalogueInvariants:
         """Sage D4 — format ``C<category>.<index>-<slug>``."""
         rx = re.compile(r"^C[1-7]\.\d+-[a-z0-9][a-z0-9\-]*$")
         for r in DEFAULT_DENY_PATTERNS + DEFAULT_WARN_PATTERNS:
-            assert rx.match(r.rule_id), (
-                f"rule_id {r.rule_id!r} must match C<n>.<idx>-<slug>"
-            )
+            assert rx.match(r.rule_id), f"rule_id {r.rule_id!r} must match C<n>.<idx>-<slug>"
 
 
 # ---------------------------------------------------------------------------
@@ -295,9 +286,7 @@ class TestCanonicalRuleIds:
     def test_total_count_is_52(self):
         """37 DENY + 15 WARN = 52 rules."""
         total = len(DEFAULT_DENY_PATTERNS) + len(DEFAULT_WARN_PATTERNS)
-        assert total == 52, (
-            f"Canonical catalogue has 37 DENY + 15 WARN = 52 rules; got {total}"
-        )
+        assert total == 52, f"Canonical catalogue has 37 DENY + 15 WARN = 52 rules; got {total}"
 
     def test_deny_count_is_37(self):
         assert len(DEFAULT_DENY_PATTERNS) == 37
@@ -346,9 +335,7 @@ class TestCategoryActionMap:
         deny_categories = {r.category for r in DEFAULT_DENY_PATTERNS}
         warn_categories = {r.category for r in DEFAULT_WARN_PATTERNS}
         overlap = deny_categories & warn_categories
-        assert not overlap, (
-            f"Categories must not span DENY and WARN: overlap={overlap}"
-        )
+        assert not overlap, f"Categories must not span DENY and WARN: overlap={overlap}"
 
     def test_frozen_catalogue(self):
         """Tuple is immutable by construction."""

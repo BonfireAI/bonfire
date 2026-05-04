@@ -85,9 +85,7 @@ def sample_records() -> list[DispatchRecord | PipelineRecord]:
 
 
 class TestCostSummary:
-    def test_summary_shows_cumulative_total(
-        self, ledger_path: Path, sample_records: list
-    ) -> None:
+    def test_summary_shows_cumulative_total(self, ledger_path: Path, sample_records: list) -> None:
         _write_records(ledger_path, sample_records)
         result = runner.invoke(cost_app, [], catch_exceptions=False)
         assert result.exit_code == 0
@@ -197,9 +195,7 @@ class TestExportSchemaStability:
             f"Got keys: {sorted(dispatch_dump.keys())}"
         )
 
-    def test_summary_output_is_deterministic(
-        self, ledger_path: Path, sample_records: list
-    ) -> None:
+    def test_summary_output_is_deterministic(self, ledger_path: Path, sample_records: list) -> None:
         """Invoking `bonfire cost` twice on the same ledger yields identical output.
 
         Cites Sage §D8 + v1 cli/commands/cost.py:24-47.

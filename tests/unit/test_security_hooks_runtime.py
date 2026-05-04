@@ -45,10 +45,16 @@ class TestIndependentClosures:
         bus1 = _CollectingBus()
         bus2 = _CollectingBus()
         h1 = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus1, session_id="s1", agent_name="agent-alpha",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus1,
+            session_id="s1",
+            agent_name="agent-alpha",  # type: ignore[arg-type]
         )
         h2 = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus2, session_id="s2", agent_name="agent-beta",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus2,
+            session_id="s2",
+            agent_name="agent-beta",  # type: ignore[arg-type]
         )
 
         input_data = {
@@ -80,18 +86,26 @@ class TestConcurrentDifferentHooks:
         bus1 = _CollectingBus()
         bus2 = _CollectingBus()
         h1 = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus1, session_id="alpha", agent_name="A",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus1,
+            session_id="alpha",
+            agent_name="A",  # type: ignore[arg-type]
         )
         h2 = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus2, session_id="beta", agent_name="B",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus2,
+            session_id="beta",
+            agent_name="B",  # type: ignore[arg-type]
         )
 
         input_a = {
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
             "tool_input": {"command": "rm -rf /"},
         }
         input_b = {
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
             "tool_input": {"command": "git push --force origin main"},
         }
 
@@ -122,19 +136,23 @@ class TestConcurrentSameHook:
 
         bus = _CollectingBus()
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         inputs = [
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}}
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            }
             for _ in range(10)
         ]
         results = await asyncio.gather(
             *(hook(i, f"tu-{n}", {"signal": None}) for n, i in enumerate(inputs))
         )
-        assert all(
-            r["hookSpecificOutput"]["permissionDecision"] == "deny" for r in results
-        )
+        assert all(r["hookSpecificOutput"]["permissionDecision"] == "deny" for r in results)
         assert len(bus.events) == 10
 
     @pytest.mark.asyncio
@@ -143,7 +161,10 @@ class TestConcurrentSameHook:
 
         bus = _CollectingBus()
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         commands = [
             "rm -rf /",
@@ -154,15 +175,17 @@ class TestConcurrentSameHook:
             "ls",
         ]
         expected_deny_count = sum(
-            1 for c in commands
-            if "rm -rf /" in c or "--force" in c or "id_rsa" in c
+            1 for c in commands if "rm -rf /" in c or "--force" in c or "id_rsa" in c
         )
 
         results = await asyncio.gather(
             *(
                 hook(
-                    {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-                     "tool_input": {"command": c}},
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": c},
+                    },
                     f"tu-{n}",
                     {"signal": None},
                 )
@@ -170,7 +193,8 @@ class TestConcurrentSameHook:
             )
         )
         deny_count = sum(
-            1 for r in results
+            1
+            for r in results
             if r.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
         )
         assert deny_count == expected_deny_count
@@ -191,15 +215,20 @@ class TestConfigIsolation:
         bus_silent = _CollectingBus()
         h_emit = build_preexec_hook(
             SecurityHooksConfig(emit_denial_events=True),
-            bus=bus_emit, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            bus=bus_emit,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         h_silent = build_preexec_hook(
             SecurityHooksConfig(emit_denial_events=False),
-            bus=bus_silent, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            bus=bus_silent,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
 
         input_data = {
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
             "tool_input": {"command": "rm -rf /"},
         }
         r1 = await h_emit(input_data, "tu1", {"signal": None})
@@ -222,11 +251,13 @@ class TestConfigIsolation:
         )
 
         input_alpha = {
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
             "tool_input": {"command": "alpha-tool do-stuff"},
         }
         input_beta = {
-            "hook_event_name": "PreToolUse", "tool_name": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
             "tool_input": {"command": "beta-tool do-stuff"},
         }
 
@@ -259,8 +290,7 @@ class TestHookIsAsync:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         coro = hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -290,11 +320,17 @@ class TestWithRealEventBus:
         bus.subscribe(SecurityDenied, consumer)
 
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -316,12 +352,18 @@ class TestWithRealEventBus:
         bus.subscribe(SecurityDenied, consumer)
 
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         for cmd in ("rm -rf /", "git push --force origin main", "cat ~/.ssh/id_rsa"):
             await hook(
-                {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-                 "tool_input": {"command": cmd}},
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": cmd},
+                },
                 "tu",
                 {"signal": None},
             )
@@ -343,11 +385,17 @@ class TestWithRealEventBus:
         bus.subscribe_all(global_consumer)
 
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu",
             {"signal": None},
         )

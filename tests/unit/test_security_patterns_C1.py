@@ -32,9 +32,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 CATEGORY_NAME = "destructive-fs"
@@ -68,9 +66,7 @@ class TestCategoryC1Action:
         from bonfire.dispatch.security_patterns import DEFAULT_WARN_PATTERNS
 
         warn_rules = [r for r in DEFAULT_WARN_PATTERNS if r.category == CATEGORY_NAME]
-        assert warn_rules == [], (
-            "C1 destructive-fs must NOT appear in DEFAULT_WARN_PATTERNS"
-        )
+        assert warn_rules == [], "C1 destructive-fs must NOT appear in DEFAULT_WARN_PATTERNS"
 
     def test_rule_id_prefix(self):
         for r in _rules_in_category():
@@ -82,9 +78,7 @@ class TestCategoryC1Action:
         """Sage ambiguity #1: C1 slug set matches CANONICAL_DENY_RULE_IDS."""
         shipped = {r.rule_id for r in _rules_in_category()}
         expected = {s for s in CANONICAL_DENY_RULE_IDS if s.startswith("C1.")}
-        assert shipped == expected, (
-            f"C1 slug drift. Expected {expected}, got {shipped}"
-        )
+        assert shipped == expected, f"C1 slug drift. Expected {expected}, got {shipped}"
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +106,7 @@ class TestC1_1_RmRfNonTemp:
     )
     def test_true_positive(self, cmd: str):
         rule = _find("C1.1-rm-rf-non-temp")
-        assert rule.pattern.search(cmd) is not None, (
-            f"C1.1 expected to match {cmd!r}"
-        )
+        assert rule.pattern.search(cmd) is not None, f"C1.1 expected to match {cmd!r}"
 
     @pytest.mark.parametrize(
         "cmd",
@@ -130,9 +122,7 @@ class TestC1_1_RmRfNonTemp:
     )
     def test_false_positive(self, cmd: str):
         rule = _find("C1.1-rm-rf-non-temp")
-        assert rule.pattern.search(cmd) is None, (
-            f"C1.1 expected NOT to match {cmd!r}"
-        )
+        assert rule.pattern.search(cmd) is None, f"C1.1 expected NOT to match {cmd!r}"
 
 
 class TestC1_2_DdToDevice:

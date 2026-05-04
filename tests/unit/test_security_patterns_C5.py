@@ -31,9 +31,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 CATEGORY_NAME = "priv-escalation"
@@ -60,8 +58,7 @@ class TestCategoryC5Action:
     def test_category_absent_from_deny_set(self):
         deny = [r for r in DEFAULT_DENY_PATTERNS if r.category == CATEGORY_NAME]
         assert deny == [], (
-            "C5 priv-escalation MUST be WARN-only in v0.1. "
-            "Never moved into DEFAULT_DENY_PATTERNS."
+            "C5 priv-escalation MUST be WARN-only in v0.1. Never moved into DEFAULT_DENY_PATTERNS."
         )
 
     def test_rule_id_prefix(self):

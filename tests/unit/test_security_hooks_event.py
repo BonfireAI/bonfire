@@ -44,11 +44,13 @@ async def _run_with_bus(
 
     cfg = SecurityHooksConfig(emit_denial_events=emit)
     hook = build_preexec_hook(
-        cfg, bus=bus, session_id=session_id, agent_name=agent_name,  # type: ignore[arg-type]
+        cfg,
+        bus=bus,
+        session_id=session_id,
+        agent_name=agent_name,  # type: ignore[arg-type]
     )
     return await hook(
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-         "tool_input": {"command": cmd}},
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}},
         "tu1",
         {"signal": None},
     )
@@ -75,7 +77,10 @@ class TestDenyEmits:
 
         bus = _CollectingBus()
         await _run_with_bus(
-            "rm -rf /", bus, session_id="sess-abc", agent_name="knight-a",
+            "rm -rf /",
+            bus,
+            session_id="sess-abc",
+            agent_name="knight-a",
         )
         e = bus.events[0]
         assert isinstance(e, SecurityDenied)
@@ -142,12 +147,18 @@ class TestAllowDoesNotEmit:
 
         bus = _CollectingBus()
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         for tool in ("Read", "Grep", "Glob", "WebSearch", "WebFetch"):
             await hook(
-                {"hook_event_name": "PreToolUse", "tool_name": tool,
-                 "tool_input": {"file_path": "/etc/passwd"}},
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": tool,
+                    "tool_input": {"file_path": "/etc/passwd"},
+                },
                 "tu1",
                 {"signal": None},
             )
@@ -171,7 +182,9 @@ class TestWarnPath:
         bus = _CollectingBus()
         # eval is C6.1 WARN.
         await _run_with_bus("eval $FOO", bus)
-        warns = [e for e in bus.events if isinstance(e, SecurityDenied) and e.reason.startswith("WARN:")]
+        warns = [
+            e for e in bus.events if isinstance(e, SecurityDenied) and e.reason.startswith("WARN:")
+        ]
         assert warns, (
             "Ambiguity #6: C6 match MUST emit SecurityDenied with 'WARN:' prefix "
             "even though the hook allows the call to proceed."
@@ -184,11 +197,12 @@ class TestWarnPath:
 
         bus = _CollectingBus()
         await _run_with_bus("eval $FOO", bus)
-        warns = [e for e in bus.events if isinstance(e, SecurityDenied) and e.reason.startswith("WARN:")]
+        warns = [
+            e for e in bus.events if isinstance(e, SecurityDenied) and e.reason.startswith("WARN:")
+        ]
         for e in warns:
             assert e.reason.startswith("WARN: "), (
-                f"Ambiguity #6: WARN reason MUST start with literal 'WARN: '. "
-                f"Got {e.reason!r}"
+                f"Ambiguity #6: WARN reason MUST start with literal 'WARN: '. Got {e.reason!r}"
             )
 
     @pytest.mark.asyncio
@@ -233,8 +247,11 @@ class TestEmissionDisabled:
         cfg = SecurityHooksConfig(emit_denial_events=False)
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -248,8 +265,11 @@ class TestEmissionDisabled:
         cfg = SecurityHooksConfig(emit_denial_events=True)
         hook = build_preexec_hook(cfg, bus=None)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -282,8 +302,7 @@ class TestErrorBranchEmission:
         cfg = SecurityHooksConfig(extra_deny_patterns=["[invalid"])
         hook = build_preexec_hook(cfg, bus=bus, session_id="s", agent_name="a")
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -304,13 +323,17 @@ class TestFieldPropagation:
 
         bus = _CollectingBus()
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus,  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus,  # type: ignore[arg-type]
             session_id=None,
             agent_name=None,
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -325,11 +348,17 @@ class TestFieldPropagation:
 
         bus = _CollectingBus()
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -355,6 +384,5 @@ class TestPatternIdSurface:
         bus = _CollectingBus()
         await _run_with_bus("rm -rf /", bus)
         assert re.match(r"^C\d+\.\d+-", bus.events[0].pattern_id), (
-            f"pattern_id must match Scout-2/338 ID format. "
-            f"Got {bus.events[0].pattern_id!r}"
+            f"pattern_id must match Scout-2/338 ID format. Got {bus.events[0].pattern_id!r}"
         )

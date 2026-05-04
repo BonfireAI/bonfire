@@ -14,11 +14,8 @@ int returns, backfill_all -> dict[str, int]). V1's signatures differed; Sage win
 
 from __future__ import annotations
 
-import pytest
-
 from bonfire.knowledge.backfill import backfill_all, backfill_memory, backfill_sessions
 from bonfire.knowledge.memory import InMemoryVaultBackend
-
 
 # ---------------------------------------------------------------------------
 # backfill_sessions

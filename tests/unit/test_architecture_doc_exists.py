@@ -83,8 +83,7 @@ def test_architecture_doc_has_substance() -> None:
     placeholder. Length budget per Scout: 250–400 lines.
     """
     assert _DOC_PATH.is_file(), (
-        f"{_DOC_PATH} does not exist — cannot check length. See "
-        "test_architecture_doc_exists."
+        f"{_DOC_PATH} does not exist — cannot check length. See test_architecture_doc_exists."
     )
     line_count = len(_DOC_PATH.read_text(encoding="utf-8").splitlines())
     assert line_count >= _MIN_DOC_LINES, (
@@ -102,8 +101,7 @@ def test_architecture_doc_has_required_sections() -> None:
     consumers`` or ``## Where to read next`` both work).
     """
     assert _DOC_PATH.is_file(), (
-        f"{_DOC_PATH} does not exist — cannot check sections. See "
-        "test_architecture_doc_exists."
+        f"{_DOC_PATH} does not exist — cannot check sections. See test_architecture_doc_exists."
     )
     text = _DOC_PATH.read_text(encoding="utf-8")
     headings = _h2_headings(text)

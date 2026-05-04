@@ -42,8 +42,7 @@ else:
 def _require_module():
     if _IMPORT_ERROR is not None:
         pytest.fail(
-            f"bonfire.dispatch.security_hooks.build_preexec_hook not importable: "
-            f"{_IMPORT_ERROR}"
+            f"bonfire.dispatch.security_hooks.build_preexec_hook not importable: {_IMPORT_ERROR}"
         )
 
 
@@ -122,8 +121,11 @@ class TestHookPassThrough:
         """D6: non-PreToolUse events pass through as ``{}``."""
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PostToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -134,8 +136,11 @@ class TestHookPassThrough:
         """D6: Read/Grep/Glob/WebSearch pass through as ``{}``."""
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Read",
-             "tool_input": {"file_path": "/etc/passwd"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "/etc/passwd"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -145,8 +150,11 @@ class TestHookPassThrough:
     async def test_safe_bash_returns_empty(self):
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "pytest tests/"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -156,8 +164,7 @@ class TestHookPassThrough:
     async def test_empty_command_returns_empty(self):
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": ""}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": ""}},
             "tu1",
             {"signal": None},
         )
@@ -174,8 +181,11 @@ class TestHookDenyWireFormat:
     async def test_deny_has_hook_specific_output_envelope(self):
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -186,8 +196,11 @@ class TestHookDenyWireFormat:
         """D6: ``permissionDecision == "deny"`` (lowercase, not DENY/block)."""
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -201,8 +214,11 @@ class TestHookDenyWireFormat:
         """D6: ``hookEventName == "PreToolUse"`` (CamelCase)."""
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -212,8 +228,11 @@ class TestHookDenyWireFormat:
     async def test_deny_includes_reason_string(self):
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -227,8 +246,11 @@ class TestHookDenyWireFormat:
         NOT top-level ``decision``."""
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -247,13 +269,17 @@ class TestExtraDenyPatternsAdditive:
         cfg = SecurityHooksConfig(extra_deny_patterns=[r"\bmy_bespoke_danger\b"])
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm my_bespoke_danger"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm my_bespoke_danger"},
+            },
             "tu1",
             {"signal": None},
         )
         assert result.get("hookSpecificOutput", {}).get("permissionDecision") in (
-            "deny", None,
+            "deny",
+            None,
         )
 
     @pytest.mark.asyncio
@@ -262,8 +288,11 @@ class TestExtraDenyPatternsAdditive:
         cfg = SecurityHooksConfig(extra_deny_patterns=["anothertoken"])
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -282,11 +311,17 @@ class TestExtraDenyPatternsAdditive:
 
         cfg = SecurityHooksConfig(extra_deny_patterns=[r"my-dangerous-tool"])
         hook = build_preexec_hook(
-            cfg, bus=bus, session_id="s", agent_name="a",
+            cfg,
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "my-dangerous-tool arg"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "my-dangerous-tool arg"},
+            },
             "tu1",
             {"signal": None},
         )

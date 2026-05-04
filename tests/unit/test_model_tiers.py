@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 
-
 # ---------------------------------------------------------------------------
 # Import surface — module + package re-export
 # ---------------------------------------------------------------------------
@@ -199,9 +198,7 @@ class TestModelTierStrEnumSemantics:
         from bonfire.agent.tiers import ModelTier
 
         for tier in ModelTier:
-            assert isinstance(tier, str), (
-                f"{tier!r} must be a str instance (StrEnum invariant)"
-            )
+            assert isinstance(tier, str), f"{tier!r} must be a str instance (StrEnum invariant)"
 
     def test_set_cardinality_no_fossils(self):
         """Sage §D3: 'Three values exactly.' Ratchet against fossil resurrection."""

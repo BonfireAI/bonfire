@@ -231,9 +231,7 @@ class TestPhraseBankSelect:
         previous = bank.select("stage.started", ctx)
         for _ in range(20):
             current = bank.select("stage.started", ctx)
-            assert current != previous, (
-                f"Anti-repeat violated: got '{current}' twice in a row"
-            )
+            assert current != previous, f"Anti-repeat violated: got '{current}' twice in a row"
             previous = current
 
     def test_select_single_item_bank_always_returns_it(self) -> None:
@@ -360,9 +358,7 @@ class TestBasePersonaDisplayNameLookup:
 
     def _persona_with_full_display_map(self) -> BasePersona:
         """BasePersona constructed with a complete gamified display-name map."""
-        display_map = {
-            role.value: ROLE_DISPLAY[role.value].gamified for role in AgentRole
-        }
+        display_map = {role.value: ROLE_DISPLAY[role.value].gamified for role in AgentRole}
         return BasePersona(
             name="fullmap",
             phrases={},
@@ -445,7 +441,4 @@ class TestDisplayNameBoundaries:
         """Constructing BasePersona without ``display_names`` yields pure fallback."""
         persona = BasePersona(name="no_map", phrases={})
         for role in AgentRole:
-            assert (
-                persona.display_name(role)
-                == ROLE_DISPLAY[role.value].professional
-            )
+            assert persona.display_name(role) == ROLE_DISPLAY[role.value].professional

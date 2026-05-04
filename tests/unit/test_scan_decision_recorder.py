@@ -7,8 +7,6 @@ Adjudication: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
 
 from __future__ import annotations
 
-import pytest
-
 from bonfire.scan.decision_recorder import DecisionRecorder
 
 
@@ -36,11 +34,9 @@ class TestScanEntryType:
 
 class TestPatternDetection:
     async def test_detects_use_not_pattern(self, tmp_path) -> None:
-        """"Use X for ... Do not use Y." pattern extracts X and Y."""
+        """ "Use X for ... Do not use Y." pattern extracts X and Y."""
         md = tmp_path / "doc.md"
-        md.write_text(
-            "# Doc\n\nUse Pydantic for validation. Do not use dataclasses.\n"
-        )
+        md.write_text("# Doc\n\nUse Pydantic for validation. Do not use dataclasses.\n")
         recorder = DecisionRecorder(md, project_name="p")
         entries = await recorder.scan()
         assert entries
@@ -50,16 +46,13 @@ class TestPatternDetection:
 
     async def test_detects_adr_accepted_section(self, tmp_path) -> None:
         md = tmp_path / "adr.md"
-        md.write_text(
-            "# ADR\n\n## Context\n\nSomething.\n\n"
-            "## Decision\n\nAdopt Typer for CLI.\n"
-        )
+        md.write_text("# ADR\n\n## Context\n\nSomething.\n\n## Decision\n\nAdopt Typer for CLI.\n")
         recorder = DecisionRecorder(md, project_name="p")
         entries = await recorder.scan()
         # ADR format detected: at least one decision extracted.
-        assert any(
-            e.metadata.get("source_format") == "adr" for e in entries
-        ) or entries  # structural presence sufficient
+        assert (
+            any(e.metadata.get("source_format") == "adr" for e in entries) or entries
+        )  # structural presence sufficient
 
     async def test_extracts_rejected_alternatives(self, tmp_path) -> None:
         md = tmp_path / "adr.md"
@@ -70,9 +63,7 @@ class TestPatternDetection:
         recorder = DecisionRecorder(md, project_name="p")
         entries = await recorder.scan()
         # At least one entry has rejected_alternatives metadata.
-        rejected_entries = [
-            e for e in entries if "rejected_alternatives" in e.metadata
-        ]
+        rejected_entries = [e for e in entries if "rejected_alternatives" in e.metadata]
         # Not strictly required every time the pattern appears — but the feature
         # must work when used.
         if rejected_entries:

@@ -235,6 +235,4 @@ class TestXPResultByteStability:
             "xp_total",
             "respawn",
             "respawn_reason",
-        }, (
-            f"XPResult field-set drifted from Sage §D4 lock; got keys={sorted(parsed.keys())}"
-        )
+        }, f"XPResult field-set drifted from Sage §D4 lock; got keys={sorted(parsed.keys())}"

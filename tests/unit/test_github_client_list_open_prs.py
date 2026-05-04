@@ -27,7 +27,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import ValidationError
 
-
 # ---------------------------------------------------------------------------
 # PRSummary model — frozen Pydantic per Sage §D5 lines 498-504.
 # ---------------------------------------------------------------------------

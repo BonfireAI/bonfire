@@ -338,9 +338,7 @@ class TestRenderXPAwardedByteStability:
             f"Line 1 drift: got {output[0]!r}"
         )
         # Line 2 byte-stable per display.py:46.
-        assert output[1] == "⬆ LEVEL UP: Ember → Flame", (
-            f"Line 2 drift: got {output[1]!r}"
-        )
+        assert output[1] == "⬆ LEVEL UP: Ember → Flame", f"Line 2 drift: got {output[1]!r}"
 
 
 class TestSelectPhraseFallbackMatrix:
@@ -373,9 +371,7 @@ class TestSelectPhraseFallbackMatrix:
             ("xp.level_up.flame", "Flame"),
         ],
     )
-    def test_select_phrase_fallback_matrix(
-        self, category: str, expected_tail: str
-    ) -> None:
+    def test_select_phrase_fallback_matrix(self, category: str, expected_tail: str) -> None:
         persona = MagicMock(spec=[])  # no phrase_pool attribute
         consumer = XPDisplayConsumer(
             persona=persona,

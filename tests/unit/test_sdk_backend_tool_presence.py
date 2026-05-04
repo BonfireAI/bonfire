@@ -109,7 +109,12 @@ class TestBothKwargsSet:
 
         assert "tools" in captured
         assert list(captured["tools"]) == [
-            "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Grep",
+            "Glob",
         ]
 
     async def test_allowed_tools_kwarg_remains_unchanged(self) -> None:
@@ -128,7 +133,12 @@ class TestBothKwargsSet:
             await backend.execute(_envelope(), options=options)
 
         assert list(captured["allowed_tools"]) == [
-            "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Grep",
+            "Glob",
         ]
 
     async def test_tools_and_allowed_tools_have_equal_content(self) -> None:

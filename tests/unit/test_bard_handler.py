@@ -224,9 +224,7 @@ class TestGenericVocabularyDiscipline:
             f"in code -- use ROLE_DISPLAY[ROLE].gamified. Offenders: {offenders}"
         )
 
-    def test_role_constant_matches_stage_spec_role_field(
-        self, bard_stage: StageSpec
-    ) -> None:
+    def test_role_constant_matches_stage_spec_role_field(self, bard_stage: StageSpec) -> None:
         """Integration: stage.role == handler module ROLE."""
         import bonfire.handlers.bard as bard_mod
 
@@ -1037,7 +1035,9 @@ class TestHostileInputSurvival:
 
 class TestConfigThreading:
     def test_config_kwarg_accepted_and_stored(
-        self, git_workflow: AsyncMock, github_client  # noqa: ANN001
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
     ) -> None:
         """``config=`` threaded onto ``self._config``."""
         cfg = PipelineConfig(model="X")
@@ -1046,7 +1046,9 @@ class TestConfigThreading:
         assert handler._config.model == "X"
 
     def test_explicit_none_config_stored_as_none(
-        self, git_workflow: AsyncMock, github_client  # noqa: ANN001
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
     ) -> None:
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client, config=None)
         assert handler._config is None
@@ -1154,8 +1156,7 @@ class TestNegativeDriftGuards:
 
         src = Path(bard_mod.__file__).read_text()
         assert "execute_with_retry" not in src, (
-            "BardHandler must not wrap dispatch in execute_with_retry — "
-            "it has no .execute."
+            "BardHandler must not wrap dispatch in execute_with_retry — it has no .execute."
         )
 
     def test_module_does_not_import_dispatch_options(self) -> None:
@@ -1242,7 +1243,8 @@ class TestIdentitySealInvariants:
 
 
 def test_bard_handler_satisfies_stage_handler_protocol(
-    git_workflow: AsyncMock, github_client  # noqa: ANN001
+    git_workflow: AsyncMock,
+    github_client,  # noqa: ANN001
 ) -> None:
     """BardHandler instances pass runtime_checkable StageHandler isinstance."""
     from bonfire.protocols import StageHandler

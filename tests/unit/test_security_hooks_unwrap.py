@@ -46,8 +46,7 @@ async def _run(cmd: str) -> dict[str, Any]:
 
     hook = build_preexec_hook(SecurityHooksConfig())
     return await hook(
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-         "tool_input": {"command": cmd}},
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}},
         "tu1",
         {"signal": None},
     )
@@ -78,9 +77,7 @@ class TestDepth1SingleUnwrap:
     )
     async def test_single_unwrap_still_denies(self, cmd: str):
         result = await _run(cmd)
-        assert _is_deny(result), (
-            f"Single-unwrap of {cmd!r} must still hit C1 deny."
-        )
+        assert _is_deny(result), f"Single-unwrap of {cmd!r} must still hit C1 deny."
 
 
 # ---------------------------------------------------------------------------
@@ -156,8 +153,7 @@ class TestDepthExhaustionFailClosed:
         cmd = "sudo sudo sudo sudo sudo sudo rm -rf /"
         result = await _run(cmd)
         assert _is_deny(result), (
-            "Ambiguity #2: past unwrap_max_depth=5 MUST fail closed. "
-            f"Got {result!r} for {cmd!r}"
+            f"Ambiguity #2: past unwrap_max_depth=5 MUST fail closed. Got {result!r} for {cmd!r}"
         )
 
     @pytest.mark.asyncio
@@ -176,12 +172,14 @@ class TestDepthExhaustionFailClosed:
         bus.subscribe(SecurityDenied, consumer)
 
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=bus, session_id="s", agent_name="a",
+            SecurityHooksConfig(),
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         cmd = "sudo sudo sudo sudo sudo sudo rm -rf /"
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": cmd}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}},
             "tu1",
             {"signal": None},
         )
@@ -194,18 +192,12 @@ class TestDepthExhaustionFailClosed:
     @pytest.mark.asyncio
     async def test_depth6_nested_unwrappers_denies(self):
         """Knight-A's depth-6 xfail becomes mandatory per ambiguity #2."""
-        cmd = (
-            "sudo bash -c 'timeout 30 nohup env FOO=bar "
-            "xargs -I{} rm -rf /'"
-        )
+        cmd = "sudo bash -c 'timeout 30 nohup env FOO=bar xargs -I{} rm -rf /'"
         assert _is_deny(await _run(cmd))
 
     @pytest.mark.asyncio
     async def test_depth7_nested_unwrappers_denies(self):
-        cmd = (
-            "sudo bash -c 'sh -c \"timeout 30 nohup env FOO=bar "
-            "xargs -I{} rm -rf /\"'"
-        )
+        cmd = "sudo bash -c 'sh -c \"timeout 30 nohup env FOO=bar xargs -I{} rm -rf /\"'"
         assert _is_deny(await _run(cmd))
 
 
@@ -307,9 +299,7 @@ class TestQuotingAndUnwrapOrder:
     @pytest.mark.asyncio
     async def test_bash_c_with_flags_between(self):
         result = await _run("bash -x -c 'rm -rf /'")
-        assert _is_deny(result), (
-            "bash -x -c 'rm -rf /' — unwrap MUST handle interleaved flags."
-        )
+        assert _is_deny(result), "bash -x -c 'rm -rf /' — unwrap MUST handle interleaved flags."
 
     @pytest.mark.asyncio
     async def test_timeout_with_flags(self):
@@ -411,9 +401,7 @@ class TestRecursionBomb:
         chain = "sudo " * 20 + "rm -rf /"
         result = await _run(chain)
         assert isinstance(result, dict)
-        assert _is_deny(result), (
-            "Ambiguity #2: past max_depth=5, fail-closed. 20x sudo must deny."
-        )
+        assert _is_deny(result), "Ambiguity #2: past max_depth=5, fail-closed. 20x sudo must deny."
 
     @pytest.mark.asyncio
     async def test_very_long_command_bounded(self):

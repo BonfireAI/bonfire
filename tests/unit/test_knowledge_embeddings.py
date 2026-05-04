@@ -20,7 +20,6 @@ import pytest
 from bonfire.knowledge.embeddings import EmbeddingProvider, get_embedder
 from bonfire.knowledge.mock_embedder import MockEmbedder
 
-
 # ---------------------------------------------------------------------------
 # Protocol conformance
 # ---------------------------------------------------------------------------
@@ -58,9 +57,7 @@ class TestGetEmbedderFactory:
         """When ollama is unavailable, ollama branch raises ImportError."""
         # Remove any cached bonfire.knowledge.ollama_embedder + ollama from sys.modules.
         for mod in list(sys.modules):
-            if mod == "ollama" or mod.startswith("ollama.") or mod.endswith(
-                "ollama_embedder"
-            ):
+            if mod == "ollama" or mod.startswith("ollama.") or mod.endswith("ollama_embedder"):
                 monkeypatch.delitem(sys.modules, mod, raising=False)
         # Simulate no ollama package at all.
         monkeypatch.setitem(sys.modules, "ollama", None)

@@ -45,8 +45,7 @@ async def _run(cmd: str) -> dict[str, Any]:
 
     hook = build_preexec_hook(SecurityHooksConfig())
     return await hook(
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-         "tool_input": {"command": cmd}},
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}},
         "tu1",
         {"signal": None},
     )
@@ -102,8 +101,7 @@ class TestBlindSpotSubstitutionHead:
 
 class TestBlindSpotBase64Eval:
     @pytest.mark.xfail(
-        reason="Blind spot #3 (Scout-2/338 §5.3): base64 eval. v0.2 entropy "
-        "detection near `| sh`.",
+        reason="Blind spot #3 (Scout-2/338 §5.3): base64 eval. v0.2 entropy detection near `| sh`.",
     )
     @pytest.mark.asyncio
     async def test_base64_pipe_sh(self):
@@ -313,11 +311,14 @@ class TestBlindSpotWriteThenExecute:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Write",
-             "tool_input": {
-                 "file_path": "/home/user/run.sh",
-                 "content": "#!/bin/bash\nrm -rf /\n",
-             }},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Write",
+                "tool_input": {
+                    "file_path": "/home/user/run.sh",
+                    "content": "#!/bin/bash\nrm -rf /\n",
+                },
+            },
             "tu1",
             {"signal": None},
         )

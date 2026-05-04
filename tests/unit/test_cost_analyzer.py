@@ -692,9 +692,7 @@ class TestModelCosts:
 class TestModelCostsResilience:
     """BON-351 D8 + D5 resilience corners — innovation surface."""
 
-    def test_pathological_corpus_groups_correctly_and_sorts(
-        self, ledger_path: Path
-    ) -> None:
+    def test_pathological_corpus_groups_correctly_and_sorts(self, ledger_path: Path) -> None:
         """10_000 records across 5 models — sort + count + sum are correct.
 
         Locks Sage D8 (model_costs aggregator) at scale. Without an O(N)

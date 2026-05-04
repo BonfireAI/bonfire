@@ -87,14 +87,10 @@ class TestQuery:
         """Entries containing more query words score higher and come first."""
         backend = InMemoryVaultBackend()
         await backend.store(
-            VaultEntry(
-                content="alpha beta", entry_type="code_chunk", content_hash="a"
-            )
+            VaultEntry(content="alpha beta", entry_type="code_chunk", content_hash="a")
         )
         await backend.store(
-            VaultEntry(
-                content="alpha beta gamma", entry_type="code_chunk", content_hash="b"
-            )
+            VaultEntry(content="alpha beta gamma", entry_type="code_chunk", content_hash="b")
         )
         await backend.store(
             VaultEntry(content="unrelated", entry_type="code_chunk", content_hash="c")
@@ -107,9 +103,7 @@ class TestQuery:
     async def test_query_filters_by_entry_type(self) -> None:
         """entry_type kwarg filters results before scoring."""
         backend = InMemoryVaultBackend()
-        await backend.store(
-            VaultEntry(content="alpha", entry_type="code_chunk", content_hash="a")
-        )
+        await backend.store(VaultEntry(content="alpha", entry_type="code_chunk", content_hash="a"))
         await backend.store(
             VaultEntry(
                 content="alpha",
@@ -138,9 +132,7 @@ class TestQuery:
     # knight-a(innovative): edge — zero matches returns empty list cleanly.
     async def test_query_returns_empty_when_no_match(self) -> None:
         backend = InMemoryVaultBackend()
-        await backend.store(
-            VaultEntry(content="hello", entry_type="code_chunk", content_hash="h")
-        )
+        await backend.store(VaultEntry(content="hello", entry_type="code_chunk", content_hash="h"))
         assert await backend.query("zzz") == []
 
 
@@ -149,9 +141,7 @@ class TestExists:
 
     async def test_exists_returns_true_after_store(self) -> None:
         backend = InMemoryVaultBackend()
-        entry = VaultEntry(
-            content="payload", entry_type="code_chunk", content_hash="known-hash"
-        )
+        entry = VaultEntry(content="payload", entry_type="code_chunk", content_hash="known-hash")
         await backend.store(entry)
         assert await backend.exists("known-hash") is True
 

@@ -37,7 +37,6 @@ from bonfire.models.events import (
 )
 from bonfire.protocols import VaultBackend, VaultEntry
 
-
 # ---------------------------------------------------------------------------
 # Test fakes
 # ---------------------------------------------------------------------------

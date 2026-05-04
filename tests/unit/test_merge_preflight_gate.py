@@ -31,9 +31,8 @@ except ImportError:  # pragma: no cover
     META_PREFLIGHT_TEST_DEBT_NOTED = "preflight_test_debt_noted"
     _PREFLIGHT_META_PRESENT = False
 
-from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
+from bonfire.models.envelope import Envelope, ErrorDetail
 from bonfire.models.plan import GateContext, GateResult
-
 
 pytestmark = pytest.mark.skipif(
     MergePreflightGate is None,
@@ -60,7 +59,9 @@ def _ctx(cost: float = 0.0) -> GateContext:
     return GateContext(pipeline_cost_usd=cost)
 
 
-def _completed_envelope(metadata: dict | None = None, result: str = "preflight: PASSED") -> Envelope:
+def _completed_envelope(
+    metadata: dict | None = None, result: str = "preflight: PASSED"
+) -> Envelope:
     """Envelope mimicking a successful MergePreflightHandler return."""
     base = Envelope(task="preflight", metadata=metadata or {})
     return base.with_result(result)

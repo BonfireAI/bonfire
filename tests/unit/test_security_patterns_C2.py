@@ -28,9 +28,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.dispatch.security_patterns not importable: {_IMPORT_ERROR}")
 
 
 CATEGORY_NAME = "destructive-git"
@@ -65,9 +63,7 @@ class TestCategoryC2Action:
     def test_c2_slugs_match_canonical(self):
         shipped = {r.rule_id for r in _rules_in_category()}
         expected = {s for s in CANONICAL_DENY_RULE_IDS if s.startswith("C2.")}
-        assert shipped == expected, (
-            f"C2 slug drift. Expected {expected}, got {shipped}"
-        )
+        assert shipped == expected, f"C2 slug drift. Expected {expected}, got {shipped}"
 
 
 class TestC2_1_GitResetHard:

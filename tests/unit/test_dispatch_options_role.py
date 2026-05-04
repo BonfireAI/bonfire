@@ -32,7 +32,6 @@ from pydantic import ValidationError
 
 from bonfire.protocols import DispatchOptions
 
-
 # ===========================================================================
 # 1. Field existence + canonical name (Sage D4)
 # ===========================================================================

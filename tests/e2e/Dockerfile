@@ -44,9 +44,13 @@ RUN chmod +x /usr/local/bin/e2e-runner
 COPY prompts/runner-prompt.md /usr/local/bin/e2e-prompt.txt
 
 # Defense in depth: drop privileges before the runner executes.
+# Ubuntu 24.04 ships a default `ubuntu` user at UID 1000 — remove it so the
+# runtime `box` user can take that UID cleanly. `|| true` keeps the build
+# idempotent if a future base image drops the default user.
 # /home/box/.claude is the OAuth credential mount target — operators on Claude
 # Max bind-mount their host's ~/.claude/.credentials.json into this directory.
-RUN useradd -m -u 1000 box \
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && useradd -m -u 1000 box \
     && mkdir -p /workspace/out /workspace/target /home/box/.claude \
     && chown -R box:box /workspace /home/box/.claude
 

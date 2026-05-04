@@ -24,6 +24,7 @@ port v1 source per Sage §D9.
 
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -33,6 +34,10 @@ from typer.testing import CliRunner
 from bonfire.cli.app import app
 
 runner = CliRunner()
+
+# Strip ANSI style codes so substring assertions on Typer/Rich help output
+# don't split on style boundaries when CI runners emit colored output.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class TestScanCommand:
@@ -52,8 +57,9 @@ class TestScanCommand:
 
     def test_scan_help_shows_options(self) -> None:
         result = runner.invoke(app, ["scan", "--help"])
-        assert "--no-browser" in result.output
-        assert "--port" in result.output
+        plain = _ANSI_RE.sub("", result.output)
+        assert "--no-browser" in plain
+        assert "--port" in plain
 
     @patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock)
     def test_scan_passes_port_option(self, mock_run: AsyncMock) -> None:

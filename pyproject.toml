@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonfire-ai"
-version = "0.0.0a1"
-description = "AI Build Pipelines for Real Code. Define agents. Wire stages. Ship quality."
+version = "0.1.0a2"
+description = "An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
@@ -26,7 +26,6 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "typer>=0.15",
-    "rich>=14.0",
     "jinja2>=3.0",
     "pyyaml>=6.0",
     "websockets>=13.0",
@@ -51,6 +50,10 @@ Issues = "https://github.com/BonfireAI/bonfire/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bonfire"]
+include = [
+    "src/bonfire/onboard/ui.html",
+    "src/bonfire/py.typed",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -64,6 +67,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["bonfire"]

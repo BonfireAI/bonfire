@@ -1,0 +1,106 @@
+name: Release
+
+# PyPI release workflow for `bonfire-ai`.
+#
+# Triggered by pushing a version tag (`vX.Y.Z` for stable, `vX.Y.ZaN` /
+# `vX.Y.ZbN` / `vX.Y.ZrcN` for pre-releases). The `build` job assembles
+# the wheel + sdist and twine-checks both; the `publish` job uploads them
+# to PyPI via the `pypa/gh-action-pypi-publish` action.
+#
+# Auth path: PyPI Trusted Publisher (OIDC). No API token is referenced —
+# the `id-token: write` permission plus the `pypi` GitHub Environment let
+# `pypa/gh-action-pypi-publish` mint a short-lived OIDC token that PyPI
+# verifies against the Trusted Publisher binding registered for the
+# `bonfire-ai` project.
+#
+# Prerequisites (configured outside this workflow, one-time):
+#   1. PyPI project `bonfire-ai` has a Trusted Publisher binding pointing
+#      at `BonfireAI/bonfire`, workflow `release.yml`, environment `pypi`.
+#   2. GitHub Environment `pypi` exists on this repo (Settings →
+#      Environments). Optional reviewer protection lives there.
+#
+# See `CLAUDE.md` § "Release Policy and Gates" and `docs/release-policy.md`
+# for what blocks a `v0.1.0` tag.
+#
+# `workflow_dispatch` is enabled so a maintainer can manually re-run the
+# pipeline from the Actions tab if a tag-driven run fails partway through.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*a*"
+      - "v*.*.*b*"
+      - "v*.*.*rc*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize publishes per ref. A re-pushed tag (or a manual dispatch on a
+# tag) waits behind any in-flight publish for that same ref rather than
+# racing it. `cancel-in-progress: false` because PyPI does not allow
+# re-uploading a version — never abort a run mid-publish.
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build wheel + sdist
+    # Guard the entire pipeline on a tag ref. `workflow_dispatch` is enabled
+    # for re-running a tag-driven build, but a dispatch from `main` or a
+    # feature branch must not attempt to build for publish. `publish` needs
+    # `build`, so a skipped build cascades to a skipped publish.
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build frontend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Inspect built artifacts (twine check)
+        # `--strict` fails on README rendering warnings so a release never
+        # ships with a broken project page on PyPI.
+        run: python -m twine check --strict dist/*
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (Trusted Publisher)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # required for PyPI Trusted Publisher OIDC auth
+      contents: read
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        # Pinned to a commit SHA (v1.12.2) rather than the floating
+        # `release/v1` ref for supply-chain hardening.
+        uses: pypa/gh-action-pypi-publish@15c56dba361d8335944d31a2ecd17d700fc7bcbc

@@ -1,0 +1,85 @@
+{
+  "pr": 11,
+  "reviewer": "code-reviewer",
+  "reviewed_head_sha": "7eafc35",
+  "verdict": "MERGE",
+  "tests_green": true,
+  "tests_count": 639,
+  "ruff_clean": true,
+  "lens": "engineering-discipline",
+  "findings": [
+    {
+      "id": "ENG-01",
+      "severity": "low",
+      "category": "documentation-vs-signature",
+      "location": "src/bonfire/dispatch/tier.py:12-23; tests/unit/test_dispatch_tier.py:15",
+      "finding": "Test-file docstring line 15 declares check_tier as kw-only (check_tier(*, agent_name, model, tier=\"free\")), but the implementation and the Sage decisions doc §3 show it as positional-or-keyword. No test actually enforces kw-only (no TypeError-on-positional assertion), and every call site uses keyword form, so behavior is safe. The drift is doc-only.",
+      "recommendation": "Align the test docstring to the spec and impl (drop the leading *) OR add the * in impl and a TypeError assertion. Non-blocking for merge.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-02",
+      "severity": "low",
+      "category": "observability",
+      "location": "src/bonfire/dispatch/runner.py:220-234",
+      "finding": "On exception-only exhaustion the final envelope is rebuilt from envelope.with_error(ErrorDetail(error_type='infrastructure', message=str(exc))). If an earlier attempt produced a FAILED envelope with useful ErrorDetail (retryable non-terminal), that detail is replaced with the last str(exc). V1-verbatim and Sage §6 lock this, so behavior is correct-by-spec, but operators debugging mixed failure modes will see only the last exception message.",
+      "recommendation": "Accept for v0.1 (spec-locked). Consider a follow-up ticket to preserve last non-infrastructure error_type if it exists, for richer telemetry.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-03",
+      "severity": "info",
+      "category": "bus-fault-tolerance",
+      "location": "src/bonfire/dispatch/runner.py:50-53",
+      "finding": "_emit() does not catch exceptions from bus.emit() itself. bus.emit() (events/bus.py:89-129) isolates HANDLER failures but the emit call path itself (sequence increment, model_copy) is not broken today. Any future bus.emit()-raising bug would propagate into the except-Exception retry handler at line 201 and be misattributed as an infrastructure failure, incrementing retries. Not a bug today; a coupling observation.",
+      "recommendation": "No action. If the bus contract changes in the future, reconsider wrapping _emit with try/except.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-04",
+      "severity": "info",
+      "category": "retry-algorithm-correctness",
+      "location": "src/bonfire/dispatch/runner.py:117-218",
+      "finding": "Verified: delay = retry_delay * (2 ** attempt); no sleep before first attempt (sleep happens after a failed attempt, inside the attempt<max_retries guard); no sleep after final exhausted attempt (the last loop iteration's retry-block is guarded by attempt<max_retries so it is skipped); retries field counts retries not attempts (first-attempt success = 0; max_retries=3 exhaustion = 3); total call count on exhaustion = max_retries + 1. All three cardinality variants are covered by TestAttemptCardinality. Backoff determinism covered in TestBackoff. Terminal error set matches Sage §3.1 exactly (5 entries, axiom_load dropped per the public-repo adaptation).",
+      "recommendation": "APPROVE. Retry algorithm is correct and spec-aligned.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-05",
+      "severity": "info",
+      "category": "async-patterns",
+      "location": "src/bonfire/dispatch/runner.py:56-71, sdk_backend.py:114-155",
+      "finding": "Verified: _attempt_once awaits backend.execute() directly under asyncio.timeout(); no sync-in-async mixing. SDK backend correctly uses `async with aclosing(stream)` around the async generator returned by query(), ensuring aclose() on early return (RateLimitError rejected path). time.monotonic() used for durations (not wall clock). await/emit pattern is clean.",
+      "recommendation": "APPROVE.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-06",
+      "severity": "info",
+      "category": "pydantic-v2-idioms",
+      "location": "src/bonfire/dispatch/result.py",
+      "finding": "DispatchResult uses model_config = ConfigDict(frozen=True), bare-type field annotations (envelope: Envelope, cost_usd: float, etc.) — idiomatic Pydantic v2. Envelope is runtime-imported with noqa: TC001 because Pydantic needs the concrete class at model-creation time; that noqa is correct and matches the project's 'TC003 breaks Pydantic' rule. No Field(...) metadata is required because all fields are required-by-position and have trivial validation. Good.",
+      "recommendation": "APPROVE.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-07",
+      "severity": "info",
+      "category": "sdk-backend-error-wrapping",
+      "location": "src/bonfire/dispatch/sdk_backend.py:65-85",
+      "finding": "Verified: outer try/except in execute() wraps _do_execute(); ErrorDetail populated with error_type=type(exc).__name__, message=str(exc), traceback=tb_module.format_exc(). Never-raises guarantee holds. Inner _do_execute handles RateLimitError rejection by returning an envelope-with-error (not raising), and AgentError (is_error=True from ResultMessage) similarly returned as error-envelope. Clean separation of provider-specific signals from infrastructure exceptions.",
+      "recommendation": "APPROVE.",
+      "blocker": false
+    },
+    {
+      "id": "ENG-08",
+      "severity": "info",
+      "category": "lazy-import + tier-stateless",
+      "location": "src/bonfire/dispatch/pydantic_ai_backend.py:24,51-55; src/bonfire/dispatch/tier.py",
+      "finding": "PydanticAIBackend: module-level `Agent: Any = None` sentinel, lazy import inside execute() via `global Agent`, cached after first use; importable without pydantic_ai installed (Sage §1.1). Test docstring explicitly notes this backend does NOT try/except — the runner's exception-loop is the safety net, by design. TierGate is genuinely stateless: no __init__ state, method returns True for all inputs, matrix of unicode/empty/whitespace/long-string inputs all pass.",
+      "recommendation": "APPROVE.",
+      "blocker": false
+    }
+  ],
+  "recommendation": "MERGE. Implementation is V1-verbatim, async patterns are sound, retry algorithm is correct (spec-aligned on all three edges: no pre-sleep, no post-exhaustion sleep, retries-counts-retries), SDK backend error wrapping is complete with traceback capture, lazy import pattern for pydantic_ai is clean, TierGate is stateless. 639/639 tests green under PYTHONPATH to review worktree; ruff clean. Only one low-severity doc drift (ENG-01, check_tier test docstring claims kw-only that impl does not enforce) and one observability note (ENG-02, exception-exhaustion error_type overwrite) — both non-blocking and consistent with V1."
+}

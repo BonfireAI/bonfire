@@ -1,0 +1,100 @@
+[stage.started]
+phrases = [
+    "Off we go. {agent_name} takes the {stage_name}.",
+    "{stage_name} opens. {agent_name} is ready.",
+    "Easy now. {agent_name} begins {stage_name}.",
+]
+
+[stage.completed]
+phrases = [
+    "Beautiful. {stage_name} is done — {duration_seconds}s for ${cost_usd}.",
+    "{agent_name} finished {stage_name} in {duration_seconds}s. ${cost_usd} well spent.",
+    "Look at that. {stage_name} held together.",
+]
+
+[stage.failed]
+phrases = [
+    "It happens. {stage_name} stumbled — {error_message}",
+    "{agent_name} caught a snag at {stage_name}. {error_message}",
+    "Don't worry, we look at this together. {stage_name}: {error_message}",
+]
+
+[pipeline.started]
+phrases = [
+    "Here we go. {plan_name}, with ${budget_usd} to spend. Take your time.",
+    "{plan_name} sets out. Budget ${budget_usd}. I'm right here with you.",
+    "All right. {plan_name} begins. The path is open.",
+]
+
+[pipeline.completed]
+phrases = [
+    "Done. {stages_completed} stages in {duration_seconds}s, ${total_cost_usd} all in. Look at what you built.",
+    "{stages_completed} stages cleared, {duration_seconds}s, ${total_cost_usd}. Nicely flown.",
+    "We made it. {stages_completed} stages in the books.",
+]
+
+[pipeline.failed]
+phrases = [
+    "{failed_stage} broke. We can try again — {error_message}",
+    "Pipeline caught at {failed_stage}. {error_message}. Onward when you're ready.",
+    "Not this time. {failed_stage}: {error_message}. Don't let it end here.",
+]
+
+[session.started]
+phrases = [
+    "A new session. {task}, by way of {workflow}. I'll be at your shoulder.",
+    "Begin when you like. {task} ahead of us — {workflow} will carry it.",
+    "Welcome back. {task}, {workflow}. Off we go.",
+]
+
+[quality.failed]
+phrases = [
+    "{gate_name} caught {stage_name}. Severity {severity} — {message}. We'll get there.",
+    "The {gate_name} gate isn't satisfied with {stage_name}. {message}.",
+    "{stage_name} didn't clear {gate_name}. That's the standard holding the line, not you.",
+]
+
+[cost.budget_warning]
+phrases = [
+    "{percent}% of the budget already — ${current_usd} of ${budget_usd}. Worth a glance.",
+    "Budget is at {percent}%. ${current_usd} of ${budget_usd} spent. Pace as you like.",
+    "Heads up — ${current_usd} of ${budget_usd} gone ({percent}%).",
+]
+
+[dispatch.failed]
+phrases = [
+    "{agent_name} couldn't get out the door. {error_message}",
+    "Dispatch got tangled for {agent_name}. {error_message}",
+    "We couldn't send {agent_name} this run. {error_message}.",
+]
+
+# Vault lifecycle — the knowledge store as a quiet companion to Falcor.
+# Lifecycle event-bus emission is deferred to a follow-up; phrase banks
+# pre-staged so wiring lands cleanly when vault.* events are emitted.
+[vault.stored]
+phrases = [
+    "The Vault has it. {entry_type} kept safe.",
+    "{entry_type} tucked away in the Vault. It will keep.",
+    "Saved — the Vault holds the {entry_type}.",
+]
+
+[vault.retrieved]
+phrases = [
+    "The Vault opens. {entry_type} — here you are.",
+    "{entry_type} is back in your hands. The Vault remembered.",
+    "Pulled from the Vault — {entry_type}.",
+]
+
+[vault.migrated]
+phrases = [
+    "{entries_migrated} entries carried over. They'll be at home in the new shelves.",
+    "The Vault has been rebuilt. {entries_migrated} entries hold.",
+    "Migration is done. {entries_migrated} entries safely across.",
+]
+
+[vault.queried]
+phrases = [
+    "{result_count} matches surface. The Vault is helpful that way.",
+    "The Vault answers — {result_count} matches.",
+    "Found {result_count} in the Vault for you.",
+]

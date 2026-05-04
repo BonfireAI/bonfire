@@ -1,0 +1,67 @@
+[stage.started]
+phrases = [
+    "[{stage_name}] started ({agent_name})",
+]
+
+[stage.completed]
+phrases = [
+    "[{stage_name}] completed ({duration_seconds}s, ${cost_usd})",
+]
+
+[stage.failed]
+phrases = [
+    "[{stage_name}] failed: {error_message}",
+]
+
+[pipeline.completed]
+phrases = [
+    "[pipeline] completed ({stages_completed} stages, {duration_seconds}s, ${total_cost_usd})",
+]
+
+[pipeline.failed]
+phrases = [
+    "[pipeline] failed at {failed_stage}: {error_message}",
+]
+
+[session.started]
+phrases = [
+    "[session] started: {task} ({workflow})",
+]
+
+[quality.failed]
+phrases = [
+    "[{gate_name}] {stage_name} failed ({severity}): {message}",
+]
+
+[cost.budget_warning]
+phrases = [
+    "[budget] {percent}% used (${current_usd}/${budget_usd})",
+]
+
+[dispatch.failed]
+phrases = [
+    "[dispatch] {agent_name} failed: {error_message}",
+]
+
+# Vault lifecycle — the knowledge store as an active named surface.
+# Lifecycle event-bus emission is deferred to a follow-up; phrase banks
+# pre-staged so wiring lands cleanly when vault.* events are emitted.
+[vault.stored]
+phrases = [
+    "[vault] +1 {entry_type}",
+]
+
+[vault.retrieved]
+phrases = [
+    "[vault] get {entry_type}",
+]
+
+[vault.migrated]
+phrases = [
+    "[vault] migrate ({entries_migrated})",
+]
+
+[vault.queried]
+phrases = [
+    "[vault] query ({result_count})",
+]

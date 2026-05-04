@@ -136,6 +136,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env*
+!.env.example
 .envrc
 .venv
 env/
@@ -205,3 +207,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Claude Code per-machine settings + ephemeral worktrees
+.claude/settings.local.json
+.claude/worktrees/

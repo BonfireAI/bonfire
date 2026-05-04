@@ -138,7 +138,7 @@ set_phase "compute_baseline_hashes"
 # ---------------------------------------------------------------------
 set_phase "drive_claude_cli"
 
-SESSION_ID="$(uuidgen)"
+SESSION_ID="$(< /proc/sys/kernel/random/uuid)"
 START_TS="$(date +%s)"
 export BONFIRE_COST_LEDGER_PATH=/workspace/target/.bonfire/costs.jsonl
 export BONFIRE_SESSION_DIR=/workspace/target/.bonfire/sessions

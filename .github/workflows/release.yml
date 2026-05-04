@@ -1,0 +1,89 @@
+name: Release
+
+# PyPI release workflow for `bonfire-ai`.
+#
+# Triggered by pushing a version tag (`vX.Y.Z` for stable, `vX.Y.ZaN` /
+# `vX.Y.ZbN` / `vX.Y.ZrcN` for pre-releases). The `build` job assembles
+# the wheel + sdist and twine-checks both; the `publish` job uploads them
+# to PyPI via the `pypa/gh-action-pypi-publish` action.
+#
+# Auth path: PyPI Trusted Publisher (OIDC). No API token is referenced —
+# the `id-token: write` permission plus the `pypi` GitHub Environment let
+# `pypa/gh-action-pypi-publish` mint a short-lived OIDC token that PyPI
+# verifies against the Trusted Publisher binding registered for the
+# `bonfire-ai` project.
+#
+# Prerequisites (configured outside this workflow, one-time):
+#   1. PyPI project `bonfire-ai` has a Trusted Publisher binding pointing
+#      at `BonfireAI/bonfire`, workflow `release.yml`, environment `pypi`.
+#   2. GitHub Environment `pypi` exists on this repo (Settings →
+#      Environments). Optional reviewer protection lives there.
+#
+# See `CLAUDE.md` § "Release Policy and Gates" and `docs/release-policy.md`
+# for what blocks a `v0.1.0` tag.
+#
+# `workflow_dispatch` is enabled so a maintainer can manually re-run the
+# pipeline from the Actions tab if a tag-driven run fails partway through.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*a*"
+      - "v*.*.*b*"
+      - "v*.*.*rc*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheel + sdist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build frontend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Inspect built artifacts (twine check)
+        run: python -m twine check dist/*
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (Trusted Publisher)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # required for PyPI Trusted Publisher OIDC auth
+      contents: read
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

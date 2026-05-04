@@ -94,13 +94,8 @@ PY
 }
 
 # Trap: any non-zero exit (including SIGTERM/SIGINT) routes through here.
-on_exit_trap() {
-    local rc=$?
-    if [[ $rc -ne 0 ]]; then
-        emit_failure_verdict "trap:nonzero_exit" "$rc"
-    fi
-}
-trap on_exit_trap EXIT
+# shellcheck disable=SC2154  # rc is assigned by 'rc=$?' at trap-fire time
+trap 'rc=$?; if [[ $rc -ne 0 ]]; then emit_failure_verdict "trap:nonzero_exit" "$rc"; fi' EXIT
 trap 'emit_failure_verdict "trap:sigterm" 143; exit 143' TERM
 trap 'emit_failure_verdict "trap:sigint" 130; exit 130' INT
 

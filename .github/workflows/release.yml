@@ -37,9 +37,22 @@ on:
 permissions:
   contents: read
 
+# Serialize publishes per ref. A re-pushed tag (or a manual dispatch on a
+# tag) waits behind any in-flight publish for that same ref rather than
+# racing it. `cancel-in-progress: false` because PyPI does not allow
+# re-uploading a version — never abort a run mid-publish.
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build wheel + sdist
+    # Guard the entire pipeline on a tag ref. `workflow_dispatch` is enabled
+    # for re-running a tag-driven build, but a dispatch from `main` or a
+    # feature branch must not attempt to build for publish. `publish` needs
+    # `build`, so a skipped build cascades to a skipped publish.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,7 +74,9 @@ jobs:
         run: python -m build
 
       - name: Inspect built artifacts (twine check)
-        run: python -m twine check dist/*
+        # `--strict` fails on README rendering warnings so a release never
+        # ships with a broken project page on PyPI.
+        run: python -m twine check --strict dist/*
 
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
@@ -86,4 +101,6 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        # Pinned to a commit SHA (v1.12.2) rather than the floating
+        # `release/v1` ref for supply-chain hardening.
+        uses: pypa/gh-action-pypi-publish@15c56dba361d8335944d31a2ecd17d700fc7bcbc

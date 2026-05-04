@@ -43,14 +43,23 @@ RUN chmod +x /usr/local/bin/e2e-runner
 # Bake the in-box prompt template — claude-cli reads this verbatim.
 COPY prompts/runner-prompt.md /usr/local/bin/e2e-prompt.txt
 
+# BOX_UID/BOX_GID default to 1000 (matches the GitHub Actions runner). The
+# driver script passes `--build-arg BOX_UID=$(id -u)` and `BOX_GID=$(id -g)`
+# so the container's runtime user has the same numeric UID as the operator
+# on the host. That keeps bind-mounted output directories writable from the
+# container even when the operator's host UID is not 1000.
+ARG BOX_UID=1000
+ARG BOX_GID=1000
+
 # Defense in depth: drop privileges before the runner executes.
 # Ubuntu 24.04 ships a default `ubuntu` user at UID 1000 — remove it so the
-# runtime `box` user can take that UID cleanly. `|| true` keeps the build
-# idempotent if a future base image drops the default user.
+# runtime `box` user can take that UID cleanly when BOX_UID=1000. `|| true`
+# keeps the build idempotent if a future base image drops the default user.
 # /home/box/.claude is the OAuth credential mount target — operators on Claude
 # Max bind-mount their host's ~/.claude/.credentials.json into this directory.
 RUN userdel -r ubuntu 2>/dev/null || true \
-    && useradd -m -u 1000 box \
+    && groupadd -g $BOX_GID box 2>/dev/null || true \
+    && useradd -m -u $BOX_UID -g $BOX_GID box \
     && mkdir -p /workspace/out /workspace/target /home/box/.claude \
     && chown -R box:box /workspace /home/box/.claude
 

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
 """Canonical agent role definitions for Bonfire.
 
 The StrEnum value IS the serialized form IS the config key IS the grep target.
@@ -22,11 +25,12 @@ class AgentRole(StrEnum):
         researcher  -> Research Agent  / Scout
         tester      -> Test Agent      / Knight
         implementer -> Build Agent     / Warrior
-        verifier    -> Verify Agent    / Assayer
+        verifier    -> Verify Agent    / Cleric
         publisher   -> Publish Agent   / Bard
         reviewer    -> Review Agent    / Wizard
-        closer      -> Release Agent   / Herald
+        closer      -> Release Agent   / Steward
         synthesizer -> Synthesis Agent / Sage
+        analyst     -> Analysis Agent  / Architect
     """
 
     RESEARCHER = "researcher"
@@ -37,3 +41,4 @@ class AgentRole(StrEnum):
     REVIEWER = "reviewer"
     CLOSER = "closer"
     SYNTHESIZER = "synthesizer"
+    ANALYST = "analyst"

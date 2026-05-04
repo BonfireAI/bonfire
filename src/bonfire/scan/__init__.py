@@ -1,1 +1,11 @@
-"""bonfire.scan — placeholder for v0.1 transfer."""
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
+"""Scanners that produce VaultEntry records for knowledge ingestion."""
+
+from __future__ import annotations
+
+from bonfire.scan.decision_recorder import DecisionRecorder
+from bonfire.scan.tech_scanner import TechScanner
+
+__all__ = ["TechScanner", "DecisionRecorder"]

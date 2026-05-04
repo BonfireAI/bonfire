@@ -1,0 +1,94 @@
+{
+  "pr": 10,
+  "reviewer": "superpowers:code-reviewer",
+  "reviewed_head_sha": "0aa64b3",
+  "verdict": "APPROVE",
+  "findings": [
+    {
+      "id": "R-001",
+      "severity": "suggestion",
+      "lens": "engineering-discipline:scope-hygiene",
+      "file": "src/bonfire/events/consumers/display.py",
+      "line": 30,
+      "summary": "DisplayConsumer retains V1's persona branches though wire_consumers dropped the kwarg (Sage \u00a73 adaptation).",
+      "detail": "The Sage decisions doc explicitly drops `persona` from the public v0.1 wire_consumers signature because `bonfire.persona` does not exist in public v0.1. However DisplayConsumer.__init__ still accepts `persona: Any | None = None` and four handlers (_on_stage_completed, _on_stage_failed, _on_quality_failed, _on_cost_budget_warning at lines 47-51, 56-60, 64-68, 74-77) all contain `if self._persona is not None: result = self._persona.format_event(event); ...` branches. Because wire_consumers never passes persona, the branches are dead code in the v0.1 entry path. They are only reachable by direct `DisplayConsumer(callback=..., persona=...)` instantiation, which is not part of the public v0.1 surface. Either (a) leave intact (transfer fidelity) and annotate with a scope comment, or (b) strip the branches to match the narrower v0.1 surface and restore when bonfire.persona lands. Leaning (a) — matches V1 verbatim and shrinks diff with the persona wave.",
+      "suggestion": "No action required pre-merge. Consider adding a one-line comment at display.py:34 noting 'persona is V1-only; public v0.1 never wires it (see Sage \u00a73)' so a future reader doesn't chase a dead branch."
+    },
+    {
+      "id": "R-002",
+      "severity": "suggestion",
+      "lens": "engineering-discipline:user-facing-polish",
+      "file": "src/bonfire/events/consumers/cost.py",
+      "line": 64,
+      "summary": "CostBudgetWarning.percent can exceed 100.0 when a single dispatch overshoots budget (e.g. 500%).",
+      "detail": "The latching logic is correct and mirrors V1 exactly. Thresholds are ordered 100-first then 80-second (cost.py:45 then :56) so a single large dispatch crossing both fires BOTH events. The warning emits `percent=percent` with no cap (line 64), so a cost=50 / budget=10 dispatch emits a CostBudgetWarning with percent=500.0. DisplayConsumer renders this as '\u26a0 Budget 500.0% consumed ($50.00 / $10.00)'. Not incorrect \u2014 percent is a ratio, not capped \u2014 but the string is awkward. V1 exhibits identical behavior, so fidelity is preserved. Flag only for a future display polish pass.",
+      "suggestion": "Out of scope for W2.3 (transfer, not redesign). Consider filing a polish ticket for the display wave to either cap percent at 100 or label the warning differently when percent > 100. No pre-merge action."
+    },
+    {
+      "id": "R-003",
+      "severity": "info",
+      "lens": "engineering-discipline:async-correctness",
+      "file": "src/bonfire/events/bus.py",
+      "line": 104,
+      "summary": "Sequence counter advances before any handler runs \u2014 correctly preserves monotonicity across handler failures.",
+      "detail": "`self._sequence += 1` at line 104 executes before `model_copy(update={\"sequence\": self._sequence})` at line 105 and before any handler dispatch. Because the counter is incremented synchronously at the top of emit(), an exception in any handler cannot unroll it. Verified by test `test_counter_still_advances_on_handler_failure` (test_event_bus.py:783). Also verified by test `test_emit_with_no_subscribers_still_increments_sequence` (:826). Semantics are correct: first emit stamps 1, each subsequent emit stamps N+1, regardless of handler success. Positive confirmation \u2014 no action.",
+      "suggestion": "None. Discipline-lens approves."
+    },
+    {
+      "id": "R-004",
+      "severity": "info",
+      "lens": "engineering-discipline:consumer-isolation",
+      "file": "src/bonfire/events/bus.py",
+      "line": 109,
+      "summary": "Per-handler try/except with `except Exception` \u2014 narrower than bare except, wider than specific types. Consumer isolation invariant holds.",
+      "detail": "Both the typed loop (:108-117) and global loop (:120-129) wrap each `await handler(stamped)` in an independent try/except Exception block. Not bare `except:` \u2014 keyboard interrupts and system exits propagate correctly. Errors are logged with handler qualname, event class name, and sequence number via `logger.exception`, which captures the traceback automatically. Verified by `TestConsumerIsolation` suite (7 tests) and `TestConsumerCoexistence` suite (5 tests). The logging discipline (qualname + event type + sequence) gives operators the three data points needed to diagnose a peer-isolation incident in production. Strong positive.",
+      "suggestion": "None. Discipline-lens approves."
+    },
+    {
+      "id": "R-005",
+      "severity": "info",
+      "lens": "engineering-discipline:pydantic-v2",
+      "file": "src/bonfire/events/bus.py",
+      "line": 105,
+      "summary": "`model_copy(update={...})` is the correct Pydantic v2 idiom and produces a new frozen instance.",
+      "detail": "Pydantic v2 `model_copy(update=...)` returns a new model instance with updated fields; the source remains untouched. This is the correct idiom for frozen models (BonfireEvent is frozen per W2.1). Verified by `test_original_event_is_not_mutated` (:591), `test_handler_receives_stamped_copy_not_original` (:605), and `test_stamped_copy_preserves_other_fields` (:641). No accidental mutation path. Positive confirmation.",
+      "suggestion": "None."
+    },
+    {
+      "id": "R-006",
+      "severity": "info",
+      "lens": "engineering-discipline:kwarg-enforcement",
+      "file": "src/bonfire/events/consumers/__init__.py",
+      "line": 26,
+      "summary": "wire_consumers enforces keyword-only via leading `*`; all 5 public v0.1 kwargs present.",
+      "detail": "Signature at __init__.py:26-33: `def wire_consumers(*, bus, persistence, cost_tracker, display_callback, vault_backend) -> None`. Leading `*` enforces keyword-only. Five kwargs match Sage \u00a73 adjudication exactly (persona and cost_ledger_path dropped per v0.1 adaptation). Positional invocation raises TypeError (verified by `test_wire_consumers_is_keyword_only` :855). Factory is 30 lines, no side effects beyond subscribe calls, no returns (None). Clean.",
+      "suggestion": "None."
+    },
+    {
+      "id": "R-007",
+      "severity": "info",
+      "lens": "engineering-discipline:sync-async-detection",
+      "file": "src/bonfire/events/consumers/display.py",
+      "line": 33,
+      "summary": "DisplayConsumer detects sync vs async callback via `asyncio.iscoroutinefunction`, cached at init.",
+      "detail": "Line 33 caches `self._is_async = asyncio.iscoroutinefunction(callback)` at construction. The `_call` method (line 36-44) branches: async path awaits, sync path calls directly. Exceptions from either mode are caught at line 43-44 with `logger.warning(..., exc_info=True)`. Verified by `TestDisplayConsumerCallbackModes` (2 tests) and `TestDisplayConsumerResilience` (sync + async broken callback tests). `asyncio.iscoroutinefunction` correctly identifies AsyncMock (used in tests) as async. Callers passing unusual patterns (e.g. `functools.partial(async_fn)`) are a known edge case but not exercised by public v0.1 wiring.",
+      "suggestion": "None. If a future caller wires a partial, the detection could misfire \u2014 but that is out-of-scope for W2.3."
+    },
+    {
+      "id": "R-008",
+      "severity": "info",
+      "lens": "engineering-discipline:option-a-surface",
+      "file": "src/bonfire/events/consumers/vault_ingest.py",
+      "line": 1,
+      "summary": "VaultIngestConsumer implements the Sage Option A minimal stub \u2014 no bonfire.vault or bonfire.protocols imports.",
+      "detail": "Per Sage \u00a72 decisions: Option A = minimal in-file class, 4 typed subscriptions, _safe_store swallows backend exceptions. File imports stdlib + typing + `bonfire.models.events` only (lines 13-23). Class defines 4 handlers that delegate to `_safe_store`, which does `getattr(self.backend, 'store', None)` guard (line 46) then try/except around `await store(event)` (line 49-52). No hashing, no dedup, no VaultEntry construction, no bonfire.vault.* or bonfire.protocols imports. Scope matches Sage decision exactly. Verified by `TestVaultIngestConsumerSurface` (5 tests).",
+      "suggestion": "None. Exemplary scope discipline."
+    }
+  ],
+  "evidence": {
+    "pytest_from_worktree_with_pythonpath": "374 passed in 0.74s",
+    "pytest_events_only": "112 passed in 0.49s",
+    "ruff_full_tree": "All checks passed!",
+    "note": "Default editable install points at /home/ishtar/Projects/bonfire-public/src/bonfire/ (main tree), not the worktree. Running pytest from the worktree without PYTHONPATH override yields 262 passed + 112 errors because the events tests can't find bonfire.events.bus \u2014 the MAIN tree's editable install does not have the new modules. This is a local tooling artifact, NOT a PR defect. The PR is verified green via PYTHONPATH=.../worktree/src."
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "pr": 11,
+  "reviewer": "wizard",
+  "reviewed_head_sha": "7eafc35",
+  "verdict": "APPROVE",
+  "tests_green": true,
+  "tests_count": 639,
+  "ruff_clean": true,
+  "scrub_clean": true,
+  "terminal_error_count": 5,
+  "findings": [
+    {
+      "id": "W-001",
+      "severity": "NIT",
+      "lens": 7,
+      "summary": "Sage decisions doc §2.3 specifies __all__ = {DispatchResult, TierGate, execute_with_retry} but the shipped __init__.py exposes the two backends (ClaudeSDKBackend, PydanticAIBackend) as well. The canonical runner test uses `<= exported` (subset), so this is a deliberate superset, not a failure — but the Sage doc is now mildly out of date.",
+      "path": "src/bonfire/dispatch/__init__.py",
+      "line": 9,
+      "recommendation": "Optional follow-up: add one line to the Sage decisions doc noting that the final __init__ superset includes the two backends as convenience re-exports. Not blocking."
+    }
+  ]
+}

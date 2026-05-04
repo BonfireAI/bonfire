@@ -1,0 +1,85 @@
+name: Smoke
+
+# BON-354 — release-artifact smoke gate.
+#
+# Builds the v0.1.0 wheel + sdist, twine-checks both, then installs each
+# into a fresh venv and runs `tests/smoke/smoke_test.py` (stdlib only, no
+# pytest). Catches packaging drift, missing data files, and console-script
+# wiring regressions before they reach PyPI.
+#
+# Mocked-only: this workflow does NOT use any LLM API key. The real-key
+# leg lives in the local `tests/e2e/scripts/e2e-box.sh` per
+# `docs/release-gates.md` §"E2E box · Local execution only · Never runs
+# in CI." The `bonfire dispatch` CLI verb is deferred to v0.1.1 (BON-633)
+# per BON-354 comment 9503cd7f.
+
+on:
+  push:
+    branches: [main, v0.1]
+  pull_request:
+    branches: [main, v0.1]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Today only 3.12 is declared in `pyproject.toml` classifiers.
+        # Add 3.13 here once the classifier lands (scout report §5
+        # out-of-scope row 3, D-FT BON-354-FT-7).
+        python-version: ["3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build frontend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Inspect built artifacts (twine check)
+        run: twine check dist/*
+
+      # ----- Wheel install in clean venv ----------------------------------
+      - name: Create wheel-smoke venv
+        run: python -m venv .smoke-wheel
+
+      - name: Install wheel into smoke venv
+        run: |
+          .smoke-wheel/bin/pip install --upgrade pip
+          .smoke-wheel/bin/pip install dist/*.whl
+
+      - name: Smoke test (wheel)
+        run: .smoke-wheel/bin/python tests/smoke/smoke_test.py
+
+      # ----- Sdist install in clean venv ----------------------------------
+      - name: Create sdist-smoke venv
+        run: python -m venv .smoke-sdist
+
+      - name: Install sdist into smoke venv
+        run: |
+          .smoke-sdist/bin/pip install --upgrade pip
+          .smoke-sdist/bin/pip install dist/*.tar.gz
+
+      - name: Smoke test (sdist)
+        run: .smoke-sdist/bin/python tests/smoke/smoke_test.py
+
+      # ----- Publish dist/ as a downloadable artifact ---------------------
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.python-version }}
+          path: dist/*
+          if-no-files-found: error

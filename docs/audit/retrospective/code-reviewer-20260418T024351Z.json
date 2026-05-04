@@ -1,0 +1,84 @@
+{
+  "pr": 9,
+  "reviewer": "superpowers:code-reviewer",
+  "reviewed_head_sha": "4516ef8",
+  "lens": "engineering-discipline",
+  "verdict": "APPROVE",
+  "summary": {
+    "tests_total": 114,
+    "tests_passing": 114,
+    "tests_failing": 0,
+    "ruff_clean": true,
+    "runtime_checkable_count": 4,
+    "protocol_class_count": 4,
+    "dispatch_options_fields": 8,
+    "vault_entry_fields": 10,
+    "pydantic_frozen_verified": true,
+    "entry_id_len_verified": 12,
+    "entry_id_lowercase_hex_verified": true
+  },
+  "findings": [
+    {
+      "id": "R-001",
+      "severity": "suggestion",
+      "lens": "documentation",
+      "file": "src/bonfire/protocols.py",
+      "line": 13,
+      "summary": "Scrubbing removed constraint anchors (C47/C48/C21) without leaving a footprint for grep-tracing.",
+      "detail": "The private v1 docstring carried 'C47', 'C48', 'C21' markers that make constraint violations grep-able across the repo. The public scrub removed them entirely rather than replacing with a neutral anchor. Not a bug — just reduces future auditability.",
+      "suggestion": "Optional: replace with a design-note anchor such as 'Design rule R1/R2/R3' or keep a neutral bullet list as now. No blocker; ship as-is."
+    },
+    {
+      "id": "R-002",
+      "severity": "suggestion",
+      "lens": "type-hints",
+      "file": "src/bonfire/protocols.py",
+      "line": 96,
+      "summary": "`metadata: dict[str, Any]` is permissive by design but the `Any` should be justified inline.",
+      "detail": "`Any` in a public contract is an intentional extensibility hatch for VaultEntry.metadata (score, nested refs, arbitrary backend-specific state), but there is no inline comment asserting the intent. A future reader may propose tightening this to `dict[str, str | int | float]` and break consumers.",
+      "suggestion": "Add a one-line comment: `# metadata is intentionally dict[str, Any] — arbitrary backend-specific payload`."
+    },
+    {
+      "id": "R-003",
+      "severity": "suggestion",
+      "lens": "api-shape",
+      "file": "src/bonfire/protocols.py",
+      "line": 157,
+      "summary": "`VaultBackend.get_by_source(source_path: str)` returns unbounded list — no `limit` parameter.",
+      "detail": "Every other read method on `VaultBackend` is capped (`query` has `limit=5`). `get_by_source` returns an unbounded list, which is a latent O(N) footgun for a backend storing thousands of vault entries. Contract parity would add `limit` with a sane default. BUT: this mirrors the v1 reference exactly — any change is a contract divergence from the authoritative source. Flagging as observation, not a change request for this PR; belongs as a follow-up ticket if the v1 contract ever widens.",
+      "suggestion": "Track as a follow-up ticket ('VaultBackend.get_by_source paging'). Do NOT change here — would diverge from v1 and require a cascading Sage amendment."
+    },
+    {
+      "id": "R-004",
+      "severity": "suggestion",
+      "lens": "test-suite",
+      "file": "tests/unit/test_protocols.py",
+      "line": 62,
+      "summary": "RED-shim `_IMPORT_ERROR` pattern is effectively dead code in the GREEN state; consider pruning post-Warrior.",
+      "detail": "The try/except block at lines 52-66 and the autouse fixture at lines 69-73 exist purely to make the RED collection phase succeed. Now that the Warrior has landed `bonfire.protocols`, this branch is unreachable in normal test runs. It is not harmful (CI still green) and removing it creates churn, but it is technically dead scaffolding in a long-lived test file. Keep for now — it also serves as a canary if the module is ever accidentally removed.",
+      "suggestion": "No action. Acceptable documentary scaffold. Consider pruning only if/when the file is revisited for unrelated work."
+    },
+    {
+      "id": "R-005",
+      "severity": "suggestion",
+      "lens": "test-determinism",
+      "file": "tests/unit/test_protocols.py",
+      "line": 683,
+      "summary": "`test_entry_ids_are_unique` relies on UUID4 collision probability — non-deterministic but acceptable.",
+      "detail": "Comparing two `uuid4().hex[:12]` values is probabilistically unique (48 bits of entropy → ~1 in 2.8e14 collision), so the test is effectively deterministic. However a strict engineering-discipline reading flags this as a test whose outcome depends on the RNG. Industry-standard pattern; noting for completeness. Not worth adding RNG seeding — would add cost and obscure intent.",
+      "suggestion": "No action. Standard practice."
+    },
+    {
+      "id": "R-006",
+      "severity": "suggestion",
+      "lens": "error-handling",
+      "file": "src/bonfire/protocols.py",
+      "line": 0,
+      "summary": "No protocol method documents failure modes (raises/returns-on-error).",
+      "detail": "`execute`, `store`, `query`, `exists`, `get_by_source`, `evaluate`, `handle` are all silent on exception contracts. For runtime-checkable protocols meant to be implemented by third parties, documenting that 'implementations SHOULD raise XxxError on Y' (or return a sentinel) would harden the contract. This mirrors v1 — change would need Sage coordination. Belongs as a follow-up ADR ('Protocol error contracts') rather than a PR-blocking finding.",
+      "suggestion": "Follow-up ticket: 'ADR: protocol error contracts' — define raise-vs-return-Result stance for all extension points."
+    }
+  ],
+  "recommendation": "MERGE",
+  "reasoning": "Engineering-discipline lens clean. Pydantic v2 idioms correct (ConfigDict(frozen=True), Field(default_factory=...), v2-only imports). Type hints modern (X | None, list[X], dict[K,V], no typing.Optional). All four protocols carry @runtime_checkable, direct Protocol inheritance, no ABC mixing. DispatchOptions (8 fields) and VaultEntry (10 fields) match v1 exactly. `_vault_entry_id()` correctly returns uuid4().hex[:12]. No dead code, no unused imports, ruff-clean across src/ and tests/. 114/114 tests pass when run against the worktree src (initial 114 'errors' were the known worktree editable-install footgun: venv .pth points at main-tree src; verified by running with PYTHONPATH override). Docstring scrub is minimal and principled; three documented adaptations (private refs, forbidden imports guard, TYPE_CHECKING) are all by-design and correct. All 6 findings are suggestions/observations, zero critical/important. Ship."
+}

@@ -5,13 +5,33 @@
 This policy governs how `bonfire-ai` is versioned, tagged, and published
 to PyPI during the pre-release and v0.1 development periods.
 
+## Current Status
+
+`bonfire-ai` is in alpha at version `0.1.0a1`. The original `0.1.0`
+tag shipped on 2026-04-28; on 2026-05-03 the version label was reverted
+to `0.1.0a1` to honestly reflect that the release-gate items in
+[`docs/release-gates.md`](release-gates.md) remain open. Stable
+`v0.1.0` is the future tag once they all clear. See
+[`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.
+
+The two sections below ("Pre-release Period" and "Release Candidate
+Period") describe earlier alpha-numbering phases (`0.0.0a1`, `0.0.0a2`,
+…) that ran during v0.1 development. They are retained as historical
+reference. The current alpha series uses the `0.1.0aN` form. The
+"v0.1.0 Release" section captures the gates that govern cutting the
+stable tag.
+
 ## Pre-release Period
+
+> **Historical.** This phase is complete. `bonfire-ai` was in
+> pre-release until Wave 9.2 of the v0.1 plan landed; `0.1.0` shipped
+> on 2026-04-28.
 
 `bonfire-ai` is in pre-release until Wave 9.2 of the v0.1 plan lands.
 
 During this period:
 
-- **Versions follow PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ...
+- **Versions followed PEP 440 alpha numbering.** `0.0.0a1`, `0.0.0a2`, ... (this earlier pre-release phase ran during v0.1 development; the current alpha series is `0.1.0aN`.)
 - **PyPI publications are name-reservation only.** Each published wheel
   is a stub whose `bonfire` command prints a pre-release notice and
   exits. No functional features ship to PyPI.
@@ -22,6 +42,9 @@ During this period:
 
 ## Release Candidate Period
 
+> **Historical.** This phase is complete. The release-candidate window
+> closed when `0.1.0` was cut on 2026-04-28.
+
 When Wave 8 (documentation polish) is complete and Wave 9 (smoke tests)
 is in flight:
 
@@ -30,7 +53,8 @@ is in flight:
 - The pre-release banner is reworded to a release-candidate notice with
   a known-issues list.
 - PyPI publications remain alpha-classified; `pip install bonfire-ai`
-  without `--pre` still yields `0.0.0a1`.
+  without `--pre` resolves to the most recent stable release (currently
+  `0.1.0`), not the in-flight rc.
 
 ## v0.1.0 Release
 
@@ -38,9 +62,11 @@ The first functional release is cut when:
 
 - Wave 9.1 end-to-end smoke tests pass in CI on `main`.
 - Wave 9.2 release preparation is merged.
-- All four trust-triangle components (W1.5.1 interfaces, W1.5.3 default
-  allow-list floor, W4.1 user-configurable allow-lists, W4.2 default
-  security hook set) are on `main`.
+- All four trust-triangle components are on `main`: the four
+  `@runtime_checkable` extension protocols (`AgentBackend`,
+  `VaultBackend`, `QualityGate`, `StageHandler`), the default
+  allow-list floor and user-configurable per-role allow-lists (W4.1),
+  and the default security hook set (W4.2).
 
 At that point:
 

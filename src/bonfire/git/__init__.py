@@ -1,1 +1,26 @@
-"""bonfire.git — placeholder for v0.1 transfer."""
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 BonfireAI
+
+"""Git integration — branch management, commit flow, worktree isolation."""
+
+from bonfire.git.path_guard import IsolationViolation, PathGuard, PathGuardError
+from bonfire.git.scratch import (
+    ScratchWorktreeContext,
+    ScratchWorktreeFactory,
+    ScratchWorktreeInfo,
+)
+from bonfire.git.workflow import GitWorkflow
+from bonfire.git.worktree import WorktreeContext, WorktreeInfo, WorktreeManager
+
+__all__ = [
+    "GitWorkflow",
+    "IsolationViolation",
+    "PathGuard",
+    "PathGuardError",
+    "ScratchWorktreeContext",
+    "ScratchWorktreeFactory",
+    "ScratchWorktreeInfo",
+    "WorktreeContext",
+    "WorktreeInfo",
+    "WorktreeManager",
+]

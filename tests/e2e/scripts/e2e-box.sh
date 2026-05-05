@@ -64,7 +64,12 @@ else
 fi
 
 echo "==> Building box image"
+# Pass the operator's UID/GID so the in-container `box` user owns
+# bind-mounted output directories cleanly. Defaults inside the Dockerfile
+# preserve the UID 1000 path used by the GitHub Actions runner.
 docker build \
+  --build-arg "BOX_UID=$(id -u)" \
+  --build-arg "BOX_GID=$(id -g)" \
   -t "$IMAGE_TAG" \
   -f "$REPO_ROOT/tests/e2e/Dockerfile" \
   "$REPO_ROOT/tests/e2e"

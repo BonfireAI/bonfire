@@ -72,9 +72,7 @@ def factory(tmp_git_repo: Path) -> ScratchWorktreeFactory:
 class TestScratchWorktreeFactory:
     """ScratchWorktreeFactory.acquire returns an async context manager."""
 
-    def test_acquire_returns_async_context_manager(
-        self, factory: ScratchWorktreeFactory
-    ) -> None:
+    def test_acquire_returns_async_context_manager(self, factory: ScratchWorktreeFactory) -> None:
         """Sage §D-CL.1 line 840: acquire(base_ref='master') returns async CM."""
         ctx = factory.acquire(base_ref="master", pr_number=1)
         # Async context manager protocol: __aenter__ + __aexit__.
@@ -125,9 +123,7 @@ class TestScratchWorktreeFactory:
             )
 
     @pytest.mark.asyncio
-    async def test_path_removed_after_clean_exit(
-        self, factory: ScratchWorktreeFactory
-    ) -> None:
+    async def test_path_removed_after_clean_exit(self, factory: ScratchWorktreeFactory) -> None:
         """Sage §D-CL.1 line 842: worktree removed after clean __aexit__."""
         ctx = factory.acquire(base_ref="master", pr_number=42)
         captured_path: Path | None = None
@@ -135,9 +131,7 @@ class TestScratchWorktreeFactory:
             captured_path = info.path
             assert captured_path.exists()
         assert captured_path is not None
-        assert not captured_path.exists(), (
-            "Worktree path must be removed after clean __aexit__."
-        )
+        assert not captured_path.exists(), "Worktree path must be removed after clean __aexit__."
 
     @pytest.mark.asyncio
     async def test_path_removed_after_exception_in_block(
@@ -225,9 +219,7 @@ class TestScratchWorktreeBranchNaming:
     """Race-safety: 8-hex random suffix per acquire (Sage §D3 line 345)."""
 
     @pytest.mark.asyncio
-    async def test_branch_name_matches_format(
-        self, factory: ScratchWorktreeFactory
-    ) -> None:
+    async def test_branch_name_matches_format(self, factory: ScratchWorktreeFactory) -> None:
         """Sage §D3 line 345: branch_name == 'bonfire/preflight-pr-<N>-<8-hex>'."""
         ctx = factory.acquire(base_ref="master", pr_number=42)
         async with ctx as info:

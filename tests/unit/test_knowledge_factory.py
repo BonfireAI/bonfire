@@ -26,7 +26,6 @@ from bonfire.knowledge import get_vault_backend
 from bonfire.knowledge.memory import InMemoryVaultBackend
 from bonfire.protocols import VaultBackend
 
-
 # ---------------------------------------------------------------------------
 # Signature / defaults
 # ---------------------------------------------------------------------------

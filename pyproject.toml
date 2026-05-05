@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonfire-ai"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary."
 readme = "README.md"
 license = "Apache-2.0"
@@ -68,6 +68,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["bonfire"]

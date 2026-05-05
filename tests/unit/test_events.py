@@ -663,6 +663,7 @@ def _minimal_kwargs(cls: type[BonfireEvent]) -> dict:
     # without every _minimal_kwargs caller needing the import at module load.
     try:
         from bonfire.models.events import SecurityDenied as _SD  # type: ignore[import]
+
         per_class[_SD] = {
             "tool_name": "Bash",
             "reason": "r",

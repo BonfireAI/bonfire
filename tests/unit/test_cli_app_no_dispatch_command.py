@@ -138,8 +138,7 @@ def test_no_dispatch_alias_registered(alias: str) -> None:
             )
         elif cmd.callback is not None:
             assert cmd.callback.__name__ != alias, (
-                f"Fossil alias {alias!r} is the callback name. "
-                f"Found: {cmd.callback.__name__}"
+                f"Fossil alias {alias!r} is the callback name. Found: {cmd.callback.__name__}"
             )
 
     # Sub-typer groups must also not match
@@ -173,6 +172,5 @@ def test_help_text_excludes_dispatch_word() -> None:
     # Lowercase comparison — case-insensitive guard
     output_lower = result.output.lower()
     assert "dispatch" not in output_lower, (
-        f"`bonfire --help` output mentions 'dispatch' — fossil residue. "
-        f"Output: {result.output!r}"
+        f"`bonfire --help` output mentions 'dispatch' — fossil residue. Output: {result.output!r}"
     )

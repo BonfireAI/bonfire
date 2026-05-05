@@ -98,9 +98,7 @@ class TestRenderSessionGreeting:
 class TestRenderSessionSummary:
     """Tests for render_session_summary."""
 
-    def test_summary_calls_render_session_end(
-        self, tracker: MagicMock, display: MagicMock
-    ) -> None:
+    def test_summary_calls_render_session_end(self, tracker: MagicMock, display: MagicMock) -> None:
         render_session_summary(
             tracker=tracker,
             display=display,
@@ -134,9 +132,7 @@ class TestRenderSessionSummary:
         kwargs = display.render_session_end.call_args.kwargs
         assert kwargs["temperature_before"] == 50
 
-    def test_summary_passes_temperature_after(
-        self, tracker: MagicMock, display: MagicMock
-    ) -> None:
+    def test_summary_passes_temperature_after(self, tracker: MagicMock, display: MagicMock) -> None:
         render_session_summary(
             tracker=tracker,
             display=display,

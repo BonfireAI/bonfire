@@ -45,9 +45,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"bonfire.models.events.SecurityDenied not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"bonfire.models.events.SecurityDenied not importable: {_IMPORT_ERROR}")
 
 
 SESSION = {"session_id": "sess-abc", "sequence": 1}
@@ -58,10 +56,12 @@ SESSION = {"session_id": "sess-abc", "sequence": 1}
 # ---------------------------------------------------------------------------
 
 
-RESERVED_INFRA_PATTERN_IDS: frozenset[str] = frozenset({
-    "_infra.error",            # ambiguity #3 — hook internal exception
-    "_infra.unwrap-exhausted", # ambiguity #2 — past unwrap_max_depth=5
-})
+RESERVED_INFRA_PATTERN_IDS: frozenset[str] = frozenset(
+    {
+        "_infra.error",  # ambiguity #3 — hook internal exception
+        "_infra.unwrap-exhausted",  # ambiguity #2 — past unwrap_max_depth=5
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -150,21 +150,15 @@ class TestSecurityDeniedFields:
 
     def test_tool_name_required(self):
         with pytest.raises(ValidationError):
-            SecurityDenied(
-                reason="r", pattern_id="C1.1", **SESSION
-            )  # type: ignore[call-arg]
+            SecurityDenied(reason="r", pattern_id="C1.1", **SESSION)  # type: ignore[call-arg]
 
     def test_reason_required(self):
         with pytest.raises(ValidationError):
-            SecurityDenied(
-                tool_name="Bash", pattern_id="C1.1", **SESSION
-            )  # type: ignore[call-arg]
+            SecurityDenied(tool_name="Bash", pattern_id="C1.1", **SESSION)  # type: ignore[call-arg]
 
     def test_pattern_id_required(self):
         with pytest.raises(ValidationError):
-            SecurityDenied(
-                tool_name="Bash", reason="r", **SESSION
-            )  # type: ignore[call-arg]
+            SecurityDenied(tool_name="Bash", reason="r", **SESSION)  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -268,20 +262,38 @@ class TestEventCountDelta:
 
     def test_registry_has_29_entries(self):
         assert len(EVENT_REGISTRY) == 29, (
-            f"Expected 29 registered events (28 base + SecurityDenied), "
-            f"got {len(EVENT_REGISTRY)}."
+            f"Expected 29 registered events (28 base + SecurityDenied), got {len(EVENT_REGISTRY)}."
         )
 
     def test_security_denial_is_only_new_entry(self):
         expected_preexisting = {
-            "pipeline.started", "pipeline.completed", "pipeline.failed", "pipeline.paused",
-            "stage.started", "stage.completed", "stage.failed", "stage.skipped",
-            "dispatch.started", "dispatch.completed", "dispatch.failed", "dispatch.retry",
-            "quality.passed", "quality.failed", "quality.bypassed",
-            "git.branch_created", "git.commit_created", "git.pr_created", "git.pr_merged",
-            "cost.accrued", "cost.budget_warning", "cost.budget_exceeded",
-            "session.started", "session.ended",
-            "xp.awarded", "xp.penalty", "xp.respawn",
+            "pipeline.started",
+            "pipeline.completed",
+            "pipeline.failed",
+            "pipeline.paused",
+            "stage.started",
+            "stage.completed",
+            "stage.failed",
+            "stage.skipped",
+            "dispatch.started",
+            "dispatch.completed",
+            "dispatch.failed",
+            "dispatch.retry",
+            "quality.passed",
+            "quality.failed",
+            "quality.bypassed",
+            "git.branch_created",
+            "git.commit_created",
+            "git.pr_created",
+            "git.pr_merged",
+            "cost.accrued",
+            "cost.budget_warning",
+            "cost.budget_exceeded",
+            "session.started",
+            "session.ended",
+            "xp.awarded",
+            "xp.penalty",
+            "xp.respawn",
             "axiom.loaded",
         }
         assert expected_preexisting.issubset(set(EVENT_REGISTRY.keys())), (

@@ -15,11 +15,8 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from bonfire.knowledge.ingest import ingest_markdown, ingest_session, retrieve_context
 from bonfire.knowledge.memory import InMemoryVaultBackend
-
 
 # ---------------------------------------------------------------------------
 # Markdown ingestion
@@ -52,9 +49,7 @@ class TestIngestMarkdown:
         md = tmp_path / "doc.md"
         md.write_text("# T\n\nBody.\n")
         backend = InMemoryVaultBackend()
-        await ingest_markdown(
-            md, backend=backend, project_name="myproj", git_hash="deadbeef"
-        )
+        await ingest_markdown(md, backend=backend, project_name="myproj", git_hash="deadbeef")
         assert backend._entries
         e = backend._entries[0]
         assert e.project_name == "myproj"

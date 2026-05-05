@@ -73,8 +73,7 @@ class TestMalformedToolInput:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": ["command"]},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": ["command"]},
             "tu1",
             {"signal": None},
         )
@@ -86,8 +85,11 @@ class TestMalformedToolInput:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": b"rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": b"rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -99,8 +101,11 @@ class TestMalformedToolInput:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": 12345}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": 12345},
+            },
             "tu1",
             {"signal": None},
         )
@@ -121,8 +126,11 @@ class TestMalformedToolInput:
         hook = build_preexec_hook(SecurityHooksConfig())
         for evt in ("PostToolUse", "UserPromptSubmit", "Stop", "unknown"):
             result = await hook(
-                {"hook_event_name": evt, "tool_name": "Bash",
-                 "tool_input": {"command": "rm -rf /"}},
+                {
+                    "hook_event_name": evt,
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "rm -rf /"},
+                },
                 "tu1",
                 {"signal": None},
             )
@@ -134,8 +142,7 @@ class TestMalformedToolInput:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse",
-             "tool_input": {"command": "rm -rf /"}},
+            {"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
             "tu1",
             {"signal": None},
         )
@@ -155,8 +162,7 @@ class TestBrokenExtraDenyPatterns:
         broken = SecurityHooksConfig(extra_deny_patterns=["[invalid(regex"])
         hook = build_preexec_hook(broken)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -170,8 +176,11 @@ class TestBrokenExtraDenyPatterns:
         cfg = SecurityHooksConfig(extra_deny_patterns=["(unclosed"])
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "echo hi"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hi"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -184,8 +193,11 @@ class TestBrokenExtraDenyPatterns:
         cfg = SecurityHooksConfig(extra_deny_patterns=[r"\g<99>"])
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "echo hi"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hi"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -218,17 +230,18 @@ class TestErrorBranchEmitsInfraEvent:
 
         cfg = SecurityHooksConfig(extra_deny_patterns=["[invalid(regex"])
         hook = build_preexec_hook(
-            cfg, bus=bus, session_id="s", agent_name="a",
+            cfg,
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
         assert len(captured) == 1, (
-            "Ambiguity #3: error branch MUST emit SecurityDenied for operator "
-            "observability."
+            "Ambiguity #3: error branch MUST emit SecurityDenied for operator observability."
         )
 
     @pytest.mark.asyncio
@@ -247,11 +260,13 @@ class TestErrorBranchEmitsInfraEvent:
 
         cfg = SecurityHooksConfig(extra_deny_patterns=["[invalid(regex"])
         hook = build_preexec_hook(
-            cfg, bus=bus, session_id="s", agent_name="a",
+            cfg,
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -276,11 +291,13 @@ class TestErrorBranchEmitsInfraEvent:
 
         cfg = SecurityHooksConfig(extra_deny_patterns=["[invalid(regex"])
         hook = build_preexec_hook(
-            cfg, bus=bus, session_id="s", agent_name="a",
+            cfg,
+            bus=bus,
+            session_id="s",
+            agent_name="a",
         )
         await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -310,8 +327,11 @@ class TestBusEmissionFailure:
             agent_name="a",
         )
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "rm -rf /"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -326,11 +346,17 @@ class TestBusEmissionFailure:
                 raise ValueError("serialization failed")
 
         hook = build_preexec_hook(
-            SecurityHooksConfig(), bus=BrokenBus(), session_id="s", agent_name="a",  # type: ignore[arg-type]
+            SecurityHooksConfig(),
+            bus=BrokenBus(),
+            session_id="s",
+            agent_name="a",  # type: ignore[arg-type]
         )
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "git push --force origin main"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git push --force origin main"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -355,8 +381,11 @@ class TestInternalFunctionRaises:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "echo hi"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hi"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -375,8 +404,7 @@ class TestInternalFunctionRaises:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -394,8 +422,11 @@ class TestInternalFunctionRaises:
 
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "echo hi"}},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hi"},
+            },
             "tu1",
             {"signal": None},
         )
@@ -415,8 +446,7 @@ class TestErrorReasonFormat:
         cfg = SecurityHooksConfig(extra_deny_patterns=["[broken"])
         hook = build_preexec_hook(cfg)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -443,8 +473,11 @@ class TestCancellationSemantics:
         hook = build_preexec_hook(SecurityHooksConfig())
         with pytest.raises(asyncio.CancelledError):
             await hook(
-                {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-                 "tool_input": {"command": "echo hi"}},
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "echo hi"},
+                },
                 "tu1",
                 {"signal": None},
             )
@@ -466,7 +499,9 @@ class TestDisabledConfigNeverFailsClosed:
 
         envelope = Envelope(task="t", agent_name="a")
         result = _build_security_hooks_dict(
-            SecurityHooksConfig(enabled=False), bus=None, envelope=envelope,
+            SecurityHooksConfig(enabled=False),
+            bus=None,
+            envelope=envelope,
         )
         assert result is None
 
@@ -488,8 +523,7 @@ class TestNoAllowByOmission:
         monkeypatch.setattr(hooks_mod, "_extract_command", exploding_extract)
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )
@@ -510,8 +544,7 @@ class TestNoAllowByOmission:
         monkeypatch.setattr(hooks_mod, "_normalize", broken)
         hook = build_preexec_hook(SecurityHooksConfig())
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-             "tool_input": {"command": "ls"}},
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}},
             "tu1",
             {"signal": None},
         )

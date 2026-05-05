@@ -33,8 +33,7 @@ async def _run(cmd: str) -> dict[str, Any]:
 
     hook = build_preexec_hook(SecurityHooksConfig())
     return await hook(
-        {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-         "tool_input": {"command": cmd}},
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": cmd}},
         "tu1",
         {"signal": None},
     )
@@ -214,11 +213,11 @@ class TestZeroWidthCharacters:
     )
     @pytest.mark.asyncio
     async def test_zero_width_space_split_rm(self):
-        cmd = "r\u200Bm -rf /"
+        cmd = "r\u200bm -rf /"
         assert _is_deny(await _run(cmd))
 
     @pytest.mark.xfail(reason="Zero-width char blind spot.")
     @pytest.mark.asyncio
     async def test_zero_width_joiner_split(self):
-        cmd = "r\u200Dm -rf /"
+        cmd = "r\u200dm -rf /"
         assert _is_deny(await _run(cmd))

@@ -461,8 +461,6 @@ yet exist on disk. ImportError is the expected failure shape.
 """
 
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Knight B fixtures (independent of Knight A's fixtures; harmless duplicates
 # at concatenation time -- pytest tolerates duplicate top-level helpers).

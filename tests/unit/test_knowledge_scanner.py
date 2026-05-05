@@ -25,7 +25,6 @@ from bonfire.knowledge.scanner import (
     ProjectScanner,
 )
 
-
 # ---------------------------------------------------------------------------
 # Dataclass shape (D8.3)
 # ---------------------------------------------------------------------------
@@ -141,9 +140,7 @@ class TestDiscover:
             ("script.sh", "other"),
         ],
     )
-    def test_discover_classifies_by_suffix(
-        self, tmp_path, name: str, expected: str
-    ) -> None:
+    def test_discover_classifies_by_suffix(self, tmp_path, name: str, expected: str) -> None:
         (tmp_path / name).write_text("x")
         manifest = ProjectScanner(tmp_path).discover()
         matching = [f for f in manifest.files if f.path.name == name]

@@ -30,9 +30,7 @@ else:
 @pytest.fixture(autouse=True)
 def _require_module():
     if _IMPORT_ERROR is not None:
-        pytest.fail(
-            f"DispatchOptions.security_hooks not importable: {_IMPORT_ERROR}"
-        )
+        pytest.fail(f"DispatchOptions.security_hooks not importable: {_IMPORT_ERROR}")
 
 
 class TestSecurityHooksFieldPresent:

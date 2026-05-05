@@ -815,9 +815,7 @@ class TestModuleConstraints:
         allowed = "from bonfire.dispatch.security_hooks import SecurityHooksConfig"
         # Strip the one allowed line then assert no other dispatch imports
         # slipped in.
-        stripped = "\n".join(
-            line for line in source.splitlines() if line.strip() != allowed
-        )
+        stripped = "\n".join(line for line in source.splitlines() if line.strip() != allowed)
         assert "from bonfire.dispatch" not in stripped
         assert "import bonfire.dispatch" not in stripped
 

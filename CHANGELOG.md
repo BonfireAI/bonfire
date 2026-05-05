@@ -4,6 +4,57 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a2] — 2026-05-05
+
+Lands the first declarative integration surface — Instruction Set Markup
+(ISM) v1 — alongside the OIDC-driven PyPI release workflow and a cluster of
+developer-environment compatibility fixes. First end-to-end exercise of the
+new release pipeline.
+
+### Added
+
+- **Instruction Set Markup (ISM) v1.** Declarative third-party tool
+  integrations as markdown + YAML documents instead of hand-coded Python.
+  Frozen Pydantic schema in `src/bonfire/integrations/document.py`
+  (`ISMDocument`, `ISMCategory` covering forge / ticketing / comms / vault /
+  ide, `DetectionRule` discriminated union over command / env_var /
+  file_match / python_import, `Credentials`, `Fallback`, `ISMSchemaError`).
+  Two-tier loader at `src/bonfire/integrations/loader.py` with builtin +
+  user discovery, mirroring `bonfire.persona.loader.PersonaLoader`. First
+  reference adapter ships at
+  `src/bonfire/integrations/builtins/github.ism.md` — forge category,
+  declares `pr.open` / `pr.merge` / `pr.review` / `issue.close`, detects via
+  `gh` CLI + `GITHUB_TOKEN` / `GH_TOKEN` env + `.git/config`. The wheel
+  include in `pyproject.toml` is extended so `.ism.md` files ship.
+
+### Changed
+
+- The PyPI publishing workflow now (a) serializes per-tag publishes via a
+  workflow-level `concurrency` block, (b) guards the build job on the ref
+  being a tag so manual dispatches from non-tag refs do not attempt to
+  publish, (c) pins `pypa/gh-action-pypi-publish` to a commit SHA rather
+  than the floating `release/v1` ref, and (d) runs `twine check --strict`
+  so a malformed long-description fails the build before publish.
+- The release-gate Box Dockerfile is now compatible with hosts whose first-
+  user UID is not 1000. The container's runtime user takes its UID/GID from
+  the operator's host at build time via `--build-arg BOX_UID=$(id -u)`.
+- `tests/e2e/scripts/e2e-runner.sh` mints its session UUID from the kernel
+  random source (`/proc/sys/kernel/random/uuid`) rather than `uuidgen`,
+  removing a userspace package dependency.
+
+### Fixed
+
+- `tests/unit/test_scan_cli.py::test_scan_help_shows_options` is now robust
+  to ANSI escape codes Typer/Rich emit when `FORCE_COLOR=1` is set on CI
+  runners.
+- The shellcheck contract test for the release-gate runner script passes
+  after a static-analysis false positive on the EXIT trap was silenced via
+  an inline `disable=SC2154` directive.
+- The lint backlog under `tests/unit/` is cleared: 16 mechanical ruff
+  violations auto-fixed (import ordering, unused imports, mid-file imports),
+  plus a `tests/**` per-file ignore for `E501` so docstring lines that
+  quote real code-under-test signatures verbatim do not need to wrap.
+
 ## [0.1.0a1] — 2026-05-03
 
 > Renamed from `[0.1.0]` to `[0.1.0a1]` 2026-05-03. The original `0.1.0`
@@ -155,9 +206,11 @@ end-to-end CLI verb are still in progress and ship in subsequent
 
 ### Notes
 
-- Pre-v0.1.0a1 commit history on the `v0.1` branch contains internal-tracker
+- Pre-v0.1.0a2 commit history on the `v0.1` branch contains internal-tracker
   references (e.g., `BON-NNN`) in commit subjects. This is accepted as
-  historical for the v0.1.0a1 alpha release. New commits comply with
-  [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
+  historical through the v0.1.0a2 alpha release; the public tree's strict
+  enforcement begins with the next post-alpha sweep. New commits from that
+  point on comply with [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
 
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1
+[0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2

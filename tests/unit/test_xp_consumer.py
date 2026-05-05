@@ -520,9 +520,7 @@ class TestEmitKeywordShape:
         # construction. The bus's internal sequence counter is irrelevant
         # here — we capture the unstamped XPRespawn the consumer constructs.
         nonzero_event = _pipeline_completed(sequence=99)
-        await consumer_inst.on_pipeline_completed(
-            nonzero_event, success=True, stages_failed=3
-        )
+        await consumer_inst.on_pipeline_completed(nonzero_event, success=True, stages_failed=3)
 
         # Sage §D8: XPRespawn(session_id, sequence, checkpoint, reason)
         respawn_calls = [

@@ -15,7 +15,7 @@ Adopted innovations (2 drift-guards over floor):
     Sage §D2 + v1 cli/app.py:54-63.
 
   * test_version_flag_format_stability — asserts the exact format
-    `bonfire 0.1.0a1` after strip(). Guards against capitalization/prefix drift
+    `bonfire 0.1.0a2` after strip(). Guards against capitalization/prefix drift
     that the substring floor test would miss. Cites Sage §D8 + v1 cli/app.py:20-23.
 
 Imports are RED — `bonfire.cli.app` does not exist as a package until Warriors
@@ -303,22 +303,22 @@ class TestRegistrationSurface:
             typer.echo(f"bonfire {__version__}")
 
         v1 source line 22 confirms: `typer.echo(f"bonfire {__version__}")`.
-        Current `__version__` resolves to "0.1.0a1" per
+        Current `__version__` resolves to "0.1.0a2" per
         `src/bonfire/__init__.py` and `pyproject.toml`.
 
         Floor test `test_version_flag_contains_version_string` only checks
         `"0.1.0" in result.output` — would still pass if format drifted to
-        e.g. "Bonfire-AI v0.1.0a1" or "bonfire (version: 0.1.0a1)".
+        e.g. "Bonfire-AI v0.1.0a2" or "bonfire (version: 0.1.0a2)".
 
         This test asserts the EXACT lower-case "bonfire" prefix + literal
-        " 0.1.0a1" — guards against:
+        " 0.1.0a2" — guards against:
           - capitalization drift (Bonfire vs bonfire);
-          - extra "v" prefix (bonfire v0.1.0a1);
+          - extra "v" prefix (bonfire v0.1.0a2);
           - any wrapper text around the version string.
         """
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
         # Strip trailing newline only — content must match verbatim
-        assert result.output.strip() == "bonfire 0.1.0a1", (
-            f"Expected exact format 'bonfire 0.1.0a1'; got {result.output.strip()!r}"
+        assert result.output.strip() == "bonfire 0.1.0a2", (
+            f"Expected exact format 'bonfire 0.1.0a2'; got {result.output.strip()!r}"
         )

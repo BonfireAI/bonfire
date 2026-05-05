@@ -18,7 +18,6 @@ from bonfire.knowledge.chunker import chunk_markdown, chunk_source_file
 from bonfire.knowledge.hasher import content_hash as _ch
 from bonfire.protocols import VaultEntry
 
-
 # ---------------------------------------------------------------------------
 # Markdown
 # ---------------------------------------------------------------------------
@@ -171,9 +170,7 @@ class TestChunkSourcePython:
         assert "async def gamma" in joined
 
     def test_chunk_source_file_tags_python_correctly(self) -> None:
-        chunks = chunk_source_file(
-            "class A:\n    pass\n\ndef f(): pass\n", source_path="m.py"
-        )
+        chunks = chunk_source_file("class A:\n    pass\n\ndef f(): pass\n", source_path="m.py")
         for c in chunks:
             assert c.tags == ["chunk", "python"]
 
@@ -204,9 +201,7 @@ class TestChunkSourceNonPython:
 
 class TestChunkSourceMetadata:
     def test_chunk_source_file_metadata_has_chunk_index_and_total(self) -> None:
-        src = (
-            "class A:\n    pass\n\nclass B:\n    pass\n\nclass C:\n    pass\n"
-        )
+        src = "class A:\n    pass\n\nclass B:\n    pass\n\nclass C:\n    pass\n"
         chunks = chunk_source_file(src, source_path="m.py")
         total = len(chunks)
         for i, c in enumerate(chunks):
@@ -214,9 +209,7 @@ class TestChunkSourceMetadata:
             assert c.metadata["total_chunks"] == total
 
     def test_chunk_source_file_entry_type_is_code_chunk(self) -> None:
-        chunks = chunk_source_file(
-            "class A: pass\nclass B: pass\n", source_path="m.py"
-        )
+        chunks = chunk_source_file("class A: pass\nclass B: pass\n", source_path="m.py")
         for c in chunks:
             assert c.entry_type == "code_chunk"
 

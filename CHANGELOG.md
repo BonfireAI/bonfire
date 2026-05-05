@@ -4,12 +4,28 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0a2] — 2026-05-04
+## [0.1.0a2] — 2026-05-05
 
-Maintenance alpha. No functional changes from `0.1.0a1` — this release lands
-a set of release-pipeline hardening and developer-environment compatibility
-fixes accumulated since the prior alpha, and exercises the OIDC-driven
-release workflow end-to-end for the first time.
+Lands the first declarative integration surface — Instruction Set Markup
+(ISM) v1 — alongside the OIDC-driven PyPI release workflow and a cluster of
+developer-environment compatibility fixes. First end-to-end exercise of the
+new release pipeline.
+
+### Added
+
+- **Instruction Set Markup (ISM) v1.** Declarative third-party tool
+  integrations as markdown + YAML documents instead of hand-coded Python.
+  Frozen Pydantic schema in `src/bonfire/integrations/document.py`
+  (`ISMDocument`, `ISMCategory` covering forge / ticketing / comms / vault /
+  ide, `DetectionRule` discriminated union over command / env_var /
+  file_match / python_import, `Credentials`, `Fallback`, `ISMSchemaError`).
+  Two-tier loader at `src/bonfire/integrations/loader.py` with builtin +
+  user discovery, mirroring `bonfire.persona.loader.PersonaLoader`. First
+  reference adapter ships at
+  `src/bonfire/integrations/builtins/github.ism.md` — forge category,
+  declares `pr.open` / `pr.merge` / `pr.review` / `issue.close`, detects via
+  `gh` CLI + `GITHUB_TOKEN` / `GH_TOKEN` env + `.git/config`. The wheel
+  include in `pyproject.toml` is extended so `.ism.md` files ship.
 
 ### Changed
 

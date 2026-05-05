@@ -53,6 +53,7 @@ packages = ["src/bonfire"]
 include = [
     "src/bonfire/onboard/ui.html",
     "src/bonfire/py.typed",
+    "src/bonfire/integrations/builtins/*.ism.md",
 ]
 
 [tool.pytest.ini_options]

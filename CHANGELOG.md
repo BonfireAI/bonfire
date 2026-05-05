@@ -190,9 +190,11 @@ end-to-end CLI verb are still in progress and ship in subsequent
 
 ### Notes
 
-- Pre-v0.1.0a1 commit history on the `v0.1` branch contains internal-tracker
+- Pre-v0.1.0a2 commit history on the `v0.1` branch contains internal-tracker
   references (e.g., `BON-NNN`) in commit subjects. This is accepted as
-  historical for the v0.1.0a1 alpha release. New commits comply with
-  [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
+  historical through the v0.1.0a2 alpha release; the public tree's strict
+  enforcement begins with the next post-alpha sweep. New commits from that
+  point on comply with [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
 
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1
+[0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2

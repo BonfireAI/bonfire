@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
 
-> ### Alpha — `v0.1.0a1`
+> ### Alpha — `v0.1.0a2`
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
 > engine, the role-bound cadre, the quality gates, the persona system,

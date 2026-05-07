@@ -24,8 +24,11 @@ port v1 source per Sage §D9.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import io
 import re
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -170,3 +173,71 @@ class TestScanCliThreading:
             f"`Front Door closed.` missing from output when "
             f"KeyboardInterrupt propagates; got output={result.output!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# --no-browser semantics — clarify headless / agent-driven flow
+# ---------------------------------------------------------------------------
+
+
+class TestScanNoBrowserSemantics:
+    """`--no-browser` accurately describes the headless WS-driven flow.
+
+    The flag only suppresses `typer.launch(url)`; the WS server still binds
+    and blocks on `await server.client_connected.wait()` until any client
+    connects. Operators driving scan via websocat / scripted WS clients need
+    the help text and runtime echo to reflect that reality.
+    """
+
+    def test_scan_no_browser_help_clarifies_client_semantics(self) -> None:
+        """`--no-browser` help text mentions WS-client semantics, not just the browser."""
+        result = runner.invoke(app, ["scan", "--help"])
+        assert result.exit_code == 0
+        plain = _ANSI_RE.sub("", result.output)
+        assert "--no-browser" in plain
+        markers = ("client", "websocket", "ws://", "manual")
+        plain_lower = plain.lower()
+        assert any(m in plain_lower for m in markers), (
+            f"--no-browser help text should mention one of {markers!r} so the "
+            f"reader sees the WS server still binds and waits for any client; "
+            f"got help output: {plain!r}"
+        )
+
+    def test_run_scan_no_browser_echoes_client_not_browser(self) -> None:
+        """Runtime echo with `no_browser=True` mentions client + ws_url, not browser."""
+        with (
+            patch("bonfire.cli.commands.scan.FrontDoorServer") as mock_server_cls,
+            patch("bonfire.onboard.flow.run_front_door", new_callable=AsyncMock) as mock_flow,
+        ):
+            mock_server = MagicMock()
+            mock_server.start = AsyncMock(return_value=None)
+            mock_server.stop = AsyncMock(return_value=None)
+            mock_server.url = "http://127.0.0.1:8765"
+            mock_server.ws_url = "ws://127.0.0.1:8765/ws"
+
+            client_event = asyncio.Event()
+            client_event.set()
+            shutdown_event = asyncio.Event()
+            shutdown_event.set()
+            mock_server.client_connected = client_event
+            mock_server.shutdown_event = shutdown_event
+
+            mock_server_cls.return_value = mock_server
+            mock_flow.return_value = "/tmp/bonfire.toml"
+
+            from bonfire.cli.commands.scan import _run_scan
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                asyncio.run(_run_scan(port=8765, no_browser=True))
+            captured = buf.getvalue()
+
+            assert "Waiting for browser connection" not in captured, (
+                f"With --no-browser, the runtime echo should not say "
+                f"`Waiting for browser connection...`; got: {captured!r}"
+            )
+            assert ("client" in captured.lower()) or ("ws://" in captured), (
+                f"With --no-browser, the runtime echo should mention `client` "
+                f"or include the ws:// URL so headless operators see what to "
+                f"connect; got: {captured!r}"
+            )

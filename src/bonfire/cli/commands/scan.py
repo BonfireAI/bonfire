@@ -72,7 +72,7 @@ def scan(
         ),
     ),
 ) -> None:
-    """Launch The Front Door — browser-based onboarding scan."""
+    """Launch The Front Door — WS-driven onboarding scan."""
     try:
         asyncio.run(_run_scan(port=port, no_browser=no_browser))
     except KeyboardInterrupt:

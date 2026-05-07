@@ -20,6 +20,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import logging
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import websockets
 
 _DRIVER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "petri_conversational_driver.py"
 _spec = importlib.util.spec_from_file_location("petri_conversational_driver", _DRIVER_PATH)
@@ -239,6 +241,48 @@ class TestInterleavedScanComplete:
         observed_panels = {u["panel"] for u in drv.scan_updates_seen}
         assert observed_panels == {"A", "B"}
 
+    async def test_scan_phase_stays_scanning_through_interleaved_completes(self, drv: Any) -> None:
+        """Discriminator for a buggy 'barrier' implementation.
+
+        ``scan_phase`` MUST stay ``"scanning"`` through every interleaved
+        ``scan_complete`` until ``all_scans_complete`` arrives. A buggy
+        driver that flipped the phase to ``"conversing"`` on the first
+        ``scan_complete`` would fail this test — the previous
+        ``is_done``-only check did not catch that bug class because the
+        existing driver structurally cannot flip ``is_done`` except via
+        ``config_generated``, so a "barrier" bug would simply set a flag
+        the driver ignored and still pass.
+        """
+        assert drv.scan_phase == "pending"
+        await drv.handle_event(_evt("scan_start", panels=["A", "B"]))
+        assert drv.scan_phase == "scanning"
+
+        await drv.handle_event(_evt("scan_update", panel="A", label="x", value="1"))
+        assert drv.scan_phase == "scanning"
+
+        # First scan_complete arrives — buggy "barrier" driver would
+        # advance the phase here.
+        await drv.handle_event(_evt("scan_complete", panel="A", item_count=1))
+        assert drv.scan_phase == "scanning", (
+            "scan_complete from one panel must NOT advance scan_phase; "
+            "other panels are still emitting scan_updates."
+        )
+
+        # Panel B still emitting after panel A completed.
+        await drv.handle_event(_evt("scan_update", panel="B", label="y", value="2"))
+        assert drv.scan_phase == "scanning"
+
+        await drv.handle_event(_evt("scan_complete", panel="B", item_count=1))
+        assert drv.scan_phase == "scanning"
+
+        # Only all_scans_complete (or conversation_start) advances the phase.
+        await drv.handle_event(_evt("all_scans_complete", total_items=2))
+        assert drv.scan_phase == "conversing"
+
+        await drv.handle_event(_evt("config_generated", config_toml="x", annotations={}))
+        assert drv.scan_phase == "done"
+        assert drv.is_done is True
+
     async def test_full_session_with_interleaving_terminates_only_on_config(self, drv: Any) -> None:
         """End-to-end interleaved sequence including conversation. is_done must
         flip on config_generated and not before.
@@ -286,3 +330,113 @@ class TestCustomAnswers:
             assert reply is not None
             replies.append(reply["text"])
         assert replies == ["answer one", "answer two", "answer three"]
+
+
+# ---------------------------------------------------------------------------
+# 5. run_driver against an in-process WebSocket server
+# ---------------------------------------------------------------------------
+
+
+async def _serve(handler: Any) -> Any:
+    """Start an ephemeral websockets server on 127.0.0.1:0."""
+    return await websockets.serve(handler, "127.0.0.1", 0)
+
+
+def _server_port(server: Any) -> int:
+    return server.sockets[0].getsockname()[1]
+
+
+class TestRunDriverTimeout:
+    async def test_run_driver_returns_nonzero_on_receive_timeout(self) -> None:
+        """A silent server triggers asyncio.wait_for; run_driver must return
+        a non-zero rc and the driver must NOT be marked done.
+        """
+        server_started = asyncio.Event()
+
+        async def silent_handler(ws: Any) -> None:
+            server_started.set()
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                pass
+
+        server = await _serve(silent_handler)
+        try:
+            port = _server_port(server)
+            ws_url = f"ws://127.0.0.1:{port}"
+            d = driver.ConversationalDriver(logger=logging.getLogger("test"))
+            rc = await driver.run_driver(ws_url, d, logging.getLogger("test"), timeout_seconds=0.2)
+            # rc == 2 specifically (not 1) discriminates between "timeout
+            # fired" and "connection closed before done". A buggy
+            # no-timeout driver would only ever return 1.
+            assert rc == 2, f"Timeout must return rc=2, got {rc}"
+            assert d.is_done is False
+        finally:
+            server.close()
+            await server.wait_closed()
+
+
+class TestRunDriverFakeServer:
+    async def test_clean_shutdown_on_config_generated(self) -> None:
+        """End-to-end against an in-process server: drive answers a question,
+        then sees config_generated, returns rc=0.
+        """
+        received: list[dict[str, Any]] = []
+
+        async def handler(ws: Any) -> None:
+            await ws.send(
+                json.dumps({"type": "falcor_message", "subtype": "question", "text": "Q1?"})
+            )
+            reply = await ws.recv()
+            received.append(json.loads(reply))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "config_generated",
+                        "config_toml": "[bonfire]\n",
+                        "annotations": {},
+                    }
+                )
+            )
+            try:
+                async for _ in ws:
+                    pass
+            except websockets.exceptions.ConnectionClosed:
+                pass
+
+        server = await _serve(handler)
+        try:
+            port = _server_port(server)
+            ws_url = f"ws://127.0.0.1:{port}"
+            d = driver.ConversationalDriver(logger=logging.getLogger("test"))
+            rc = await driver.run_driver(ws_url, d, logging.getLogger("test"))
+            assert rc == 0
+            assert d.is_done is True
+            assert len(received) == 1
+            assert received[0]["type"] == "user_message"
+            assert isinstance(received[0]["text"], str)
+            assert received[0]["text"].strip() != ""
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    async def test_returns_one_when_server_closes_mid_flow(self) -> None:
+        """Server sends one event then closes the connection. run_driver
+        returns 1 because is_done is False at close.
+        """
+
+        async def handler(ws: Any) -> None:
+            await ws.send(json.dumps({"type": "scan_start", "panels": ["A"]}))
+            await ws.close()
+
+        server = await _serve(handler)
+        try:
+            port = _server_port(server)
+            ws_url = f"ws://127.0.0.1:{port}"
+            d = driver.ConversationalDriver(logger=logging.getLogger("test"))
+            rc = await driver.run_driver(ws_url, d, logging.getLogger("test"))
+            assert rc == 1
+            assert d.is_done is False
+        finally:
+            server.close()
+            await server.wait_closed()

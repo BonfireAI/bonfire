@@ -5,11 +5,18 @@
 
 A minimal Python WebSocket client that lets us drive the Front Door
 onboarding scan end-to-end inside the dogfood petri-box VM without a
-browser. Spawns ``python -m bonfire scan --no-browser``, parses the
-listening URL the CLI prints to stdout, opens the WebSocket as a
-client, logs every server-emitted event, replies to each
-``falcor_message`` of subtype ``"question"`` with a canned answer, and
-exits with rc=0 once ``config_generated`` arrives.
+browser. Spawns the ``bonfire`` console script that sits next to the
+active venv's ``python`` interpreter (preferred, so the source-tree
+``bonfire`` package is imported rather than a globally-installed
+build); falls back to ``shutil.which("bonfire")`` and finally to
+``python -c "from bonfire.cli import app; ..."`` if no script is on
+PATH. Parses the listening URL the CLI prints to stdout, opens the
+WebSocket as a client, logs every server-emitted event, replies to
+each ``falcor_message`` of subtype ``"question"`` with a canned
+answer, and exits with rc=0 once ``config_generated`` arrives. If no
+event is received for ``--timeout-seconds`` seconds (default 120),
+the driver logs the last event seen, terminates the subprocess, and
+exits non-zero.
 
 The driver does NOT integrate an LLM — the canned answers are a small
 dict literal at the top of the file. Replacing them with a model call
@@ -19,7 +26,8 @@ the answer source.
 Usage::
 
     cd ~/work/bonfire-public && source .venv/bin/activate
-    python scripts/petri_conversational_driver.py [--cwd PATH]
+    python scripts/petri_conversational_driver.py [--cwd PATH] \\
+        [--timeout-seconds 120]
 
 The driver runs the CLI in the directory it is invoked from unless
 ``--cwd`` is given. A ``bonfire.toml`` will be written to that
@@ -37,9 +45,11 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import websockets
+
+ScanPhase = Literal["pending", "scanning", "conversing", "done"]
 
 __all__ = [
     "DEFAULT_ANSWERS",
@@ -114,17 +124,14 @@ class ConversationalDriver:
     requires no reply.
     """
 
-    answers: dict[int, str] | None = None
-    logger: logging.Logger | None = None
-    scan_updates_seen: list[dict[str, Any]] = field(default_factory=list)
-    _question_index: int = 0
-    _done: bool = False
-
-    def __post_init__(self) -> None:
-        if self.answers is None:
-            self.answers = dict(DEFAULT_ANSWERS)
-        if self.logger is None:
-            self.logger = logging.getLogger("petri_conversational_driver")
+    answers: dict[int, str] = field(default_factory=lambda: dict(DEFAULT_ANSWERS))
+    logger: logging.Logger = field(
+        default_factory=lambda: logging.getLogger("petri_conversational_driver")
+    )
+    scan_updates_seen: list[dict[str, Any]] = field(init=False, default_factory=list, repr=False)
+    scan_phase: ScanPhase = field(init=False, default="pending", repr=False)
+    _question_index: int = field(init=False, default=0, repr=False)
+    _done: bool = field(init=False, default=False, repr=False)
 
     @property
     def is_done(self) -> bool:
@@ -139,8 +146,15 @@ class ConversationalDriver:
         own ``ScanComplete`` the instant its scan finishes, while other
         panels are still emitting ``scan_update``s. The only event that
         terminates the driver is ``config_generated``.
+
+        ``scan_phase`` advances on ``scan_start`` (→ ``scanning``),
+        ``all_scans_complete`` or ``conversation_start`` (→
+        ``conversing``), and ``config_generated`` (→ ``done``). It
+        does NOT advance on ``scan_complete`` — a buggy "barrier"
+        implementation that flipped the phase on the first
+        ``scan_complete`` would be caught by
+        ``test_scan_phase_stays_scanning_through_interleaved_completes``.
         """
-        assert self.logger is not None  # narrow Optional for type-checker
         data = self._coerce(event)
         if data is None:
             return None
@@ -149,6 +163,7 @@ class ConversationalDriver:
         self.logger.info("event type=%s payload=%s", type_, data)
 
         if type_ == "scan_start":
+            self.scan_phase = "scanning"
             return None
         if type_ == "scan_update":
             self.scan_updates_seen.append(dict(data))
@@ -156,20 +171,22 @@ class ConversationalDriver:
         if type_ == "scan_complete":
             return None
         if type_ == "all_scans_complete":
+            self.scan_phase = "conversing"
             return None
         if type_ == "conversation_start":
+            self.scan_phase = "conversing"
             return None
         if type_ == "falcor_message":
             return self._handle_falcor(data)
         if type_ == "config_generated":
             self._done = True
+            self.scan_phase = "done"
             return None
 
         self.logger.warning("Unknown event type %r; ignoring", type_)
         return None
 
     def _coerce(self, event: str | dict[str, Any]) -> dict[str, Any] | None:
-        assert self.logger is not None
         if isinstance(event, dict):
             return event
         try:
@@ -183,7 +200,6 @@ class ConversationalDriver:
         return parsed
 
     def _handle_falcor(self, data: dict[str, Any]) -> dict[str, Any] | None:
-        assert self.logger is not None
         subtype = data.get("subtype")
         text = data.get("text", "")
         if subtype == "question":
@@ -202,7 +218,6 @@ class ConversationalDriver:
         return None
 
     def _answer_for(self, q_number: int) -> str:
-        assert self.answers is not None
         if q_number in self.answers:
             return self.answers[q_number]
         # Fallback: reuse the last canned answer rather than crash if the
@@ -220,19 +235,36 @@ async def run_driver(
     ws_url: str,
     drv: ConversationalDriver,
     logger: logging.Logger,
+    timeout_seconds: float = 120.0,
 ) -> int:
     """Open the WebSocket, dispatch events, exit when ``is_done``.
 
-    Returns 0 on a clean ``config_generated``, 1 if the connection
-    closes before the driver has finished.
+    Returns:
+      ``0`` — clean ``config_generated`` received.
+      ``1`` — connection closed before driver finished.
+      ``2`` — receive timed out (no event for ``timeout_seconds`` s).
     """
-    logger.info("Connecting to %s", ws_url)
+    logger.info("Connecting to %s (recv timeout=%.1fs)", ws_url, timeout_seconds)
+    last_event: Any = None
     async with websockets.connect(ws_url) as ws:
         try:
-            async for raw in ws:
+            while True:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=timeout_seconds)
+                except TimeoutError:
+                    logger.error(
+                        "WS receive timed out after %.1fs; last event seen=%r",
+                        timeout_seconds,
+                        last_event,
+                    )
+                    return 2
                 if not isinstance(raw, str):
                     logger.warning("Non-text frame ignored")
                     continue
+                try:
+                    last_event = json.loads(raw)
+                except json.JSONDecodeError:
+                    last_event = raw
                 reply = await drv.handle_event(raw)
                 if reply is not None:
                     await ws.send(json.dumps(reply))
@@ -313,6 +345,17 @@ async def main(argv: list[str] | None = None) -> int:
         help="Port to bind (0 = random).",
     )
     parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=120.0,
+        help=(
+            "Per-event WebSocket receive timeout (default: 120s). If no "
+            "event arrives within this window, the driver logs the last "
+            "event seen, terminates the scan subprocess, and exits "
+            "non-zero."
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -340,6 +383,9 @@ async def main(argv: list[str] | None = None) -> int:
 
     # Forward the subprocess stderr to our logger in the background.
     stderr_task = asyncio.create_task(_drain(proc.stderr, logger, "scan stderr"))
+    # Hoist stdout_task to outer scope so the finally can cancel it on
+    # KeyboardInterrupt before gather() runs.
+    stdout_task: asyncio.Task[None] | None = None
 
     try:
         ws_url = await _read_until_url(proc.stdout, logger)
@@ -352,7 +398,7 @@ async def main(argv: list[str] | None = None) -> int:
         stdout_task = asyncio.create_task(_drain(proc.stdout, logger, "scan stdout"))
 
         drv = ConversationalDriver(logger=logger)
-        rc = await run_driver(ws_url, drv, logger)
+        rc = await run_driver(ws_url, drv, logger, timeout_seconds=args.timeout_seconds)
 
         # Allow the scan subprocess to settle (it shuts down on WS close).
         try:
@@ -365,12 +411,14 @@ async def main(argv: list[str] | None = None) -> int:
         await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
         scan_rc = proc.returncode if proc.returncode is not None else 0
         logger.info("driver rc=%d, scan rc=%d", rc, scan_rc)
-        return rc or scan_rc
+        return scan_rc if rc == 0 else rc
     finally:
         if proc.returncode is None:
             proc.terminate()
             await proc.wait()
         stderr_task.cancel()
+        if stdout_task is not None:
+            stdout_task.cancel()
 
 
 def _entrypoint() -> int:

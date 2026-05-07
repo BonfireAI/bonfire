@@ -86,7 +86,18 @@ a hardcoded `KNOWN_PANELS` array (`ui.html:362`).
 | `panel`  | `str`   | yes      | panel slug (one of the six)            |
 | `label`  | `str`   | yes      | the row's left-column label            |
 | `value`  | `str`   | yes      | the row's right-column value           |
-| `detail` | `str`   | no       | optional secondary text; defaults `""` |
+| `detail` | `str`   | no       | optional secondary text; defaults `""` (see note below on emit truth) |
+
+**Note on `detail` (parser tolerance vs emit truth)**: "Required: no"
+describes the parser. The field has a default of `""` on the Pydantic
+model (`src/bonfire/onboard/protocol.py:65`), so `parse_server_message`
+accepts frames that omit it and clients should not require it. On the
+wire, however, `flow.scan_emit` calls `event.model_dump()`
+(`src/bonfire/onboard/flow.py:58`), and Pydantic's `model_dump()`
+serializes every field on the model — so the server **always** emits
+`detail`, with the empty string `""` for events that did not set it.
+Drivers should tolerate absence (per the protocol) but in practice will
+always observe the field.
 
 **Fires**: many times per scan, interleaved across panels in parallel. Each
 event is one discovery row in one panel. The orchestrator runs all six
@@ -183,14 +194,22 @@ fades in the chat panel.
 **Fires**: at multiple points; the `subtype` determines origin and intent.
 
 - `subtype="narration"` — emitted by `NarrationEngine.get_narration` while
-  scans are streaming, interleaved between `scan_update`s. Tier-3 events
-  always narrate; Tier 2 narrate on every third discovery; Tier 1 every
-  fourth (`narration.should_narrate`). Skipped events return `None` and
-  emit nothing.
-  Source: `src/bonfire/onboard/narration.py:244-268`. The interleaving call
-  site is `src/bonfire/onboard/flow.py:60-64` (after each `ScanUpdate` is
-  broadcast, the engine is asked for a narration and that too is broadcast
-  if non-`None`).
+  scans are streaming, interleaved between `scan_update`s. The engine
+  keeps a single rolling discovery counter (`_discovery_count`) that
+  increments on every `ScanUpdate` regardless of tier
+  (`src/bonfire/onboard/narration.py:252`). For each event it then
+  classifies the tier and applies the modulo rule against the counter:
+  Tier 3 always narrates; Tier 2 narrates when
+  `_discovery_count % 3 == 0`; Tier 1 narrates when
+  `_discovery_count % 4 == 0`
+  (`src/bonfire/onboard/narration.py:230-242`). The counter is **global,
+  not per-tier** — Tier 2 narrates on the 3rd, 6th, 9th, … discovery
+  overall (only if that discovery itself is Tier 2), so consecutive
+  narratable events can be much further apart than "every third Tier-2
+  event" would imply. Skipped events return `None` and emit nothing.
+  The interleaving call site is `src/bonfire/onboard/flow.py:60-64`
+  (after each `ScanUpdate` is broadcast, the engine is asked for a
+  narration and that too is broadcast if non-`None`).
 - `subtype="question"` — emitted by the conversation engine: the first
   question follows `ConversationStart` in `start()`
   (`src/bonfire/onboard/conversation.py:395`); subsequent questions follow
@@ -248,7 +267,7 @@ The client-type registry has exactly one entry:
 | Field  | Type | Required | Notes                |
 |--------|------|----------|----------------------|
 | `type` | `"user_message"` | yes | discriminator         |
-| `text` | `str` | yes     | user's free-text answer (sent verbatim, trimmed of leading/trailing whitespace by the client) |
+| `text` | `str` | yes     | user's free-text answer; `sendMessage()` calls `.trim()` on the input before sending (`src/bonfire/onboard/ui.html:434`), so leading/trailing whitespace is stripped — the field is **not** verbatim user keystrokes |
 
 **Sent**: each time the user clicks "Send" or presses Enter in the chat
 input during Act II. The session expects exactly three of these (one per
@@ -263,13 +282,19 @@ into the local chat log).
 filters by `data.get("type") == "user_message"`, extracts `text`, calls
 `conversation.handle_answer`). The handler is installed on the server only
 **after** `ConversationEngine.start` has emitted Q1
-(`src/bonfire/onboard/flow.py:96`); any client message sent before that
-point is therefore handled by the previous (None) callback and dropped on
-the floor at `server.py:179`.
+(`src/bonfire/onboard/flow.py:96`). Until that assignment happens,
+`FrontDoorServer._on_message` is `None` and `_ws_handler` gates each
+incoming frame with `if self._on_message is not None:`
+(`src/bonfire/onboard/server.py:179`); when the predicate is false the
+frame is silently dropped (no logging, no error response). Any
+`user_message` sent before Q1 lands is therefore lost without a trace
+on the wire.
 **Source (model)**: `src/bonfire/onboard/protocol.py:114-118`.
 
-The unhandled-callback path in `_ws_handler` logs and continues:
-`src/bonfire/onboard/server.py:179-183`.
+When a callback **is** installed and raises, `_ws_handler` logs the
+exception via `logger.exception("on_message callback failed")` and
+continues reading from the socket
+(`src/bonfire/onboard/server.py:180-183`).
 
 ## 4. State machine
 
@@ -287,14 +312,28 @@ it makes no state decisions of its own.
                               |
                   scan_start (panels[6])
                               |
-                  scan_update * N   <----+
-                              |          | (interleaved
-                  falcor_message         |  across all
-                    (subtype=narration)  |  six panels)
-                              | <--------+
-                  scan_complete (per panel, * 6)
+                              v
+        +------------------------------------------------------+
+        | Six panels run concurrently in asyncio.gather. The   |
+        | wire interleaves these three event types arbitrarily |
+        | between panels for the duration of Act I:            |
+        |                                                      |
+        |   scan_update     (one row from any panel)           |
+        |   falcor_message  (subtype=narration; emitted by     |
+        |                    flow.scan_emit immediately after  |
+        |                    a scan_update, when the engine    |
+        |                    decides to narrate)               |
+        |   scan_complete   (panel=<one of six>; emitted by    |
+        |                    _run_one as soon as that panel's  |
+        |                    scan() returns)                   |
+        |                                                      |
+        | A panel's scan_complete may fire while other panels  |
+        | are still emitting scan_updates and narrations. The  |
+        | only guarantee is that a panel's own scan_updates    |
+        | precede its own scan_complete.                       |
+        +------------------------------------------------------+
                               |
-                  all_scans_complete (total_items)
+                  all_scans_complete (total_items)   # the only barrier
                               |
                   ~ 0.5 s pause (server-side)
                               |
@@ -343,6 +382,24 @@ flow), `src/bonfire/onboard/orchestrator.py:60-84` (Act I event order),
 `src/bonfire/onboard/conversation.py:389-446` (Act II event order),
 `src/bonfire/onboard/flow.py:107-114` (Act III).
 
+`all_scans_complete` is the only Act-I barrier. A driver that gates further
+work on having seen `scan_complete` (for any panel, or for "the last"
+panel) is buggy: per `src/bonfire/onboard/orchestrator.py:104-110`,
+`_run_one` emits `ScanComplete` from inside that panel's own coroutine
+the moment its `scan()` returns, while sibling panels in the same
+`asyncio.gather` (`src/bonfire/onboard/orchestrator.py:79-80`) may still
+be emitting `ScanUpdate`s. Drivers MUST treat `all_scans_complete` as the
+sole transition signal out of Act I.
+
+If the browser disconnects during Act I, the scan keeps running on the
+server (the orchestrator is already in flight); subsequent broadcasts
+become silent no-ops because `FrontDoorServer.broadcast` early-returns
+when no clients remain (`src/bonfire/onboard/server.py:107-110`). The
+flow then proceeds into Act II and hangs at `await
+conversation_done.wait()` (`src/bonfire/onboard/flow.py:99-101`) until
+Ctrl-C — the comment in `flow.py` calls this out as accepted v1
+behavior.
+
 ## 5. Asymmetries and gaps
 
 This section names every place the protocol's two ends do not match
@@ -384,6 +441,18 @@ ghost messages.
   testing"; the server never parses its own outgoing payloads. A driver
   on the client side may use it to validate received frames against the
   Pydantic models.
+- **`parse_client_message` is in the same condition.** The helper at
+  `src/bonfire/onboard/protocol.py:155-157` exists alongside
+  `parse_server_message` but is bypassed by the production handler:
+  `_ws_handler` calls `json.loads` directly
+  (`src/bonfire/onboard/server.py:175`) and dispatches the resulting
+  `dict` to the `on_message` callback without going through the Pydantic
+  model. Client-side framing errors that the model would catch (missing
+  fields, wrong types) therefore reach the application layer as raw
+  `dict`s; `flow.on_message` handles this by ignoring frames whose
+  `data.get("type") != "user_message"` (`flow.py:84-85`). A driver
+  reusing this server should call `parse_client_message` itself if it
+  wants Pydantic validation.
 
 ## 6. Versioning
 

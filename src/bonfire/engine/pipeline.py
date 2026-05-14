@@ -32,12 +32,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
+from bonfire.engine.bracket import (
+    BracketRouter,
+    BracketSlot,
+    CaronteBracketRouter,
+)
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.executor import (
     StageExecutor,  # noqa: F401 -- public re-export for patch/discover
 )
 from bonfire.engine.model_resolver import resolve_dispatch_model
-from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
+from bonfire.models.envelope import (
+    META_BRACKET_EFFECTUATE,
+    Envelope,
+    ErrorDetail,
+    TaskStatus,
+)
 from bonfire.models.events import (
     BonfireEvent,
     PipelineCompleted,
@@ -111,6 +121,9 @@ class PipelineEngine:
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
+        pre_bracket: list[StageSpec] | None = None,
+        post_bracket: list[StageSpec] | None = None,
+        bracket_router: BracketRouter | None = None,
     ) -> None:
         self._backend = backend
         self._bus = bus
@@ -121,6 +134,21 @@ class PipelineEngine:
         self._project_root = project_root
         self._tool_policy = tool_policy
         self._settings = settings if settings is not None else factory.load_settings_or_default()
+
+        # Brackets are first-class engine concepts. Each slot fuses a
+        # sequence of stages with a routing strategy; the shipped
+        # default (``CaronteBracketRouter``) maps PASS/CONCERNS/FAIL
+        # onto pipeline success + effectuation. Hephaestus v1.1 plugs
+        # in by passing its own ``bracket_router``; no engine surgery.
+        router = bracket_router if bracket_router is not None else CaronteBracketRouter()
+        self._pre_bracket = BracketSlot(
+            stages=tuple(pre_bracket or ()),
+            router=router,
+        )
+        self._post_bracket = BracketSlot(
+            stages=tuple(post_bracket or ()),
+            router=router,
+        )
 
     # -- Public API ----------------------------------------------------------
 
@@ -156,7 +184,28 @@ class PipelineEngine:
         start: float,
         initial_envelope: Envelope | None = None,
     ) -> PipelineResult:
-        """The real pipeline execution logic."""
+        """The real pipeline execution logic.
+
+        Phase ordering:
+
+        1. Emit ``PipelineStarted``.
+        2. Run the pre-bracket slot (v1.0 ships empty; reserved for the
+           Hephaestus v1.1 Artificer).
+        3. Execute the main DAG (toposorted, with parallel groups,
+           gates, and bounces).
+        4. If the main DAG produced any halting result — failure,
+           gate-failure, budget-exceeded — return it immediately. The
+           post-bracket slot does NOT run; judging a half-built artifact
+           wastes budget. This short-circuit is a natural consequence
+           of returning before reaching the post-bracket phase, not a
+           per-feature special case.
+        5. Run the post-bracket slot. Each stage is dispatched to its
+           handler (typically the Inquisitor) with the same
+           ``prior_results`` shape main-DAG stages see. Each returned
+           envelope is folded through the configured ``BracketRouter``
+           to compute the final ``success`` flag.
+        6. Emit ``PipelineCompleted``; return ``PipelineResult``.
+        """
         stages_done: dict[str, Envelope] = dict(completed)
         total_cost = 0.0
         stage_map = self._build_stage_map(plan)
@@ -170,6 +219,24 @@ class PipelineEngine:
                 budget_usd=plan.budget_usd,
             )
         )
+
+        # --- Pre-bracket phase --------------------------------------------
+        # v1.0 ships ``pre_bracket=None`` everywhere — the slot is empty
+        # and this loop is skipped. Hephaestus v1.1 lands the Artificer
+        # pre-bracket and starts using this slot; no engine change
+        # required.
+        if not self._pre_bracket.is_empty:
+            halt, total_cost = await self._run_bracket_stages(
+                self._pre_bracket,
+                stages_done,
+                total_cost,
+                start,
+                session_id,
+                plan,
+                initial_envelope,
+            )
+            if halt is not None:
+                return halt
 
         # Emit StageSkipped for pre-completed stages
         for name in completed:
@@ -248,7 +315,29 @@ class PipelineEngine:
             for name in ready:
                 dag.done(name)
 
-        # Success
+        # --- Main DAG complete; run post-bracket phase --------------------
+        # The main DAG returned without halting, so the post-bracket
+        # slot fires. If the slot is empty (the common case for
+        # bracket-less callers) the helper short-circuits to
+        # ``(None, total_cost, True)`` and we proceed to success.
+        bracket_success = True
+        if not self._post_bracket.is_empty:
+            (
+                halt,
+                total_cost,
+                bracket_success,
+            ) = await self._run_post_bracket_phase(
+                stages_done,
+                total_cost,
+                start,
+                session_id,
+                plan,
+                initial_envelope,
+            )
+            if halt is not None:
+                return halt
+
+        # Success (or routed-to-failure via bracket router).
         duration = time.monotonic() - start
         await self._emit(
             PipelineCompleted(
@@ -260,12 +349,141 @@ class PipelineEngine:
             )
         )
         return PipelineResult(
-            success=True,
+            success=bracket_success,
             session_id=session_id,
             stages=stages_done,
             total_cost_usd=total_cost,
             duration_seconds=duration,
         )
+
+    # -- Bracket execution ---------------------------------------------------
+
+    async def _run_bracket_stages(
+        self,
+        slot: BracketSlot,
+        stages_done: dict[str, Envelope],
+        total_cost: float,
+        start: float,
+        session_id: str,
+        plan: WorkflowPlan,
+        initial_envelope: Envelope | None,
+    ) -> tuple[PipelineResult | None, float]:
+        """Run a bracket slot's stages sequentially.
+
+        Used by the pre-bracket phase. Pre-bracket stages are advisory
+        in v1.0 (Hephaestus v1.1 carves richer semantics); a stage that
+        fails here halts the pipeline immediately. Each stage's envelope
+        is recorded in ``stages_done`` under its name so the post-bracket
+        slot (and any caller inspecting ``PipelineResult.stages``) sees
+        it.
+        """
+        for spec in slot.stages:
+            env = await self._execute_stage(
+                spec, stages_done, total_cost, plan, session_id, initial_envelope
+            )
+            stages_done[spec.name] = env
+            total_cost += env.cost_usd
+            if env.status == TaskStatus.FAILED:
+                duration = time.monotonic() - start
+                error_msg = env.error.message if env.error else "bracket stage failed"
+                await self._emit(
+                    PipelineFailed(
+                        session_id=session_id,
+                        sequence=0,
+                        failed_stage=spec.name,
+                        error_message=error_msg,
+                    )
+                )
+                return (
+                    PipelineResult(
+                        success=False,
+                        session_id=session_id,
+                        stages=stages_done,
+                        total_cost_usd=total_cost,
+                        duration_seconds=duration,
+                        error=error_msg,
+                        failed_stage=spec.name,
+                    ),
+                    total_cost,
+                )
+        return None, total_cost
+
+    async def _run_post_bracket_phase(
+        self,
+        stages_done: dict[str, Envelope],
+        total_cost: float,
+        start: float,
+        session_id: str,
+        plan: WorkflowPlan,
+        initial_envelope: Envelope | None,
+    ) -> tuple[PipelineResult | None, float, bool]:
+        """Run the post-bracket slot and fold its envelopes through the router.
+
+        Returns ``(halt, total_cost, bracket_success)``:
+
+        - ``halt`` — non-``None`` only when a post-bracket stage itself
+          FAILED (handler raised, returned an error envelope, etc.).
+        - ``bracket_success`` — ``True`` iff every router decision had
+          ``success=True``. The caller stamps this onto
+          ``PipelineResult.success``.
+
+        For each stage, the router computes a :class:`BracketDecision`.
+        If the decision says ``effectuate=False``, the engine stamps
+        :data:`~bonfire.models.envelope.META_BRACKET_EFFECTUATE` ``False``
+        on the recorded envelope before it lands in ``stages_done`` —
+        so downstream observers (Steward, CLI, audit log) see the
+        router's authoritative bit on the stage envelope, not just on
+        the handler's pre-computed metadata.
+        """
+        slot = self._post_bracket
+        bracket_success = True
+
+        for spec in slot.stages:
+            env = await self._execute_stage(
+                spec, stages_done, total_cost, plan, session_id, initial_envelope
+            )
+            total_cost += env.cost_usd
+
+            if env.status == TaskStatus.FAILED:
+                duration = time.monotonic() - start
+                error_msg = env.error.message if env.error else "bracket stage failed"
+                stages_done[spec.name] = env
+                await self._emit(
+                    PipelineFailed(
+                        session_id=session_id,
+                        sequence=0,
+                        failed_stage=spec.name,
+                        error_message=error_msg,
+                    )
+                )
+                return (
+                    PipelineResult(
+                        success=False,
+                        session_id=session_id,
+                        stages=stages_done,
+                        total_cost_usd=total_cost,
+                        duration_seconds=duration,
+                        error=error_msg,
+                        failed_stage=spec.name,
+                    ),
+                    total_cost,
+                    False,
+                )
+
+            decision = slot.router.route(env)
+            # Stamp the router's effectuate decision onto the envelope's
+            # metadata. This is a strict overwrite: the router is the
+            # authority once the envelope reaches the engine, even if
+            # the handler pre-computed a different value. (The default
+            # Caronte router prefers the handler's explicit bit when
+            # present, so the common case is a no-op pass-through.)
+            stages_done[spec.name] = env.with_metadata(
+                **{META_BRACKET_EFFECTUATE: decision.effectuate}
+            )
+            if not decision.success:
+                bracket_success = False
+
+        return None, total_cost, bracket_success
 
     # -- Parallel / single group dispatch ------------------------------------
 

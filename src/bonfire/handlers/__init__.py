@@ -15,6 +15,14 @@ handler implements lives in ``HANDLER_ROLE_MAP`` and as a module-level
 | architect               | ArchitectHandler               | analyst      | Architect        |
 | sage_correction_bounce  | SageCorrectionBounceHandler    | synthesizer  | Sage             |
 
+The Caronte-bracket handlers (``InquisitorHandler`` / ``LoremasterHandler``)
+are re-exported alongside the cadre five but are not yet members of
+``HANDLER_ROLE_MAP`` -- the bracket-routing path reads the
+``ROLE: AgentRole`` module constant directly. The role-map widening to
+include the bracket stems is a follow-up once the engine plumbing
+(``pre_bracket=`` / ``post_bracket=``) lands and the existing
+five-entry pin is replaced.
+
 Deterministic verification handlers bypass the gamified-display map
 (``HANDLER_ROLE_MAP``); they appear in ``__all__`` but not in the role
 map. Today: ``MergePreflightHandler`` (verifier). The synthesizer-
@@ -30,6 +38,8 @@ from __future__ import annotations
 from bonfire.agent.roles import AgentRole
 from bonfire.handlers.architect import ArchitectHandler
 from bonfire.handlers.bard import BardHandler
+from bonfire.handlers.inquisitor import InquisitorHandler
+from bonfire.handlers.loremaster import LoremasterHandler
 from bonfire.handlers.merge_preflight import MergePreflightHandler
 from bonfire.handlers.sage_correction_bounce import SageCorrectionBounceHandler
 from bonfire.handlers.steward import StewardHandler
@@ -47,6 +57,8 @@ __all__ = [
     "HANDLER_ROLE_MAP",
     "ArchitectHandler",
     "BardHandler",
+    "InquisitorHandler",
+    "LoremasterHandler",
     "MergePreflightHandler",
     "SageCorrectionBounceHandler",
     "StewardHandler",

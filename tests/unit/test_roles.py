@@ -8,7 +8,8 @@ class TestAgentRole:
     """AgentRole StrEnum is the canonical identity for all agent roles."""
 
     def test_all_nine_roles_exist(self):
-        assert len(AgentRole) == 9
+        # Original cadre nine + Caronte bracket pair (judge, promoter).
+        assert len(AgentRole) == 11
 
     def test_values_are_lowercase_strings(self):
         for role in AgentRole:

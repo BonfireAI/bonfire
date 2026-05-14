@@ -31,6 +31,8 @@ class AgentRole(StrEnum):
         closer      -> Release Agent   / Steward
         synthesizer -> Synthesis Agent / Sage
         analyst     -> Analysis Agent  / Architect
+        judge       -> Judge Agent     / Inquisitor
+        promoter    -> Promoter Agent  / Loremaster
     """
 
     RESEARCHER = "researcher"
@@ -42,3 +44,5 @@ class AgentRole(StrEnum):
     CLOSER = "closer"
     SYNTHESIZER = "synthesizer"
     ANALYST = "analyst"
+    JUDGE = "judge"
+    PROMOTER = "promoter"

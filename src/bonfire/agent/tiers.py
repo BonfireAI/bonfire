@@ -58,6 +58,8 @@ GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType(
         "steward": AgentRole.CLOSER,
         "sage": AgentRole.SYNTHESIZER,
         "architect": AgentRole.ANALYST,
+        "inquisitor": AgentRole.JUDGE,
+        "loremaster": AgentRole.PROMOTER,
     }
 )
 
@@ -70,6 +72,8 @@ GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType(
 #   - closer      -> fast      (merge/announce, mechanical)
 #   - synthesizer -> reasoning (multi-source synthesis is the reasoning case)
 #   - analyst     -> reasoning (architectural analysis is reasoning)
+#   - judge       -> reasoning (post-bracket verdict over the full chain)
+#   - promoter    -> reasoning (cross-project clustering / muscle->tech)
 DEFAULT_ROLE_TIER: Mapping[AgentRole, ModelTier] = MappingProxyType(
     {
         AgentRole.RESEARCHER: ModelTier.REASONING,
@@ -81,6 +85,8 @@ DEFAULT_ROLE_TIER: Mapping[AgentRole, ModelTier] = MappingProxyType(
         AgentRole.CLOSER: ModelTier.FAST,
         AgentRole.SYNTHESIZER: ModelTier.REASONING,
         AgentRole.ANALYST: ModelTier.REASONING,
+        AgentRole.JUDGE: ModelTier.REASONING,
+        AgentRole.PROMOTER: ModelTier.REASONING,
     }
 )
 

@@ -52,10 +52,11 @@ class TestDefaultRoleTierShape:
             )
 
     def test_no_extra_keys_beyond_agentrole(self) -> None:
-        """The map has exactly nine entries — one per canonical role."""
+        """The map has one entry per canonical AgentRole value."""
+        from bonfire.agent.roles import AgentRole
         from bonfire.agent.tiers import DEFAULT_ROLE_TIER
 
-        assert len(DEFAULT_ROLE_TIER) == 9
+        assert len(DEFAULT_ROLE_TIER) == len(list(AgentRole))
 
     def test_mapping_is_immutable(self) -> None:
         """``DEFAULT_ROLE_TIER`` rejects assignment (MappingProxyType)."""
@@ -147,7 +148,7 @@ class TestGamifiedAliasMap:
     """``GAMIFIED_TO_GENERIC`` exposes the ten workflow-emitted aliases (§D2)."""
 
     def test_all_ten_gamified_aliases_resolve_to_agentroles(self) -> None:
-        """The map has exactly ten entries with the locked alias set."""
+        """The map covers the locked alias set (10 core + Caronte bracket pair)."""
         from bonfire.agent.tiers import GAMIFIED_TO_GENERIC
 
         expected_keys = {
@@ -161,9 +162,11 @@ class TestGamifiedAliasMap:
             "steward",
             "sage",
             "architect",
+            "inquisitor",
+            "loremaster",
         }
         assert set(GAMIFIED_TO_GENERIC.keys()) == expected_keys
-        assert len(GAMIFIED_TO_GENERIC) == 10
+        assert len(GAMIFIED_TO_GENERIC) == 12
 
     def test_alias_values_are_agentroles(self) -> None:
         """Every value in the alias map is an ``AgentRole`` member."""
@@ -276,6 +279,8 @@ class TestDefaultTierDistribution:
         from bonfire.agent.tiers import DEFAULT_ROLE_TIER, ModelTier
 
         counts = Counter(DEFAULT_ROLE_TIER.values())
+        # Original cadre nine: 5x FAST, 4x REASONING.
+        # Caronte bracket additions (judge + promoter): both REASONING.
         assert counts[ModelTier.FAST] == 5
-        assert counts[ModelTier.REASONING] == 4
+        assert counts[ModelTier.REASONING] == 6
         assert counts[ModelTier.BALANCED] == 0

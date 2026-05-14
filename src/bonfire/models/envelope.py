@@ -186,3 +186,11 @@ META_CORRECTION_CYCLES: str = "correction_cycles"
 META_CORRECTION_ESCALATED: str = "correction_escalated"
 META_CORRECTION_SKIPPED_REASON: str = "correction_skipped_reason"
 META_CORRECTION_VERDICT: str = "correction_verdict"
+# Caronte bracket-verdict metadata (post-bracket Inquisitor + engine routing).
+# The pipeline engine reads ``META_BRACKET_EFFECTUATE`` from the post-bracket
+# stage envelope to gate the Steward; ``META_BRACKET_VERDICT_STATUS`` carries
+# the raw PASS/CONCERNS/FAIL label for the audit trail. See ADR-001 + the
+# Caronte vendor handlers (``bonfire.handlers.inquisitor`` /
+# ``bonfire.handlers.loremaster``).
+META_BRACKET_VERDICT_STATUS: str = "bracket_verdict_status"
+META_BRACKET_EFFECTUATE: str = "bracket_verdict_effectuate"

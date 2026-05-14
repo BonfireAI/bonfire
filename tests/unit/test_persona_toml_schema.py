@@ -60,6 +60,8 @@ reviewer = "Wizard"
 closer = "Steward"
 synthesizer = "Sage"
 analyst = "Analysis Agent"
+judge = "Inquisitor"
+promoter = "Loremaster"
 """
 
 
@@ -114,6 +116,8 @@ def _persona_toml_missing_role(missing: AgentRole) -> str:
         AgentRole.CLOSER: "Steward",
         AgentRole.SYNTHESIZER: "Sage",
         AgentRole.ANALYST: "Analysis Agent",
+        AgentRole.JUDGE: "Inquisitor",
+        AgentRole.PROMOTER: "Loremaster",
     }
     assert missing in mapping
     del mapping[missing]
@@ -405,6 +409,8 @@ class TestDisplayNamesCoverage:
             'closer = "Steward"\n'
             'synthesizer = "Sage"\n'
             'analyst = "Analysis Agent"\n'
+            'judge = "Inquisitor"\n'
+            'promoter = "Loremaster"\n'
         )
         _create_persona_dir(builtin_dir, "intval", persona_toml=toml_str)
         with pytest.raises(PersonaSchemaError) as exc:

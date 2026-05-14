@@ -50,6 +50,8 @@ ROLE_DISPLAY: dict[str, DisplayNames] = {
     "closer": DisplayNames("Release Agent", "Steward"),
     "synthesizer": DisplayNames("Synthesis Agent", "Sage"),
     "analyst": DisplayNames("Analysis Agent", "Architect"),
+    "judge": DisplayNames("Judge Agent", "Inquisitor"),
+    "promoter": DisplayNames("Promoter Agent", "Loremaster"),
 }
 
 # ---------------------------------------------------------------------------

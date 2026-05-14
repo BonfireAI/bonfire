@@ -15,8 +15,8 @@ Enforces the negative-space contract for BON-345:
      with Falcor (the luckdragon) as the companion persona; ``default``
      and ``minimal`` remain user-selectable alternates.
   6. Every built-in persona TOML in ``src/bonfire/persona/builtins/``
-     must include a ``[display_names]`` map covering ALL 9 AgentRole
-     values, with no extra keys.
+     must include a ``[display_names]`` map covering ALL canonical
+     AgentRole values, with no extra keys.
   7. ``hookspec.py`` / ``PersonaHookSpec`` / the stale hookspec comment
      MUST NOT appear — hookspec is deferred for v0.1.
 
@@ -37,7 +37,9 @@ _PERSONA_DIR = _SRC_DIR / "persona"
 _BUILTINS_DIR = _PERSONA_DIR / "builtins"
 _CONFIG_PATH = _SRC_DIR / "models" / "config.py"
 
-# The 9 canonical AgentRole values — mirrors bonfire.agent.roles.AgentRole.
+# The canonical AgentRole values — mirrors bonfire.agent.roles.AgentRole.
+# Grows alongside the enum: the original nine cadre roles plus the Caronte
+# bracket additions (judge, promoter).
 _CANONICAL_ROLES = frozenset(
     {
         "researcher",
@@ -49,6 +51,8 @@ _CANONICAL_ROLES = frozenset(
         "closer",
         "synthesizer",
         "analyst",
+        "judge",
+        "promoter",
     }
 )
 
@@ -341,9 +345,9 @@ class TestBuiltinPersonaTomlShape:
 
     @pytest.mark.parametrize("persona_dir", _builtin_personas(), ids=lambda p: p.name)
     def test_each_builtin_display_names_has_no_extra_keys(self, persona_dir: Path) -> None:
-        """[display_names] must not contain keys outside the 9 AgentRole values.
+        """[display_names] must not contain keys outside the canonical AgentRole values.
 
-        Sage D1 — strict rejection of unknown role keys. This is the
+        Strict rejection of unknown role keys. This is the
         built-in-TOML mirror of the runtime schema check.
         """
         toml_path = persona_dir / "persona.toml"

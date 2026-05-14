@@ -12,6 +12,7 @@ from pathlib import Path
 
 import typer
 
+from bonfire.persona._toml_writer import emit_persona_assignment
 from bonfire.persona.loader import PersonaLoader
 
 # Bonfire ships with Falcor as the companion persona; users can swap
@@ -84,16 +85,20 @@ def persona_set(
 
     toml_path = Path.cwd() / "bonfire.toml"
 
+    persona_line = emit_persona_assignment(name)
+
     if toml_path.exists():
         content = toml_path.read_text()
         # Replace persona key ONLY in the [bonfire] section
         bonfire_section = re.search(r"(\[bonfire\][^\[]*)", content, re.DOTALL)
         if bonfire_section and re.search(r"^persona\s*=", bonfire_section.group(), re.MULTILINE):
-            # Replace persona within the [bonfire] section
+            # Replace persona within the [bonfire] section. Use a
+            # callable replacement so backslashes in the escaped name
+            # are NOT interpreted as re backreferences.
             old_section = bonfire_section.group()
             new_section = re.sub(
                 r'^persona\s*=\s*"[^"]*"',
-                f'persona = "{name}"',
+                lambda _m: persona_line,
                 old_section,
                 count=1,
                 flags=re.MULTILINE,
@@ -103,14 +108,14 @@ def persona_set(
             # [bonfire] exists but no persona key — add it
             content = content.replace(
                 "[bonfire]",
-                f'[bonfire]\npersona = "{name}"',
+                f"[bonfire]\n{persona_line}",
                 1,
             )
         else:
             # No [bonfire] section — append it
-            content += f'\n[bonfire]\npersona = "{name}"\n'
+            content += f"\n[bonfire]\n{persona_line}\n"
     else:
-        content = f'[bonfire]\npersona = "{name}"\n'
+        content = f"[bonfire]\n{persona_line}\n"
 
     toml_path.write_text(content)
     typer.echo(f"Persona set to: {name}")

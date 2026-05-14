@@ -53,6 +53,31 @@ class DefaultToolPolicy:
         "bard": ["Read", "Write", "Grep", "Glob"],
         "wizard": ["Read", "Grep", "Glob"],
         "steward": ["Read", "Grep"],
+        # Caronte bracket: the judge + promoter are pure readers + Lexicon
+        # mutators. No Bash, Edit, or Write surface; per-user TOML overrides
+        # (W4.1) can widen.
+        "inquisitor": [
+            "Read",
+            "Grep",
+            "Glob",
+            "mcp__bonfire_lexicon__memory_search",
+            "mcp__bonfire_lexicon__memory_read",
+            "mcp__bonfire_lexicon__memory_list",
+            "mcp__bonfire_lexicon__memory_write",
+            "mcp__bonfire_lexicon__memory_supersede",
+            "mcp__bonfire_lexicon__memory_write_batch",
+        ],
+        "loremaster": [
+            "Read",
+            "Grep",
+            "Glob",
+            "mcp__bonfire_lexicon__memory_search",
+            "mcp__bonfire_lexicon__memory_read",
+            "mcp__bonfire_lexicon__memory_list",
+            "mcp__bonfire_lexicon__memory_write",
+            "mcp__bonfire_lexicon__memory_supersede",
+            "mcp__bonfire_lexicon__memory_write_batch",
+        ],
     }
 
     def tools_for(self, role: str) -> list[str]:

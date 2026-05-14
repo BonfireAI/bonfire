@@ -54,7 +54,19 @@ def _require_module() -> None:
         pytest.fail(f"bonfire.dispatch.tool_policy not importable: {_IMPORT_ERROR}")
 
 
-_ALL_ROLES = ("scout", "knight", "warrior", "prover", "sage", "bard", "wizard", "steward")
+_ALL_ROLES = (
+    "scout",
+    "knight",
+    "warrior",
+    "prover",
+    "sage",
+    "bard",
+    "wizard",
+    "steward",
+    # Caronte bracket additions (judge + promoter cadre slots).
+    "inquisitor",
+    "loremaster",
+)
 
 
 # ===========================================================================
@@ -252,11 +264,11 @@ class TestDefaultToolPolicyShape:
         assert hasattr(DefaultToolPolicy, "_FLOOR")
 
     def test_floor_has_exactly_eight_roles(self) -> None:
-        """Sage D3 — exactly 8 canonical roles. Adding a ninth is out of scope."""
-        assert len(DefaultToolPolicy._FLOOR) == 8
+        """Canonical roles + Caronte bracket additions (judge + promoter)."""
+        assert len(DefaultToolPolicy._FLOOR) == len(_ALL_ROLES)
 
     def test_floor_keys_are_exact_eight_roles(self) -> None:
-        """Sage D3 — the eight keys are exactly these (order agnostic)."""
+        """The floor keys match the canonical role tuple (order agnostic)."""
         assert set(DefaultToolPolicy._FLOOR.keys()) == set(_ALL_ROLES)
 
     def test_floor_type_annotation_is_dict_str_list_str(self) -> None:

@@ -37,7 +37,12 @@ from bonfire.engine.executor import (
     StageExecutor,  # noqa: F401 -- public re-export for patch/discover
 )
 from bonfire.engine.model_resolver import resolve_dispatch_model
-from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
+from bonfire.models.envelope import (
+    META_BRACKET_VERDICT_STATUS,
+    Envelope,
+    ErrorDetail,
+    TaskStatus,
+)
 from bonfire.models.events import (
     BonfireEvent,
     PipelineCompleted,
@@ -111,6 +116,8 @@ class PipelineEngine:
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
+        pre_bracket: list[StageSpec] | None = None,
+        post_bracket: list[StageSpec] | None = None,
     ) -> None:
         self._backend = backend
         self._bus = bus
@@ -121,6 +128,13 @@ class PipelineEngine:
         self._project_root = project_root
         self._tool_policy = tool_policy
         self._settings = settings if settings is not None else factory.load_settings_or_default()
+        # Caronte bracket stages (ADR 0011). Both default to None for backward
+        # compat with every existing engine construction site. ``pre_bracket``
+        # ships v1.0 empty (Hephaestus v1.1 lands the first use case);
+        # ``post_bracket`` carries the v1.0 Inquisitor (Caronte) verdict stage.
+        # Stored as lists so the no-op path (None / []) is uniform.
+        self._pre_bracket: list[StageSpec] = list(pre_bracket) if pre_bracket else []
+        self._post_bracket: list[StageSpec] = list(post_bracket) if post_bracket else []
 
     # -- Public API ----------------------------------------------------------
 
@@ -181,6 +195,23 @@ class PipelineEngine:
                     reason="pre-completed (resume)",
                 )
             )
+
+        # -- Pre-bracket (Hephaestus slot; v1.0 ships empty) ------------------
+        # ADR 0011: pre_bracket runs BEFORE the main DAG. In v1.0 the slot is
+        # empty (the typical construction path passes ``pre_bracket=None``),
+        # so this is a no-op. v1.1 (Hephaestus) populates the slot.
+        # A pre-bracket failure halts the pipeline before the main DAG runs.
+        halt, total_cost = await self._run_bracket_stages(
+            self._pre_bracket,
+            stages_done,
+            total_cost,
+            start,
+            session_id,
+            plan,
+            initial_envelope,
+        )
+        if halt is not None:
+            return halt
 
         # Build DAG -- skip already-completed stages
         skip = set(completed.keys())
@@ -248,23 +279,67 @@ class PipelineEngine:
             for name in ready:
                 dag.done(name)
 
+        # -- Post-bracket (Caronte / Inquisitor) ------------------------------
+        # ADR 0011: post_bracket runs AFTER the main DAG completes
+        # successfully. Main-DAG failure short-circuits the bracket (any
+        # failure path above returned a PipelineResult before reaching here).
+        # The last post-bracket stage's verdict metadata routes the pipeline's
+        # final ``success`` flag per the Knight contract:
+        #     PASS     -> success=True,  effectuate=True
+        #     CONCERNS -> success=True,  effectuate=False (metadata-borne)
+        #     FAIL     -> success=False, effectuate=False
+        halt, total_cost = await self._run_bracket_stages(
+            self._post_bracket,
+            stages_done,
+            total_cost,
+            start,
+            session_id,
+            plan,
+            initial_envelope,
+        )
+        if halt is not None:
+            return halt
+
+        # Determine final success from post-bracket verdict (if any).
+        success = self._resolve_bracket_success(stages_done)
+
         # Success
         duration = time.monotonic() - start
-        await self._emit(
-            PipelineCompleted(
+        if success:
+            await self._emit(
+                PipelineCompleted(
+                    session_id=session_id,
+                    sequence=0,
+                    total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    stages_completed=len(stages_done),
+                )
+            )
+            return PipelineResult(
+                success=True,
                 session_id=session_id,
-                sequence=0,
+                stages=stages_done,
                 total_cost_usd=total_cost,
                 duration_seconds=duration,
-                stages_completed=len(stages_done),
+            )
+        # FAIL verdict from the post-bracket Inquisitor — reject the run.
+        fail_stage = self._post_bracket[-1].name if self._post_bracket else ""
+        await self._emit(
+            PipelineFailed(
+                session_id=session_id,
+                sequence=0,
+                failed_stage=fail_stage,
+                error_message="bracket verdict: FAIL",
             )
         )
         return PipelineResult(
-            success=True,
+            success=False,
             session_id=session_id,
             stages=stages_done,
             total_cost_usd=total_cost,
             duration_seconds=duration,
+            error="bracket verdict: FAIL",
+            failed_stage=fail_stage,
         )
 
     # -- Parallel / single group dispatch ------------------------------------
@@ -409,6 +484,108 @@ class PipelineEngine:
             return halt, total_cost
 
         return None, total_cost
+
+    # -- Bracket-stage execution (Caronte pre/post) --------------------------
+
+    async def _run_bracket_stages(
+        self,
+        bracket_stages: list[StageSpec],
+        stages_done: dict[str, Envelope],
+        total_cost: float,
+        start: float,
+        session_id: str,
+        plan: WorkflowPlan,
+        initial_envelope: Envelope | None,
+    ) -> tuple[PipelineResult | None, float]:
+        """Run a sequence of bracket stages (pre- or post-bracket).
+
+        Each bracket stage runs through ``_execute_stage`` so event emission +
+        iteration semantics match main-DAG stages. Stages run sequentially in
+        list order; a stage failure halts the bracket (and the pipeline) just
+        like a main-DAG single-stage failure. No gate evaluation, no
+        parallel-group grouping, no bounce-back -- brackets are linear by
+        design (ADR 0011 keeps bracket semantics minimal for v1.0).
+        """
+        for spec in bracket_stages:
+            env = await self._execute_stage(
+                spec, stages_done, total_cost, plan, session_id, initial_envelope
+            )
+            stages_done[spec.name] = env
+            total_cost += env.cost_usd
+
+            if env.status == TaskStatus.FAILED:
+                duration = time.monotonic() - start
+                error_msg = env.error.message if env.error else "bracket stage failed"
+                await self._emit(
+                    PipelineFailed(
+                        session_id=session_id,
+                        sequence=0,
+                        failed_stage=spec.name,
+                        error_message=error_msg,
+                    )
+                )
+                return (
+                    PipelineResult(
+                        success=False,
+                        session_id=session_id,
+                        stages=stages_done,
+                        total_cost_usd=total_cost,
+                        duration_seconds=duration,
+                        error=error_msg,
+                        failed_stage=spec.name,
+                    ),
+                    total_cost,
+                )
+
+            # Budget check after each bracket stage (parity with main-DAG).
+            if total_cost > plan.budget_usd:
+                duration = time.monotonic() - start
+                error_msg = f"Budget exceeded: ${total_cost:.2f} > ${plan.budget_usd:.2f}"
+                await self._emit(
+                    PipelineFailed(
+                        session_id=session_id,
+                        sequence=0,
+                        failed_stage=spec.name,
+                        error_message=error_msg,
+                    )
+                )
+                return (
+                    PipelineResult(
+                        success=False,
+                        session_id=session_id,
+                        stages=stages_done,
+                        total_cost_usd=total_cost,
+                        duration_seconds=duration,
+                        error=error_msg,
+                        failed_stage=spec.name,
+                    ),
+                    total_cost,
+                )
+
+        return None, total_cost
+
+    def _resolve_bracket_success(self, stages_done: dict[str, Envelope]) -> bool:
+        """Determine pipeline ``success`` from the post-bracket verdict.
+
+        Reads ``META_BRACKET_VERDICT_STATUS`` from the LAST post-bracket
+        stage's envelope. Routing per Knight contract:
+
+            PASS     -> True
+            CONCERNS -> True  (effectuation halted via separate metadata key)
+            FAIL     -> False
+
+        When no post-bracket stage exists, or the last bracket envelope has
+        no verdict metadata, success defaults to ``True`` -- the engine
+        treats absence of verdict as PASS for backward compat.
+        """
+        if not self._post_bracket:
+            return True
+        last_name = self._post_bracket[-1].name
+        last_env = stages_done.get(last_name)
+        if last_env is None:
+            return True
+        status = last_env.metadata.get(META_BRACKET_VERDICT_STATUS)
+        return status != "FAIL"
 
     # -- Stage execution with iteration --------------------------------------
 

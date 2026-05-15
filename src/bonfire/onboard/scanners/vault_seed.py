@@ -11,19 +11,36 @@ Scanner interface::
 
     async def scan(project_path: Path, emit: ScanCallback) -> int
 
+Safety rails:
+
+  * ``_scan_project_size`` walks the tree via :func:`os.fwalk` with
+    ``followlinks=False`` so a symlink loop (``a/x -> a/``) or a
+    ``/``-rooted symlink cannot drive the scanner off into the
+    filesystem at large.
+  * The walk also enforces a hard cap on entries visited
+    (:data:`_SCAN_ENTRY_CAP`); if reached, the scanner logs a WARN and
+    returns the count gathered so far rather than continuing forever.
+  * ``_scan_test_config`` reads ``pyproject.toml`` through
+    :func:`bonfire._safe_read.safe_read_text` so a multi-GB or
+    ``/dev/zero``-symlinked file does not hang the scan.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
+import os
 from typing import TYPE_CHECKING
 
+from bonfire._safe_read import safe_read_text
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = ["scan"]
+
+_log = logging.getLogger(__name__)
 
 PANEL = "vault_seed"
 
@@ -57,6 +74,18 @@ _CODE_EXTENSIONS = frozenset({".py", ".js", ".ts", ".rs", ".go"})
 
 # Average bytes per line for rough LOC estimation.
 _BYTES_PER_LINE = 40
+
+# Hard cap on (file + directory) entries visited by ``_scan_project_size``.
+# A malicious symlink loop combined with ``followlinks=False`` already
+# blocks infinite recursion, but a project with millions of legitimate
+# files would still be a DoS vector for the size estimator. 50k entries
+# covers every plausible real project; beyond that we WARN + early-return.
+_SCAN_ENTRY_CAP = 50_000
+
+# Cap on the pyproject.toml byte-read in _scan_test_config — we only
+# read the file to search for "[tool.pytest" so 1 MiB is generous.
+_PYPROJECT_READ_MAX_BYTES = 1 * 1024 * 1024
+_PYPROJECT_READ_MAX_BYTES_ENV = "BONFIRE_VAULT_SEED_PYPROJECT_MAX_BYTES"
 
 
 async def scan(project_path: Path, emit: ScanCallback) -> int:
@@ -151,7 +180,14 @@ async def _scan_test_config(project_path: Path, emit: ScanCallback) -> int:
     # [tool.pytest] section in pyproject.toml
     pyproject = project_path / "pyproject.toml"
     if pyproject.is_file():
-        content = pyproject.read_text()
+        try:
+            content = safe_read_text(
+                pyproject,
+                env_var=_PYPROJECT_READ_MAX_BYTES_ENV,
+                default_bytes=_PYPROJECT_READ_MAX_BYTES,
+            )
+        except OSError:
+            content = ""
         if "[tool.pytest" in content:
             await emit(
                 ScanUpdate(
@@ -210,23 +246,68 @@ async def _scan_key_directories(project_path: Path, emit: ScanCallback) -> int:
 
 
 async def _scan_project_size(project_path: Path, emit: ScanCallback) -> int:
-    """Estimate total file count and rough LOC."""
+    """Estimate total file count and rough LOC.
+
+    Uses :func:`os.fwalk` with ``followlinks=False`` so a symlink loop
+    (``project/x -> project/``) or a symlink to ``/`` cannot drive the
+    scanner off the project tree. Enforces a hard entry cap
+    (:data:`_SCAN_ENTRY_CAP`); on cap, emits a WARNING and returns the
+    partial estimate rather than raising.
+    """
     file_count = 0
     code_bytes = 0
+    entries_seen = 0
+    cap_hit = False
 
-    for item in project_path.rglob("*"):
-        # Skip excluded directory trees.
-        parts = item.parts
-        if any(part in _EXCLUDED_DIRS for part in parts):
-            continue
-        if not item.is_file():
-            continue
+    # ``os.fwalk`` returns ``(dirpath, dirnames, filenames, dirfd)``.
+    # ``follow_symlinks=False`` (default in CPython) is what guards
+    # against symlink-loop walks; we set it explicitly here as a
+    # defensive lock so a future refactor that flips the default does
+    # not silently re-introduce the DoS surface. Note that ``os.fwalk``
+    # uses ``follow_symlinks`` (matching ``os.stat``); ``os.walk`` uses
+    # ``followlinks`` — the names differ across the stdlib.
+    top = os.fspath(project_path)
+    walker = os.fwalk(top, follow_symlinks=False)
 
-        file_count += 1
+    for _dirpath, dirnames, filenames, dirfd in walker:
+        # In-place prune of excluded subdirectories before descent. This
+        # is the canonical ``os.walk`` / ``os.fwalk`` pattern; mutating
+        # ``dirnames`` stops recursion into the pruned names. Combined
+        # with the top-down walk this ensures we never visit a file
+        # under any of ``_EXCLUDED_DIRS``.
+        dirnames[:] = [d for d in dirnames if d not in _EXCLUDED_DIRS]
 
-        if item.suffix in _CODE_EXTENSIONS:
-            with contextlib.suppress(OSError):
-                code_bytes += item.stat().st_size
+        for fname in filenames:
+            entries_seen += 1
+            if entries_seen > _SCAN_ENTRY_CAP:
+                cap_hit = True
+                break
+
+            file_count += 1
+
+            # Code-extension byte sampling for LOC estimation.
+            # ``os.path.splitext`` matches Path.suffix's behaviour.
+            ext = os.path.splitext(fname)[1]
+            if ext in _CODE_EXTENSIONS:
+                with contextlib.suppress(OSError):
+                    # fstat against the directory fd to avoid following
+                    # any symlinks the filename itself may point to.
+                    st = os.stat(fname, dir_fd=dirfd, follow_symlinks=False)
+                    # Only count regular files; symlinks-to-files report
+                    # the link's own (small) size with follow_symlinks=
+                    # False, which still gives a sane sample.
+                    code_bytes += st.st_size
+
+        if cap_hit:
+            break
+
+    if cap_hit:
+        _log.warning(
+            "vault_seed project-size scan hit entry cap (%d entries); "
+            "returning partial result for %s",
+            _SCAN_ENTRY_CAP,
+            project_path,
+        )
 
     loc_estimate = code_bytes // _BYTES_PER_LINE if code_bytes else 0
 

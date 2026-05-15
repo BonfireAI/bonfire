@@ -14,6 +14,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from bonfire._safe_read import safe_read_text
 from bonfire.knowledge.hasher import content_hash
 from bonfire.protocols import VaultBackend, VaultEntry
 
@@ -21,6 +22,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = ["TechScanner"]
+
+# Byte caps for dependency-manifest reads. A malicious
+# or accidentally-truncated multi-GB manifest would otherwise hang the
+# scanner via ``Path.read_text()``. 2 MiB covers every realistic
+# manifest; oversize reads are truncated and a WARNING is logged.
+_MANIFEST_READ_MAX_BYTES = 2 * 1024 * 1024
+_MANIFEST_READ_MAX_BYTES_ENV = "BONFIRE_TECH_SCAN_MANIFEST_MAX_BYTES"
 
 # ---------------------------------------------------------------------------
 # Detection tables (data-driven, not if/else chains)
@@ -212,7 +220,14 @@ class TechScanner:
         # requirements.txt — line-based, extract package name before specifier
         req_path = self._project_path / "requirements.txt"
         if req_path.is_file():
-            text = req_path.read_text(encoding="utf-8")
+            try:
+                text = safe_read_text(
+                    req_path,
+                    env_var=_MANIFEST_READ_MAX_BYTES_ENV,
+                    default_bytes=_MANIFEST_READ_MAX_BYTES,
+                )
+            except OSError:
+                text = ""
             for line in text.splitlines():
                 line_stripped = line.strip()
                 if not line_stripped or line_stripped.startswith("#"):
@@ -235,7 +250,14 @@ class TechScanner:
         # pyproject.toml — scan dependency lines only, not the whole file
         pyproject_path = self._project_path / "pyproject.toml"
         if pyproject_path.is_file():
-            text = pyproject_path.read_text(encoding="utf-8")
+            try:
+                text = safe_read_text(
+                    pyproject_path,
+                    env_var=_MANIFEST_READ_MAX_BYTES_ENV,
+                    default_bytes=_MANIFEST_READ_MAX_BYTES,
+                )
+            except OSError:
+                text = ""
             dep_names = _extract_pyproject_deps(text)
             for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
                 if tech not in seen and pattern in dep_names:
@@ -254,8 +276,13 @@ class TechScanner:
         pkg_path = self._project_path / "package.json"
         if pkg_path.is_file():
             try:
-                data = json.loads(pkg_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+                raw = safe_read_text(
+                    pkg_path,
+                    env_var=_MANIFEST_READ_MAX_BYTES_ENV,
+                    default_bytes=_MANIFEST_READ_MAX_BYTES,
+                )
+                data = json.loads(raw)
+            except (json.JSONDecodeError, OSError):
                 data = {}
             all_deps: dict[str, Any] = {}
             all_deps.update(data.get("dependencies", {}))

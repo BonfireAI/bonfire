@@ -483,8 +483,12 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(config_toml)
-    except BaseException:
-        # If the write failed for any reason, leave no half-written file.
+    except Exception:
+        # Regular write failures clean up so we leave no half-written file.
+        # Interpreter-shutdown signals (KeyboardInterrupt, SystemExit) are
+        # intentionally NOT caught here: the kernel will close the file
+        # descriptor on process exit, and a partial bonfire.toml is a
+        # recoverable situation the user can inspect and remove themselves.
         try:
             target.unlink()
         except OSError:

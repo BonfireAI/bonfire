@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3.12 \
         python3.12-venv \
         python3-pip \
+        python3-pytest \
+        python3-yaml \
         build-essential \
         gnupg \
         jq \
@@ -33,7 +35,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 # Claude Code CLI — pinned for release-gate reproducibility.
 # Bump policy lives in docs/release-gates.md § "claude-cli bump policy".
-RUN npm install -g @anthropic-ai/claude-code@2.1.123
+# NPM_CONFIG_PREFIX + PATH put npm's global bin at /usr/local/bin so the
+# unprivileged `box` user (set via USER below) resolves `claude` on PATH.
+# `claude --version` turns a broken or unresolvable install into a hard
+# build failure instead of a runtime exit:127.
+ENV NPM_CONFIG_PREFIX=/usr/local
+ENV PATH=/usr/local/bin:$PATH
+RUN npm install -g @anthropic-ai/claude-code@2.1.123 \
+    && claude --version
 
 WORKDIR /workspace
 

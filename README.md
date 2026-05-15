@@ -58,6 +58,8 @@ The PyPI package is `bonfire-ai`; the installed console script is
 bonfire init .
 
 # Launch the browser-based onboarding scan
+# (pass `--conversation-timeout SECONDS` to extend the default 5-minute cap,
+# or `--conversation-timeout 0` to wait indefinitely)
 bonfire scan
 
 # Inspect cumulative cost and recent sessions

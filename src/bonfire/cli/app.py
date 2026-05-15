@@ -176,9 +176,29 @@ def scan(
             "WS driver) to connect to /ws."
         ),
     ),
+    conversation_timeout: float = typer.Option(
+        -1.0,
+        "--conversation-timeout",
+        help=(
+            "Maximum seconds to wait for the onboarding conversation to "
+            "complete before timing out (default 300). Pass 0 to disable."
+        ),
+        min=-1.0,
+    ),
 ) -> None:
     """Launch The Front Door — WS-driven onboarding scan."""
-    _lazy_run("bonfire.cli.commands.scan", "scan")(port=port, no_browser=no_browser)
+    # Sentinel default ``-1.0`` means "user did not pass the flag" — we
+    # forward only the user-set values to the inner scan callable so the
+    # library's documented default (``DEFAULT_CONVERSATION_TIMEOUT``)
+    # governs untouched invocations. ``0`` is the documented opt-out
+    # value and is forwarded as ``None`` (wait indefinitely); positive
+    # numbers flow through verbatim.
+    scan_kwargs: dict[str, object] = {"port": port, "no_browser": no_browser}
+    if conversation_timeout >= 0:
+        scan_kwargs["conversation_timeout"] = (
+            conversation_timeout if conversation_timeout > 0 else None
+        )
+    _lazy_run("bonfire.cli.commands.scan", "scan")(**scan_kwargs)
 
 
 @app.command("status")

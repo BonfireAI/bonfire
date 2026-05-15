@@ -17,6 +17,7 @@ import logging
 import os
 import traceback as tb_module
 from contextlib import aclosing
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
@@ -85,6 +86,29 @@ def _format_error_traceback(exc: BaseException) -> str | None:
     if os.environ.get(_TRACEBACK_DEBUG_ENV) == "1":
         return tb_module.format_exc()
     return _summarise_traceback(exc)
+
+
+def _resolve_setting_sources(cwd: str | None) -> list[str]:
+    """Return ``['project']`` iff the cwd opts into Bonfire, else ``[]``.
+
+    Gate behind:
+      * empty cwd (``None`` or ``""``) — the caller's own cwd, trusted by
+        default (the bonfire-public-tree dogfood path).
+      * ``BONFIRE_TRUST_PROJECT_SETTINGS`` env var set to exactly ``"1"``
+        (strict equality — no normalization).
+      * a co-located ``bonfire.toml`` file at the cwd.
+
+    Foreign repos without ``bonfire.toml`` return ``[]`` — their
+    ``CLAUDE.md`` and ``.claude/`` contents are NOT ingested into the
+    dispatched agent's system prompt.
+    """
+    if cwd is None or cwd == "":
+        return ["project"]
+    if os.environ.get("BONFIRE_TRUST_PROJECT_SETTINGS") == "1":
+        return ["project"]
+    if (Path(cwd) / "bonfire.toml").is_file():
+        return ["project"]
+    return []
 
 
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
@@ -161,7 +185,7 @@ class ClaudeSDKBackend:
                 bus=self._bus,
                 envelope=envelope,
             ),
-            setting_sources=["project"],
+            setting_sources=_resolve_setting_sources(options.cwd),
             thinking=thinking_config,
             effort=effort_level,
             stderr=lambda line: logger.warning("[CLI stderr] %s", line),

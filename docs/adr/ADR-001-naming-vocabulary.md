@@ -63,7 +63,46 @@ Display is a presentation concern, not a data concern.
 
 ## Consequences
 
-- All code uses generic names. No gamified terms in data models or tests.
+- All code uses generic names, with one ratified exception (see § Ratified Exceptions below): the W1.5.3 default tool floor keys on gamified names to match the workflow-factory wire format. No new gamified-keyed surfaces without amending this ADR.
 - Serialized formats (JSONL, TOML) use StrEnum values directly.
 - Display names are resolved at render time by the persona module.
 - Adding a new role requires: StrEnum value + naming.py entry + persona TOML.
+
+## Ratified Exceptions
+
+This ADR's doctrinal default is "all code uses generic names." A single
+exception is ratified below. The exception list is closed: new gamified-keyed
+surfaces in code require an explicit amendment to this section, not silent
+precedent.
+
+### `DefaultToolPolicy._FLOOR` keys (`bonfire.dispatch.tool_policy`)
+
+The W1.5.3 default tool allow-list shipped in `DefaultToolPolicy._FLOOR` keys
+on the **gamified** role names (`scout`, `knight`, `warrior`, `prover`,
+`sage`, `bard`, `wizard`, `steward`) rather than the generic `AgentRole`
+StrEnum values. This is a deliberate exception, accepted as part of the W4.1
+trust-triangle surface.
+
+**Why:**
+
+1. Workflow factories in `bonfire.workflow.standard` and `bonfire.workflow.research`
+   emit gamified role strings into `StageSpec.role`; the wire format at the
+   dispatch boundary is gamified.
+2. The W1.5.3 floor is the shipped contract that 1352 LOC of test coverage
+   (`tests/unit/test_tool_policy.py`) locks in place; this contract is one
+   of the trust-triangle gates blocking the v0.1.0 tag.
+3. A normalization seam already exists at `bonfire.agent.tiers.GAMIFIED_TO_GENERIC`
+   and is consumed by `resolve_model_for_role`. A planned forward-compat patch
+   will teach `DefaultToolPolicy.tools_for` to look up via either gamified or
+   generic input through this same mapping, so the floor's internal key
+   vocabulary becomes invisible to callers — but the table's internal keys
+   stay gamified to preserve the W4.1 contract and its test suite.
+
+**Forward rule:**
+
+New dict-keyed-by-role surfaces in code MUST prefer the generic `AgentRole`
+enum values. Any new gamified-keyed surface requires explicit amendment of
+this section, not silent precedent. The pinning test at
+`tests/unit/test_adr_001_ratified_exceptions.py` asserts that every key in
+`DefaultToolPolicy._FLOOR` is a known alias in `GAMIFIED_TO_GENERIC`, so
+silent extension of the ratified set fails at CI.

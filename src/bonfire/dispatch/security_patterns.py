@@ -283,7 +283,7 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.4-cat-env-file",
         category="exfiltration",
-        pattern=re.compile(r"\bcat\s+\.env(?:\.[a-z]+)?\b"),
+        pattern=re.compile(r"\b(?:cat|head|tail)\s+\.env(?:\.[a-z]+)?\b"),
         message="Reading a .env file — denied.",
     ),
     DenyRule(

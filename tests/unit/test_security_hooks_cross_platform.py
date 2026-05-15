@@ -123,12 +123,7 @@ class TestMacOSSSHDeny:
 
     @pytest.mark.parametrize("path", MACOS_SSH_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_ssh_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_ssh_write_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"macOS SSH Write of {path!r} must deny — "
@@ -137,12 +132,7 @@ class TestMacOSSSHDeny:
 
     @pytest.mark.parametrize("path", MACOS_SSH_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_ssh_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_ssh_edit_denied(self, path: str) -> None:
         result = await _run_write_edit("Edit", path)
         assert _is_deny(result), (
             f"macOS SSH Edit of {path!r} must deny — "
@@ -164,12 +154,7 @@ MACOS_AWS_PATHS = [
 class TestMacOSAWSDeny:
     @pytest.mark.parametrize("path", MACOS_AWS_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_aws_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_aws_write_denied(self, path: str) -> None:
         # Only "credentials" is in the deny list today; "config" depends on
         # whether the implementation extends the deny list. Limit assertion to the
         # canonical "credentials" file.
@@ -183,12 +168,7 @@ class TestMacOSAWSDeny:
 
     @pytest.mark.parametrize("path", MACOS_AWS_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_aws_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_aws_edit_denied(self, path: str) -> None:
         if not path.endswith("credentials"):
             pytest.skip("only ~/.aws/credentials is canonically deny")
         result = await _run_write_edit("Edit", path)
@@ -214,12 +194,7 @@ MACOS_GNUPG_PATHS = [
 class TestMacOSGnuPGDeny:
     @pytest.mark.parametrize("path", MACOS_GNUPG_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_gnupg_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_gnupg_write_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"macOS GnuPG Write of {path!r} must deny — "
@@ -228,12 +203,7 @@ class TestMacOSGnuPGDeny:
 
     @pytest.mark.parametrize("path", MACOS_GNUPG_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_gnupg_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_gnupg_edit_denied(self, path: str) -> None:
         result = await _run_write_edit("Edit", path)
         assert _is_deny(result), (
             f"macOS GnuPG Edit of {path!r} must deny — "
@@ -265,12 +235,7 @@ MACOS_DOTENV_PATHS = [
 class TestMacOSDotenvDeny:
     @pytest.mark.parametrize("path", MACOS_DOTENV_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_dotenv_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_dotenv_write_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"macOS dotenv Write of {path!r} must deny — "
@@ -280,12 +245,7 @@ class TestMacOSDotenvDeny:
 
     @pytest.mark.parametrize("path", MACOS_DOTENV_PATHS)
     @pytest.mark.asyncio
-    async def test_macos_dotenv_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_dotenv_edit_denied(self, path: str) -> None:
         result = await _run_write_edit("Edit", path)
         assert _is_deny(result), (
             f"macOS dotenv Edit of {path!r} must deny — "
@@ -310,14 +270,7 @@ WINDOWS_SSH_PATHS = [
 class TestWindowsSSHDeny:
     @pytest.mark.parametrize("path", WINDOWS_SSH_PATHS)
     @pytest.mark.asyncio
-    async def test_windows_ssh_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        # Windows operators set both HOME and USERPROFILE.
-        monkeypatch.setenv("HOME", r"C:\Users\alice")
-        monkeypatch.setenv("USERPROFILE", r"C:\Users\alice")
+    async def test_windows_ssh_write_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"Windows SSH Write of {path!r} must deny — "
@@ -326,13 +279,7 @@ class TestWindowsSSHDeny:
 
     @pytest.mark.parametrize("path", WINDOWS_SSH_PATHS)
     @pytest.mark.asyncio
-    async def test_windows_ssh_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", r"C:\Users\alice")
-        monkeypatch.setenv("USERPROFILE", r"C:\Users\alice")
+    async def test_windows_ssh_edit_denied(self, path: str) -> None:
         result = await _run_write_edit("Edit", path)
         assert _is_deny(result), (
             f"Windows SSH Edit of {path!r} must deny — "
@@ -353,13 +300,7 @@ WINDOWS_AWS_PATHS = [
 class TestWindowsAWSDeny:
     @pytest.mark.parametrize("path", WINDOWS_AWS_PATHS)
     @pytest.mark.asyncio
-    async def test_windows_aws_write_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", r"C:\Users\alice")
-        monkeypatch.setenv("USERPROFILE", r"C:\Users\alice")
+    async def test_windows_aws_write_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"Windows AWS Write of {path!r} must deny — "
@@ -368,13 +309,7 @@ class TestWindowsAWSDeny:
 
     @pytest.mark.parametrize("path", WINDOWS_AWS_PATHS)
     @pytest.mark.asyncio
-    async def test_windows_aws_edit_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", r"C:\Users\alice")
-        monkeypatch.setenv("USERPROFILE", r"C:\Users\alice")
+    async def test_windows_aws_edit_denied(self, path: str) -> None:
         result = await _run_write_edit("Edit", path)
         assert _is_deny(result), (
             f"Windows AWS Edit of {path!r} must deny — "
@@ -410,13 +345,7 @@ WINDOWS_NORMALISATION_VARIANTS = [
 class TestWindowsSeparatorNormalisation:
     @pytest.mark.parametrize("path", WINDOWS_NORMALISATION_VARIANTS)
     @pytest.mark.asyncio
-    async def test_windows_ssh_authorized_keys_normalised(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", r"C:\Users\alice")
-        monkeypatch.setenv("USERPROFILE", r"C:\Users\alice")
+    async def test_windows_ssh_authorized_keys_normalised(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"Windows separator variant {path!r} must deny — "
@@ -450,12 +379,7 @@ MACOS_CAT_BYPASS = [
 class TestMacOSCatC4Bypass:
     @pytest.mark.parametrize("cmd", MACOS_CAT_BYPASS)
     @pytest.mark.asyncio
-    async def test_macos_cat_secret_denied_at_c4_layer(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        cmd: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/Users/alice")
+    async def test_macos_cat_secret_denied_at_c4_layer(self, cmd: str) -> None:
         result = await _run_bash(cmd)
         assert _is_deny(result), (
             f"macOS ``{cmd}`` must deny — C4 regex alternation must "
@@ -484,12 +408,7 @@ LINUX_SMOKE_PATHS = [
 class TestLinuxRegressionSmoke:
     @pytest.mark.parametrize("path", LINUX_SMOKE_PATHS)
     @pytest.mark.asyncio
-    async def test_linux_write_still_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        path: str,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/home/alice")
+    async def test_linux_write_still_denied(self, path: str) -> None:
         result = await _run_write_edit("Write", path)
         assert _is_deny(result), (
             f"Linux regression — Write of {path!r} must STILL deny after "
@@ -497,13 +416,135 @@ class TestLinuxRegressionSmoke:
         )
 
     @pytest.mark.asyncio
-    async def test_linux_cat_ssh_still_denied(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setenv("HOME", "/home/alice")
+    async def test_linux_cat_ssh_still_denied(self) -> None:
         result = await _run_bash("cat /home/alice/.ssh/id_rsa")
         assert _is_deny(result), (
             "Linux regression — ``cat /home/<u>/.ssh/id_rsa`` C4.1 must "
             "STILL deny after the alternation extension lands."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test #10 — Backslash normalisation must not produce ``//`` artifacts
+#
+# The canonicalisation step must produce a clean forward-slash form on
+# inputs that contain mixed-escape, UNC-style, or odd-length backslash
+# runs. A naive two-pass ``replace("\\\\", "/").replace("\\", "/")``
+# leaves ``//`` artifacts that bypass ``_HOME_PREFIX_RE`` (which expects a
+# single leading ``/``) and silently slip past the credential floor.
+#
+# Variants exercised below:
+#
+#   1. Mixed-escape (a JSON-serialising agent doubles every backslash):
+#      ``C:\\\\Users\\\\alice\\.ssh\\authorized_keys`` — must DENY.
+#   2. Single-escape (raw Windows literal):
+#      ``C:\\Users\\alice\\.ssh\\authorized_keys`` — must DENY.
+#   3. Forward-slash variant (cross-platform tooling):
+#      ``C:/Users/alice/.ssh/authorized_keys`` — must DENY.
+#   4. Odd-length run (3 backslashes):
+#      ``\\\\\\Users\\alice\\.ssh\\id_rsa`` — the canonicalised form must
+#      not produce a ``//Users/...`` artifact that a future regex would
+#      have to special-case around.
+#   5. UNC path ``\\\\server\\share\\Users\\alice\\.ssh\\id_rsa``: no
+#      deny rule currently covers UNC, so the assertion is only that the
+#      canonicaliser does not produce a ``/Users/...`` substring that a
+#      home-prefix matcher would mistake for an actual home path.
+# ---------------------------------------------------------------------------
+
+
+# Build Python strings whose runtime content matches each shape.
+# ``r"..."`` keeps backslashes literal; the comment beside each entry
+# shows what the canonicaliser sees on the wire.
+H1_BACKSLASH_DENY_VARIANTS = [
+    # 1. Mixed-escape — JSON-doubled backslashes (a JSON-serialising agent
+    #    that double-encodes the separator emits ``\\\\`` for what was
+    #    once ``\\``). On the wire that is four backslashes per separator.
+    r"C:\\\\Users\\\\alice\.ssh\authorized_keys",
+    # 2. Single-escape — raw Windows literal (one backslash per separator
+    #    on the wire).
+    r"C:\Users\alice\.ssh\authorized_keys",
+    # 3. Forward-slash variant.
+    "C:/Users/alice/.ssh/authorized_keys",
+]
+
+
+class TestBackslashNormalisationNoDoubleSlashArtifact:
+    """Canonicalisation must not leave ``//`` artifacts that bypass the
+    home-prefix matcher.
+    """
+
+    @pytest.mark.parametrize("path", H1_BACKSLASH_DENY_VARIANTS)
+    @pytest.mark.asyncio
+    async def test_mixed_and_single_escape_authorized_keys_denied(self, path: str) -> None:
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Windows variant {path!r} must DENY — canonicalisation must "
+            "not leave a ``//`` artifact that bypasses _HOME_PREFIX_RE."
+        )
+
+    def test_mixed_escape_canonical_has_no_double_slash(self) -> None:
+        # Mixed-escape input — JSON-doubled separators (4 wire backslashes
+        # per segment break) plus single backslashes elsewhere. The
+        # canonical form must collapse to ``~/.ssh/authorized_keys`` with a
+        # single slash everywhere. A buggy two-pass replace would produce
+        # ``C://Users//alice/.ssh/authorized_keys``.
+        canonical = _mod._canonicalize_write_edit_path(r"C:\\\\Users\\\\alice\.ssh\authorized_keys")
+        assert "//" not in canonical, (
+            f"Canonical form {canonical!r} must not contain ``//`` "
+            "artifacts from the backslash normalisation."
+        )
+        assert canonical == "~/.ssh/authorized_keys"
+
+    def test_odd_length_backslash_run_has_no_double_slash(self) -> None:
+        # Three leading backslashes (an attacker variant) must not collapse
+        # to ``//Users/...`` after normalisation.
+        canonical = _mod._canonicalize_write_edit_path(r"\\\Users\alice\.ssh\id_rsa")
+        assert "//" not in canonical, (
+            f"Canonical form {canonical!r} must not contain ``//`` "
+            "artifacts from an odd-length backslash run."
+        )
+
+    def test_unc_path_does_not_misdetect_as_home(self) -> None:
+        # UNC ``\\server\share\Users\alice\.ssh\id_rsa`` — a naive two-pass
+        # normalise would yield ``/server/share/Users/alice/.ssh/id_rsa``.
+        # No deny rule currently covers UNC, so the assertion is only that
+        # the canonicaliser does not produce a leading-``//`` artifact AND
+        # does not silently re-tag this path as a home path (``~/...``).
+        canonical = _mod._canonicalize_write_edit_path(r"\\server\share\Users\alice\.ssh\id_rsa")
+        assert "//" not in canonical, (
+            f"Canonical UNC form {canonical!r} must not contain ``//`` artifacts."
+        )
+        assert not canonical.startswith("~/"), (
+            f"Canonical UNC form {canonical!r} must not be misdetected as "
+            "a home-prefix — the ``server`` segment is not a user home."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test #11 — ``head`` / ``tail`` of a .env file must be denied
+#
+# The C4.4 rule for ``cat .env`` should broaden to ``cat|head|tail`` so an
+# attacker cannot swap the reading verb to leak the same secret.
+# ---------------------------------------------------------------------------
+
+
+DOTENV_READ_VERB_BYPASS = [
+    "head .env",
+    "tail .env",
+    "head .env.local",
+    "tail .env.local",
+    "head .env.production",
+    "tail .env.production",
+]
+
+
+class TestDotenvReadVerbBroadening:
+    @pytest.mark.parametrize("cmd", DOTENV_READ_VERB_BYPASS)
+    @pytest.mark.asyncio
+    async def test_dotenv_read_verb_denied(self, cmd: str) -> None:
+        result = await _run_bash(cmd)
+        assert _is_deny(result), (
+            f"``{cmd}`` must DENY — C4.4 must broaden the reading verb "
+            "from ``cat`` to ``cat|head|tail`` so swap-the-verb bypass "
+            "is closed."
         )

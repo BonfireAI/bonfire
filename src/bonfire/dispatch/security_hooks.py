@@ -221,14 +221,18 @@ def _canonicalize_write_edit_path(file_path: str) -> str:
     s = file_path
     if s.startswith("./"):
         s = s[2:]
-    # Windows separator normalization. Two passes:
-    #   1. Doubled / escaped backslashes ("\\\\" — two real backslashes that
-    #      a JSON-serializing agent may emit) collapse to a single slash.
-    #   2. Any remaining single backslashes collapse to a forward slash.
-    # After this, the path is purely forward-slash-delimited regardless of
-    # the input encoding.
+    # Windows separator normalization. Single-pass + run-collapse:
+    #   1. Every backslash (single or arbitrary run) becomes a forward slash.
+    #   2. Any resulting run of two or more slashes collapses to a single
+    #      slash.
+    # The collapse step handles BOTH JSON-doubled-escape inputs
+    # (``C:\\\\Users\\\\alice`` → ``C://Users//alice`` after step 1) AND
+    # Windows UNC ``\\server\share`` shapes (→ ``//server/share`` after
+    # step 1), each of which would otherwise produce ``//`` artifacts that
+    # bypass ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
     if "\\" in s:
-        s = s.replace("\\\\", "/").replace("\\", "/")
+        s = s.replace("\\", "/")
+        s = re.sub(r"/{2,}", "/", s)
     s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
     return s
 

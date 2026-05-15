@@ -221,7 +221,7 @@ release flips public, the integration branch for v0.2 is cut from `main`.
 - `tests/integration/` — broader tests; deterministic, no network
 - `tests/e2e/` — fixture-driven box runs; LOCAL ONLY, never in CI
 - `tests/smoke/` — fast import/CLI smoke checks; runs in CI via `smoke.yml`
-- `tests/scripts/` — ad-hoc characterization scripts (not pytest-collected)
+- `tests/scripts/` — driver-adjacent tests and ad-hoc characterization scripts (some files are pytest-collected, others run directly)
 - `docs/` — architecture, ADRs, release policy, audit trail
 - Envelope + Payload handoff protocol between stages (see
   [`docs/architecture.md`](docs/architecture.md))

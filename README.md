@@ -58,8 +58,8 @@ bonfire init .
 # Launch the browser-based onboarding scan
 bonfire scan
 
-# Inspect per-session cost (or `bonfire cost --help` for all subcommands)
-bonfire cost session
+# Inspect cumulative cost and recent sessions
+bonfire cost
 
 # List installed personas
 bonfire persona list

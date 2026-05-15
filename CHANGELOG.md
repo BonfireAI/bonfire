@@ -4,19 +4,24 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — 2026-05-15
+## [0.1.0] — UNRELEASED
 
 The first stable release of `bonfire-ai`. Bonfire is a pipeline runtime
 for AI agents — it wires role-bound stages over a typed event bus, enforces
 TDD at the role boundary, and ships the four extension Protocols
 (`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`) that
 together form the trust triangle a production deployment composes against.
-This release closes every item on the v0.1.0 release-gate ladder; the PyPI
-`Development Status` classifier advances from `3 - Alpha` to `4 - Beta`.
+This section is staged ahead of the v0.1.0 tag-cut PR; when that PR lands
+it will (a) bump `pyproject.toml` from `0.1.0a2` to `0.1.0`, (b) advance
+the PyPI `Development Status` classifier from `3 - Alpha` to `4 - Beta`,
+and (c) date this entry to its tag-cut day. The release-gate-ladder items
+are closed in code or accepted-with-documentation per the policy in
+[`docs/release-policy.md`](docs/release-policy.md); some still surface
+follow-ups that ship in subsequent v0.1.x patches.
 
 Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
 hardening pass across the dispatch, scanner, persona, git, and Front Door
-modules, and a performance pass that takes knowledge-vault ingest from
+modules, and a performance pass that takes Vault ingest from
 quadratic to linear. Everything else is sharpening: a clarified `bonfire
 scan --no-browser` contract, a documented WebSocket protocol for the
 onboarding flow, and the CI and pre-commit wiring that make "the suite
@@ -48,15 +53,14 @@ passes" mean what it should on the integration branch.
   Status :: 3 - Alpha` to `4 - Beta` per
   [`docs/release-policy.md`](docs/release-policy.md). The
   `bonfire-ai==0.1.0` install is the first non-alpha drop.
-- **`DispatchOptions.permission_mode` default flipped to `"default"`
-  (SDK ask-mode).** The previous default `"dontAsk"` is now framed as
-  defense-in-depth rather than the primary trust gate; explicit
+- **BREAKING: `DispatchOptions.permission_mode` default flipped to
+  `"default"` (SDK ask-mode).** The previous default `"dontAsk"` is now
+  framed as defense-in-depth rather than the primary trust gate; explicit
   `permission_mode="dontAsk"` opt-ins in `handlers/wizard.py` and
   `handlers/sage_correction_bounce.py` continue to behave as before.
   Callers that today inherit the default will now run agents in
   SDK ask-mode. Handlers that need autonomous behavior must opt in
-  explicitly. **This is a behavior-changing default flip; review your
-  call sites before upgrading.**
+  explicitly. Review your call sites before upgrading from `0.1.0a*`.
 - **`bonfire scan --no-browser` is documented as WebSocket-driven, not
   browser-suppressed.** The flag never disabled the Front Door server —
   it only suppressed `typer.launch(url)`. Help text, runtime echo, and
@@ -67,7 +71,7 @@ passes" mean what it should on the integration branch.
 - **`InMemoryVaultBackend.exists()` is now O(1).** A parallel hash-set
   index turns the previous linear scan into a constant-time membership
   check. n-entry ingest was O(n²) before this change; it is now O(n).
-- **Knowledge-vault query lowercasing is now cached.** `query()` no
+- **Vault query lowercasing is now cached.** `query()` no
   longer re-lowercases each entry's content on every call; a lazy
   parallel cache fills on first query, and ingest-heavy workloads that
   never query never pay the cost.

@@ -52,10 +52,25 @@ _C1_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C1.1-rm-rf-non-temp",
         category="destructive-fs",
+        # Exclusion list is anchored at path-segment boundaries.
+        # Each ephemeral-dir token (``node_modules``, ``.venv``, ``__pycache__``,
+        # ``dist``, ``build``) is bracketed by ``(?:^|/)`` on the left and
+        # ``(?:/|\s|$)`` on the right, so:
+        #   * ``rm -rf __pycache__-backup/db`` is NOT excused (the dir name
+        #     merely starts with the token as a substring — DENY).
+        #   * ``rm -rf project/.venv`` IS excused (real ephemeral dir one
+        #     path-segment deep — ALLOW).
+        # Absolute-path prefixes (``/tmp/``, ``/var/tmp/``, ``$TMPDIR/``, ``./``)
+        # remain anchored at the start of the path argument as before.
         pattern=re.compile(
             r"(?:^|[|;&]\s*)rm\s+(?:-[a-zA-Z]*[rRfF][a-zA-Z]*\s+)+"
-            r"(?!(?:/tmp/|/var/tmp/|\$TMPDIR/|\./|"
-            r"[a-zA-Z0-9_./-]*node_modules|\.venv|__pycache__|dist/|build/))"
+            r"(?!"
+            r"(?:/tmp/|/var/tmp/|\$TMPDIR/|\./)"
+            r"|"
+            r"(?:[a-zA-Z0-9_./-]*?/)?"
+            r"(?:node_modules|\.venv|__pycache__|dist|build)"
+            r"(?:/|\s|$)"
+            r")"
         ),
         message=("rm -rf outside ephemeral paths is denied. If intended, run manually."),
     ),

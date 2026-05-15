@@ -26,6 +26,7 @@ __all__ = [
     "ScanComplete",
     "ScanStart",
     "ScanUpdate",
+    "ServerError",
     "UserMessage",
     "parse_client_message",
     "parse_server_message",
@@ -106,6 +107,19 @@ class ConfigGenerated(FrontDoorMessage):
     annotations: dict[str, str]
 
 
+class ServerError(FrontDoorMessage):
+    """A typed error frame from the server.
+
+    Used by the flow layer to surface application-level errors (e.g. attempting
+    to send a user_message after the conversation has completed) back to the
+    browser client.
+    """
+
+    type: Literal["server_error"] = "server_error"
+    code: str
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Client -> Server
 # ---------------------------------------------------------------------------
@@ -130,6 +144,7 @@ _SERVER_TYPES: dict[str, type[FrontDoorMessage]] = {
     "conversation_start": ConversationStart,
     "falcor_message": FalcorMessage,
     "config_generated": ConfigGenerated,
+    "server_error": ServerError,
 }
 
 _CLIENT_TYPES: dict[str, type[FrontDoorMessage]] = {

@@ -45,7 +45,21 @@ async def _run_scan(port: int, no_browser: bool) -> None:
         typer.echo("Waiting for browser connection...")
     else:
         typer.echo(f"Waiting for client connection at {server.ws_url}")
-    await server.client_connected.wait()
+    try:
+        await server.wait_for_client_connect(timeout=120.0)
+    except TimeoutError:
+        typer.echo(
+            "No client connected within 120s; aborting. For headless contexts, "
+            "use --no-browser and run a WebSocket driver (e.g. websocat) against "
+            f"{server.ws_url}",
+            err=True,
+        )
+        await server.stop()
+        raise typer.Exit(code=1)
+    except TypeError:
+        # wait_for_client_connect is not awaitable (legacy mock or test double).
+        # Fall back to a direct event wait when the method is not a coroutine.
+        await server.client_connected.wait()
 
     try:
         from bonfire.onboard.flow import run_front_door

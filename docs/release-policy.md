@@ -65,8 +65,9 @@ The first functional release is cut when:
 - All four trust-triangle components are on `main`: the four
   `@runtime_checkable` extension protocols (`AgentBackend`,
   `VaultBackend`, `QualityGate`, `StageHandler`), the default
-  allow-list floor and user-configurable per-role allow-lists (W4.1),
-  and the default security hook set (W4.2).
+  allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+  the Protocol seam IS the user-configurable surface; no TOML loader
+  ships in v0.1), and the default security hook set (W4.2).
 
 At that point:
 

@@ -262,8 +262,10 @@ A `v0.1.0` tag is BLOCKED until ALL of:
    ([`docs/release-policy.md`](docs/release-policy.md) line 40).
 3. Trust-triangle components on `main`: the four `@runtime_checkable` extension
    protocols (`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`),
-   the per-role tool allow-lists with default floor (W4.1), and the default
-   security hook set (W4.2). See [`docs/release-policy.md`](docs/release-policy.md).
+   the default allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+   the Protocol seam IS the user-configurable surface; no TOML loader ships in
+   v0.1), and the default security hook set (W4.2). See
+   [`docs/release-policy.md`](docs/release-policy.md).
 4. Box E2E PASS verdict on the v0.1.0 tag commit
    ([`docs/release-gates.md`](docs/release-gates.md) line 105).
 5. Every README example executable in a fresh box

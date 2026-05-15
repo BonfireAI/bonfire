@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Per-role tool allow-list policy — W1.5.3 default floor.
+"""Per-role tool allow-list policy — W1.5.3 default floor + W4.1 user seam.
 
 The :class:`ToolPolicy` Protocol lets the dispatch layer ask "for this role,
 which tools are permitted?" without any particular implementation. The bundled
 :class:`DefaultToolPolicy` ships the W1.5.3 floor — eight canonical roles
 mapped to tool lists lifted from the Bonfire v0.1 axiom tables.
 
-W4.1 (user TOML override) is a future concern; users who wish to override can
-implement :class:`ToolPolicy` and pass it into ``StageExecutor`` /
-``PipelineEngine`` via the ``tool_policy=`` constructor kwarg.
+The :class:`ToolPolicy` Protocol IS the W4.1 user-configurable surface. Users
+who wish to override the floor implement :class:`ToolPolicy` and pass their
+implementation into ``StageExecutor`` / ``PipelineEngine`` via the
+``tool_policy=`` constructor kwarg. No TOML loader ships in v0.1; the Protocol
+seam is the public surface.
 """
 
 from __future__ import annotations

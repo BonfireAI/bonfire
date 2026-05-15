@@ -152,16 +152,43 @@ _IFS_RE = re.compile(r"\$\{IFS\}|\$IFS\$[0-9]|\$IFS")
 # Backslash-newline continuation → space.
 _BACKSLASH_NEWLINE_RE = re.compile(r"\\\n")
 
+# ASCII control bytes EXCEPT tab (\x09), newline (\x0a), and carriage return
+# (\x0d). Closes the NUL-byte bypass (Mirror Probe finding S1.5): a payload
+# like ``rm\x00-rf /`` sneaks past the C1.1 ``\s+``-separator deny rule
+# because ``\s`` does not match ``\x00``. Strip these BEFORE downstream
+# matching so the deny regex sees the rejoined token.
+_CONTROL_BYTE_CLASS = r"[\x00-\x08\x0b\x0c\x0e-\x1f]"
+_CONTROL_BYTE_RE = re.compile(_CONTROL_BYTE_CLASS)
+# Control-byte runs sandwiched between two ASCII letters: drop entirely so
+# attacker-injected ``r\x00m`` rejoins into ``rm`` and the deny regex sees
+# the canonical token. Other control-byte runs collapse to a single space
+# so ``rm\x00-rf`` becomes ``rm -rf`` and C1.1's ``\s+`` separator matches.
+_CONTROL_BYTE_BETWEEN_LETTERS_RE = re.compile(
+    r"(?<=[A-Za-z])" + _CONTROL_BYTE_CLASS + r"+(?=[A-Za-z])"
+)
+_CONTROL_BYTE_RUN_RE = re.compile(_CONTROL_BYTE_CLASS + r"+")
+
 
 def _normalize(command: str) -> str:
-    """Stage 1: NFKC + expand $IFS + collapse backslash-newline.
+    """Stage 1: strip bypass control bytes + NFKC + expand $IFS + collapse
+    backslash-newline.
 
     Deliberately NOT doing an shlex round-trip here — shlex chokes on
     partial quotes which is a common agent output; we prefer "best effort
     normalize without raising." Structural unwrap (Stage 2) performs its
     own shlex-based tokenization on the segments where it matters.
+
+    Control-byte handling preserves \\t, \\n, \\r (legitimate shell
+    whitespace). Other U+0000–U+001F bytes are removed via two passes:
+    first, runs sandwiched between two ASCII letters are dropped so split
+    tokens (``r\\x00m``) rejoin into recognizable commands (``rm``); then
+    any remaining runs collapse to a single space so injected
+    pseudo-separators (``rm\\x00-rf``) yield the canonical ``rm -rf`` shape
+    that deny regexes expect.
     """
-    s = unicodedata.normalize("NFKC", command)
+    s = _CONTROL_BYTE_BETWEEN_LETTERS_RE.sub("", command)
+    s = _CONTROL_BYTE_RUN_RE.sub(" ", s)
+    s = unicodedata.normalize("NFKC", s)
     s = _BACKSLASH_NEWLINE_RE.sub(" ", s)
     s = _IFS_RE.sub(" ", s)
     return s
@@ -627,6 +654,30 @@ def build_preexec_hook(
                 raise _user_patterns_error
             user_patterns = _user_patterns_compiled
             assert user_patterns is not None  # narrow for type-checker
+
+            # Pre-strip detection: a Bash command bearing ASCII control bytes
+            # (anywhere outside \t / \n / \r) is bypass-shaped. The Stage-1
+            # _normalize strip rebuilds the token for downstream matching, but
+            # well-crafted payloads can still smuggle through dangerous-path
+            # exclusions on the rebuilt form (e.g. ``rm\x01-rf /tmp/`` would
+            # otherwise inherit C1.1's ``/tmp/`` exclusion). Treat control-byte
+            # presence as its own deny signal for Bash; Write/Edit accept
+            # arbitrary file content, so this gate applies only to Bash.
+            if tool_name == "Bash" and _CONTROL_BYTE_RE.search(command):
+                reason = "ASCII control byte in Bash command — bypass-shaped payload denied."
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=reason,
+                            pattern_id="_infra.control-byte",
+                            agent_name=aname,
+                        ),
+                    )
+                return _deny_envelope(reason)
 
             normalized = _normalize(command)
 

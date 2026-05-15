@@ -882,12 +882,12 @@ class TestConnectHandshakeTimeout:
     ) -> None:
         """wait_for_client_connect returns without exception when client connects in time."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
 
             async def _connect() -> None:
                 await asyncio.sleep(0.05)
-                async with websockets.connect(f"ws://127.0.0.1:{port}/ws"):
+                async with websockets.connect(server.ws_url):
                     await asyncio.sleep(0.05)
 
             connect_task = asyncio.create_task(_connect())
@@ -1005,13 +1005,13 @@ class TestUiHtmlNoThirdPartyEgress:
     async def test_served_html_has_no_google_fonts(self) -> None:
         """Served HTML must not contain the fonts.googleapis.com domain."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             body = response.read()
             assert b"fonts.googleapis.com" not in body, (
@@ -1024,13 +1024,13 @@ class TestUiHtmlNoThirdPartyEgress:
     async def test_served_html_has_no_third_party_https_references(self) -> None:
         """Served HTML must not contain any third-party https:// references."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             body = response.read().decode("utf-8", errors="replace")
 

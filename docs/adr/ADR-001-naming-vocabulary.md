@@ -103,6 +103,8 @@ trust-triangle surface.
 New dict-keyed-by-role surfaces in code MUST prefer the generic `AgentRole`
 enum values. Any new gamified-keyed surface requires explicit amendment of
 this section, not silent precedent. The pinning test at
-`tests/unit/test_adr_001_ratified_exceptions.py` asserts that every key in
-`DefaultToolPolicy._FLOOR` is a known alias in `GAMIFIED_TO_GENERIC`, so
-silent extension of the ratified set fails at CI.
+`tests/unit/test_adr_001_ratified_exceptions.py` asserts that
+`DefaultToolPolicy._FLOOR`'s keys exactly match the ratified set
+(`RATIFIED_FLOOR_KEYS` — the eight names enumerated above) AND that every
+ratified key is a known alias in `GAMIFIED_TO_GENERIC`. Silent extension or
+omission of the ratified set fails at CI.

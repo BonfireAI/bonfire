@@ -11,11 +11,13 @@
 > This is the first functional release of `bonfire-ai`. The pipeline
 > engine, the role-bound cadre, the quality gates, the persona system,
 > and the `bonfire scan` onboarding flow are wired and exercised by
-> the test suite. The CLI verb that drives the engine end-to-end
-> (`bonfire run`), the bundled prompt-template directory, and the
-> knowledge-graph ("the Vault") backend are deferred to later 0.1.x
-> releases. The frame is shipped; some operations are deliberately
-> not.
+> the test suite. An in-memory `VaultBackend` ships as the default
+> knowledge store; a LanceDB-backed implementation is available
+> behind the `bonfire-ai[knowledge]` extra. The CLI verb that drives
+> the engine end-to-end (`bonfire run`), the bundled prompt-template
+> directory, and the persistent knowledge-graph storage are deferred
+> to later 0.1.x releases. The frame is shipped; some operations are
+> deliberately not.
 >
 > If you are an early adopter, run it against a throwaway repo, file
 > issues at [github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues),
@@ -139,9 +141,12 @@ Alongside the cadre, the **Vault** is the named knowledge store of
 Bonfire's world — capitalized, personified in display vocabulary,
 narrated by the persona at lifecycle moments (*The Vault remembers*,
 *The Vault gives back*). The Vault is not an agent; it is never
-dispatched and has no role. The full knowledge-graph backend lands
-in a later 0.1.x release; today the protocol is published and the
-default backend is in progress.
+dispatched and has no role. Today the `VaultBackend` Protocol is
+published and an **in-memory default backend** ships (substring
+matching, no embeddings, no external dependencies — suitable for
+tests and small projects). A LanceDB-backed implementation is
+available behind the `bonfire-ai[knowledge]` extra; the persistent
+knowledge-graph storage layer lands in a later 0.1.x release.
 
 ## Config Reference
 
@@ -318,9 +323,10 @@ class StageHandler(Protocol):
     ) -> Envelope: ...
 ```
 
-The full Vault knowledge-graph implementation lands in a later
-0.1.x release. The protocol is stable today; the default backend
-ships once the schema is locked.
+The full persistent Vault knowledge-graph implementation lands in a
+later 0.1.x release. The protocol is stable today; the in-memory
+default backend ships today and a LanceDB-backed implementation is
+available behind the `bonfire-ai[knowledge]` extra.
 
 ## What's Not There Yet
 
@@ -338,17 +344,20 @@ Honest list, because alpha means alpha:
   contributor-supplied today. Default identity blocks for the
   LLM-dispatching roles (Scout, Knight, Warrior, Wizard) come in a
   later 0.1.x release.
-- **The Vault default backend is not yet shipped.** The
-  `VaultBackend` Protocol is stable; the knowledge-graph storage and
-  query implementation land once the schema is locked.
+- **The persistent Vault knowledge-graph is not yet shipped.** The
+  `VaultBackend` Protocol is stable and an in-memory default backend
+  ships today (substring matching, no embeddings); the
+  knowledge-graph storage and query implementation lands once the
+  schema is locked.
 - **No downstream surface imports the package today.** Wrappers and
   vertical surfaces are designed against the engine but not yet
   wired to it. The release-gate Box validates the artifact contract,
   not the orchestration capability.
 
-`v0.1.0a1` reserves the name on PyPI and ships the frame. Later
-0.1.x releases ship the verb, the templates, and the Vault. The
-under-claim is the feature.
+The `v0.1.0aN` alpha series reserves the name on PyPI and ships the
+frame. Later 0.1.x releases ship the verb, the bundled prompt
+templates, and the persistent Vault knowledge-graph. The under-claim
+is the feature.
 
 ## Roadmap
 
@@ -358,8 +367,10 @@ What's coming next, in rough order:
   Deferred to `v0.1.1`.
 - **Bundled prompt-template identity blocks** for the four
   LLM-dispatching cadre roles.
-- **Default Vault backend** — the knowledge-graph implementation
-  behind the `VaultBackend` Protocol.
+- **Persistent Vault knowledge-graph** — the durable storage and
+  query implementation behind the `VaultBackend` Protocol (today's
+  default is in-memory; LanceDB is available behind the
+  `bonfire-ai[knowledge]` extra).
 - **Multi-forge support** via the Instruction Set Markup (ISM) seam —
   declarative third-party tool integrations replacing today's
   hard-coded `gh`-only forge calls.

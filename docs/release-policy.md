@@ -7,9 +7,11 @@ to PyPI during the pre-release and v0.1 development periods.
 
 ## Current Status
 
-`bonfire-ai` is in alpha at version `0.1.0a1`. The original `0.1.0`
-tag shipped on 2026-04-28; on 2026-05-03 the version label was reverted
-to `0.1.0a1` to honestly reflect that the release-gate items in
+`bonfire-ai` is in alpha at version `0.1.0a2` (see
+[`pyproject.toml`](../pyproject.toml) — single source of truth for the
+shipped version string). The original `0.1.0` tag shipped on 2026-04-28;
+on 2026-05-03 the version label was reverted to the `0.1.0aN` series to
+honestly reflect that the release-gate items in
 [`docs/release-gates.md`](release-gates.md) remain open. Stable
 `v0.1.0` is the future tag once they all clear. See
 [`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.

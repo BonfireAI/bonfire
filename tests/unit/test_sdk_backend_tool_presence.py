@@ -241,8 +241,16 @@ class TestEmptyToolsKillSwitch:
 
         assert list(captured["allowed_tools"]) == []
 
-    async def test_permission_mode_dontAsk_default_preserved(self) -> None:
-        """Sage D7 — ``permission_mode='dontAsk'`` default + empty ``tools`` = deny-all."""
+    async def test_permission_mode_default_is_ask_mode(self) -> None:
+        """CONTRACT-CHANGE: ``permission_mode`` default flipped from 'dontAsk' to 'default'.
+
+        Per the CLI / scanner / session hardening contract, the new
+        ship-safe default is SDK ask-mode (``"default"``).  Empty
+        ``tools`` is still the PRESENCE-layer kill-switch; the
+        permission-mode layer no longer doubles as a deny-all by
+        default.  Explicit ``dontAsk`` callers in ``handlers/`` (wizard,
+        sage_correction_bounce) opt in by name and remain unchanged.
+        """
         captured, FakeOptions = _make_capture()
 
         with (
@@ -253,7 +261,7 @@ class TestEmptyToolsKillSwitch:
             options = DispatchOptions(tools=[])
             await backend.execute(_envelope(), options=options)
 
-        assert captured.get("permission_mode") == "dontAsk"
+        assert captured.get("permission_mode") == "default"
 
 
 # ===========================================================================

@@ -71,7 +71,7 @@ class DispatchOptions(BaseModel):
     # Agent isolation
     tools: list[str] = Field(default_factory=list)
     cwd: str = ""
-    permission_mode: str = "dontAsk"
+    permission_mode: str = "default"
     role: str = Field(default="", strict=True)
 
     # Security hook policy

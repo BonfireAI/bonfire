@@ -22,6 +22,7 @@ Two methods split the total/strict responsibilities:
 from __future__ import annotations
 
 import logging
+import re
 import tomllib
 from pathlib import Path  # noqa: TC003 — runtime constructor type
 
@@ -35,6 +36,17 @@ _HARDCODED_MINIMAL = BasePersona(name="minimal", phrases={})
 _REQUIRED_PERSONA_FIELDS = ("name", "display_name", "description", "version")
 _CANONICAL_ROLE_VALUES = frozenset(r.value for r in AgentRole)
 _KNOWN_TOPLEVEL_TABLES = frozenset({"persona", "display_names"})
+
+# Slug pattern shared with ``bonfire.integrations.loader._NAME_PATTERN`` —
+# lowercase letter start, then letters/digits/dashes/underscores. This
+# blocks path-traversal probes (``../``, ``/``, ``\\``), NUL bytes,
+# whitespace, leading dots, and uppercase variants.
+_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+
+def _is_valid_persona_name(name: str) -> bool:
+    """Return ``True`` if *name* matches the slug pattern."""
+    return bool(_NAME_PATTERN.match(name))
 
 
 class PersonaSchemaError(ValueError):
@@ -64,8 +76,23 @@ class PersonaLoader:
         the minimal safety net — first the ``minimal`` built-in if
         present, then a hardcoded ``BasePersona(name='minimal', phrases={})``.
 
+        Names that fail the slug pattern (path traversal, NUL bytes,
+        whitespace, etc.) are rejected before any filesystem probe to
+        avoid leaking existence signal through fallback semantics.
+
         This method is total. It never raises.
         """
+        if not _is_valid_persona_name(name):
+            logger.warning(
+                "Persona %r rejected as invalid name, falling back to minimal",
+                name,
+            )
+            # ``minimal`` is always a valid slug so this re-entry is safe.
+            minimal = self._try_load("minimal")
+            if minimal is not None:
+                return minimal
+            return _HARDCODED_MINIMAL
+
         persona = self._try_load(name)
         if persona is not None:
             return persona
@@ -100,6 +127,10 @@ class PersonaLoader:
         Unknown top-level tables (e.g. ``[metadata]``, ``[notes]``) are
         accepted with a ``logging.WARNING`` naming the table.
         """
+        if not _is_valid_persona_name(name):
+            raise PersonaSchemaError(
+                f"persona {name!r}: invalid name (must match {_NAME_PATTERN.pattern!r})"
+            )
         persona_dir = self._find_persona_dir(name)
         if persona_dir is None:
             raise PersonaSchemaError(f"persona {name!r} not found in user_dir or builtin_dir")

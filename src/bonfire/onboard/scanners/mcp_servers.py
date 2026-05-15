@@ -7,12 +7,25 @@ Discovers MCP server declarations from config files across all known
 AI clients: Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Zed.
 
 Privacy: NEVER reads ~/.claude.json. NEVER reports env values.
+
+Safety rails:
+
+  * Disk reads are offloaded via ``asyncio.to_thread`` so a slow config
+    file does not block the event loop.
+  * Config files larger than the configured byte cap are skipped with a
+    WARNING. Default cap is 1 MiB; override via the
+    ``BONFIRE_MCP_SCAN_MAX_BYTES`` env var.
+  * Symlinks at config-file paths are followed iff their resolved
+    target lives under the project root or the configured home
+    directory; otherwise they are skipped with a WARNING.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
@@ -21,6 +34,32 @@ __all__ = ["scan"]
 
 _PANEL = "mcp_servers"
 _log = logging.getLogger(__name__)
+
+# Default cap on config-file size in bytes. ``BONFIRE_MCP_SCAN_MAX_BYTES``
+# overrides at runtime.
+_DEFAULT_MAX_BYTES = 1 * 1024 * 1024  # 1 MiB
+_MAX_BYTES_ENV = "BONFIRE_MCP_SCAN_MAX_BYTES"
+
+
+def _max_bytes() -> int:
+    """Resolve the configured size cap from the env var, falling back to the default."""
+    raw = os.environ.get(_MAX_BYTES_ENV)
+    if raw is None or not raw.strip():
+        return _DEFAULT_MAX_BYTES
+    try:
+        value = int(raw)
+    except ValueError:
+        _log.warning(
+            "Ignoring invalid %s=%r; using default %d bytes",
+            _MAX_BYTES_ENV,
+            raw,
+            _DEFAULT_MAX_BYTES,
+        )
+        return _DEFAULT_MAX_BYTES
+    if value <= 0:
+        return _DEFAULT_MAX_BYTES
+    return value
+
 
 # ---------------------------------------------------------------------------
 # Known server registry — substring match against command + args joined
@@ -159,20 +198,110 @@ def _resolve_server_name(key: str, server_config: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _read_servers_from_config(config: _ClientConfig) -> list[tuple[str, dict]]:
+def _is_under_root(candidate: Path, root: Path) -> bool:
+    """Return ``True`` if *candidate* (resolved) is *root* (resolved) or a subpath."""
+    try:
+        candidate_resolved = candidate.resolve()
+        root_resolved = root.resolve()
+    except OSError:
+        return False
+    try:
+        candidate_resolved.relative_to(root_resolved)
+    except ValueError:
+        return False
+    return True
+
+
+def _safe_resolve_config_path(path: Path, *, home_dir: Path, project_path: Path) -> Path | None:
+    """Validate *path* against the safe roots and return the path to read.
+
+    Returns the path itself if it is not a symlink. If it IS a symlink,
+    returns the resolved target IFF that target lives under
+    ``home_dir`` or ``project_path``. Otherwise returns ``None`` and
+    logs a WARNING.
+    """
+    try:
+        is_link = path.is_symlink()
+    except OSError:
+        return None
+
+    if not is_link:
+        return path
+
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        _log.warning(
+            "MCP config symlink %s could not be resolved (%s); skipping",
+            path,
+            exc,
+        )
+        return None
+
+    if _is_under_root(resolved, home_dir) or _is_under_root(resolved, project_path):
+        return resolved
+
+    _log.warning(
+        "MCP config symlink %s resolves outside safe roots (%s); skipping",
+        path,
+        resolved,
+    )
+    return None
+
+
+def _read_text_sync(path: Path) -> str:
+    """Synchronous text read offloaded onto a worker thread."""
+    return path.read_text(encoding="utf-8")
+
+
+async def _read_servers_from_config(
+    config: _ClientConfig,
+    *,
+    home_dir: Path,
+    project_path: Path,
+) -> list[tuple[str, dict]]:
     """Read and parse servers from a single config file.
 
-    Returns list of (server_key, server_config_dict) tuples.
-    Returns empty list on missing file, malformed JSON, or missing key.
+    Returns list of (server_key, server_config_dict) tuples. Returns
+    an empty list on missing file, malformed JSON, oversize file,
+    outside-root symlink, or missing key. Disk reads are offloaded via
+    ``asyncio.to_thread`` so a slow read does not block the event
+    loop.
     """
-    if not config.path.is_file():
+    path = config.path
+
+    # The path may not exist OR may be a broken symlink. ``Path.is_file``
+    # follows symlinks, so a dangling symlink reports False here.
+    try:
+        if not (path.is_symlink() or path.is_file()):
+            return []
+    except OSError:
+        return []
+
+    safe_path = _safe_resolve_config_path(path, home_dir=home_dir, project_path=project_path)
+    if safe_path is None:
+        return []
+
+    # Size cap — check before reading.
+    try:
+        size = safe_path.stat().st_size
+    except OSError:
+        return []
+    cap = _max_bytes()
+    if size > cap:
+        _log.warning(
+            "MCP config %s exceeds size cap (%d bytes > %d bytes); skipping",
+            safe_path,
+            size,
+            cap,
+        )
         return []
 
     try:
-        raw = config.path.read_text(encoding="utf-8")
+        raw = await asyncio.to_thread(_read_text_sync, safe_path)
         data = json.loads(raw)
     except (json.JSONDecodeError, OSError) as exc:
-        _log.debug("Skipping %s: %s", config.path, exc)
+        _log.debug("Skipping %s: %s", safe_path, exc)
         return []
 
     if not isinstance(data, dict):
@@ -213,7 +342,9 @@ async def scan(
     count = 0
 
     for config in configs:
-        servers = _read_servers_from_config(config)
+        servers = await _read_servers_from_config(
+            config, home_dir=home_dir, project_path=project_path
+        )
         for key, server_data in servers:
             if not isinstance(server_data, dict):
                 continue

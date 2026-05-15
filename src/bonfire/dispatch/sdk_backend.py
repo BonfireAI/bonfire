@@ -14,6 +14,7 @@ everything.
 from __future__ import annotations
 
 import logging
+import os
 import traceback as tb_module
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
@@ -46,6 +47,44 @@ except ImportError:
     HookMatcher = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Traceback redaction
+#
+# Python tracebacks include local-frame ``repr`` data — for the SDK
+# backend that means the envelope's ``task`` (the user prompt, often
+# containing secrets) and the ``ClaudeAgentOptions`` (env-derived
+# values). Persisting the full traceback to JSONL leaks those into
+# on-disk logs. The default redaction emits a short single-frame
+# summary; setting ``BONFIRE_DEBUG_TRACEBACKS=1`` restores the full
+# multi-frame traceback for local debugging.
+# ---------------------------------------------------------------------------
+
+_TRACEBACK_DEBUG_ENV = "BONFIRE_DEBUG_TRACEBACKS"
+
+
+def _summarise_traceback(exc: BaseException) -> str | None:
+    """Return a single-line summary of *exc*'s deepest frame, or ``None``."""
+    tb = exc.__traceback__
+    if tb is None:
+        return None
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    frame = tb.tb_frame
+    return f"{frame.f_code.co_filename}:{tb.tb_lineno}: {type(exc).__name__}: {exc}"
+
+
+def _format_error_traceback(exc: BaseException) -> str | None:
+    """Format *exc*'s traceback per the redaction policy.
+
+    Returns the full ``traceback.format_exc()`` output if the
+    ``BONFIRE_DEBUG_TRACEBACKS=1`` env var is set; otherwise returns a
+    short single-frame summary (or ``None`` if no traceback exists).
+    """
+    if os.environ.get(_TRACEBACK_DEBUG_ENV) == "1":
+        return tb_module.format_exc()
+    return _summarise_traceback(exc)
 
 
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
@@ -93,7 +132,7 @@ class ClaudeSDKBackend:
                 ErrorDetail(
                     error_type=type(exc).__name__,
                     message=str(exc),
-                    traceback=tb_module.format_exc(),
+                    traceback=_format_error_traceback(exc),
                 )
             )
 

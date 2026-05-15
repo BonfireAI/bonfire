@@ -598,9 +598,17 @@ class TestDispatchOptions:
         assert opts.cwd == ""
         assert isinstance(opts.cwd, str)
 
-    def test_permission_mode_default_is_dontAsk(self):
+    def test_permission_mode_default_is_default(self):
+        """CONTRACT-CHANGE: default flipped from 'dontAsk' to 'default'.
+
+        Per the CLI / scanner / session hardening contract, the
+        deny-list-as-only-gate posture was tightened: the SDK-level
+        ask-mode is the new ship-safe default. Explicit ``dontAsk``
+        callers in ``handlers/`` (wizard, sage_correction_bounce) opt
+        in by name and stay unchanged.
+        """
         opts = DispatchOptions()
-        assert opts.permission_mode == "dontAsk"
+        assert opts.permission_mode == "default"
         assert isinstance(opts.permission_mode, str)
 
     # --- Frozen immutability -------------------------------------------

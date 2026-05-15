@@ -35,6 +35,18 @@ source .venv/bin/activate
 
 # Install the package in editable mode with dev extras
 pip install -e ".[dev]"
+
+# Install pre-commit and wire up the git hooks
+pip install pre-commit
+pre-commit install
+```
+
+The pre-commit hooks run `ruff check` and `ruff format --check` on
+staged files before each commit — the same lint gates CI enforces. To
+run them against the whole tree at any time:
+
+```bash
+pre-commit run --all-files
 ```
 
 Once installed, the standard development commands are:

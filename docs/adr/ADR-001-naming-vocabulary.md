@@ -92,11 +92,11 @@ trust-triangle surface.
    (`tests/unit/test_tool_policy.py`) locks in place; this contract is one
    of the trust-triangle gates blocking the v0.1.0 tag.
 3. A normalization seam already exists at `bonfire.agent.tiers.GAMIFIED_TO_GENERIC`
-   and is consumed by `resolve_model_for_role`. A planned forward-compat patch
-   will teach `DefaultToolPolicy.tools_for` to look up via either gamified or
-   generic input through this same mapping, so the floor's internal key
-   vocabulary becomes invisible to callers — but the table's internal keys
-   stay gamified to preserve the W4.1 contract and its test suite.
+   and is consumed by `resolve_model_for_role`. `DefaultToolPolicy.tools_for`
+   accepts either gamified or generic input via the same mapping; the floor's
+   internal key vocabulary is invisible to callers, while the table's
+   internal keys stay gamified to preserve the W4.1 contract and its test
+   suite.
 
 **Forward rule:**
 

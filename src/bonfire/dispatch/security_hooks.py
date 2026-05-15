@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SecurityHooksConfig",
+    "WRITE_EDIT_SENSITIVE_PATH_DENY",
     "build_preexec_hook",
 ]
 
@@ -120,6 +121,116 @@ _PREFILTER_KEYWORDS: tuple[str, ...] = (
     # Continuation escapes.
     "\\",
 )
+
+
+# ---------------------------------------------------------------------------
+# Write/Edit sensitive-path deny family
+#
+# The DEFAULT_DENY_PATTERNS catalogue (C1-C7) is bash-shape: rules require
+# tokens like ``\bcat\s+`` or ``>>?\s*`` as prefixes, so a Write/Edit of
+# ``~/.ssh/authorized_keys`` or ``/etc/sudoers`` never matched. This family
+# closes that gap with a path-prefix matcher gated to ``Write`` / ``Edit``
+# tool calls only; Bash continues to flow through the existing regex pool.
+#
+# Each entry is a literal prefix matched after the ``file_path`` is
+# canonicalized (``$HOME`` / ``/home/<user>`` collapsed to a leading ``~``
+# tilde-form, leading ``./`` stripped). The list MUST stay small enough that
+# auditors can read it in one screen.
+# ---------------------------------------------------------------------------
+
+
+# Path prefixes that are deny-by-default for Write/Edit. Order does not
+# matter — first match wins, but the matcher is O(N) over a short list so
+# the order is for human readability.
+WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
+    # SSH material
+    "~/.ssh/id_",
+    "~/.ssh/authorized_keys",
+    "~/.ssh/known_hosts",
+    # AWS
+    "~/.aws/credentials",
+    # GPG
+    "~/.gnupg/",
+    # Docker
+    "~/.docker/config.json",
+    # Kubernetes
+    "~/.kube/config",
+    # netrc
+    "~/.netrc",
+    # Root home
+    "/root/",
+    # System state
+    "/etc/sudoers",
+    "/etc/sudoers.d/",
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/gshadow",
+)
+
+
+# Public exported reasons keep the SecurityDenied pattern_id slug stable
+# across versions. The slug is internal to this hook (not part of the
+# C1-C7 canonical catalogue) and namespaced under ``_infra.`` for the
+# same reason ``_infra.control-byte`` / ``_infra.error`` are.
+_WRITE_EDIT_SENSITIVE_PATH_PATTERN_ID = "_infra.write-edit-sensitive-path"
+_WRITE_EDIT_SENSITIVE_PATH_REASON = (
+    "Write/Edit of a credential or system-state path is denied. "
+    "If intended, edit the file manually outside the agent dispatch."
+)
+
+
+# Regex that recognizes a ``$HOME/`` or ``/home/<user>/`` or ``/root/.``
+# prefix so we can canonicalize file_path to a ``~`` form before the prefix
+# scan. ``/root/`` itself is one of the deny prefixes — for ``/root/...``
+# inputs we keep the literal form (the ``/root/`` rule matches it directly).
+_HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+)(/|$)")
+
+
+def _canonicalize_write_edit_path(file_path: str) -> str:
+    """Collapse home-equivalent prefixes to ``~`` so the prefix matcher
+    is straightforward.
+
+    Order:
+        1. Strip leading ``./`` (one round; bash doesn't repeat it).
+        2. Replace ``$HOME/`` or ``/home/<user>/`` with ``~/``.
+
+    /root/ is NOT canonicalized — it has its own dedicated deny prefix.
+    """
+    s = file_path
+    if s.startswith("./"):
+        s = s[2:]
+    s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
+    return s
+
+
+def _match_write_edit_sensitive_path(file_path: str) -> bool:
+    """Return True if ``file_path`` resolves under any deny prefix.
+
+    Also covers the ``.env`` family — the matcher is split into two passes:
+    1. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
+    2. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
+       segment-anchored — ``/path/to/.env`` matches, ``/path/env.txt``
+       does not, ``/path/.env_example.txt`` does not).
+    """
+    if not file_path:
+        return False
+    canonical = _canonicalize_write_edit_path(file_path)
+    for prefix in WRITE_EDIT_SENSITIVE_PATH_DENY:
+        if canonical.startswith(prefix):
+            return True
+    # Last segment match for .env / .env.* (segment-anchored).
+    # Get the final path segment.
+    segment = canonical.rsplit("/", 1)[-1]
+    if segment == ".env":
+        return True
+    if segment.startswith(".env."):
+        # ``.env.example`` is whitelisted because it's documentation, not
+        # secrets; everything else under ``.env.<suffix>`` is treated as a
+        # real dotenv file.
+        if segment == ".env.example":
+            return False
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +765,25 @@ def build_preexec_hook(
                 raise _user_patterns_error
             user_patterns = _user_patterns_compiled
             assert user_patterns is not None  # narrow for type-checker
+
+            # Write/Edit sensitive-path family: gate path-shape inputs that
+            # the bash-shape C1-C7 catalogue would never match. Runs BEFORE
+            # the prefilter so a benign-looking file_path (no shell keywords)
+            # cannot skate past the scan.
+            if tool_name in ("Write", "Edit") and _match_write_edit_sensitive_path(command):
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=_WRITE_EDIT_SENSITIVE_PATH_REASON,
+                            pattern_id=_WRITE_EDIT_SENSITIVE_PATH_PATTERN_ID,
+                            agent_name=aname,
+                        ),
+                    )
+                return _deny_envelope(_WRITE_EDIT_SENSITIVE_PATH_REASON)
 
             # Pre-strip detection: a Bash command bearing ASCII control bytes
             # (anywhere outside \t / \n / \r) is bypass-shaped. The Stage-1

@@ -124,7 +124,7 @@ A minimum-version constraint (e.g. `@>=2.1.0`) is **not** an acceptable substitu
 - [ ] v0.1.0 tag commit passes the full box E2E.
 - [ ] Every `README.md` example executable in a fresh box.
 - [ ] `CHANGELOG.md` cut and accurate.
-- [x] Commit history audited — leaked internal-tracker references in pre-v0.1.0 commit subjects accepted as historical for v0.1.0; new commits comply per [CONTRIBUTING.md](../CONTRIBUTING.md). See [CHANGELOG.md](../CHANGELOG.md) `[0.1.0]` Notes section.
+- [ ] Internal-tracker audit covers **both** (a) commit subjects on `v0.1` / `main` **and** (b) committed file contents at `v0.1` HEAD. Pre-`v0.1.0` commit *history* is grandfathered (rewriting published history is more harmful than preserving it); HEAD-state files must be clean of internal-tracker IDs, internal Linear URLs, and contributor worktree paths. New commits comply per [CONTRIBUTING.md](../CONTRIBUTING.md). See [CHANGELOG.md](../CHANGELOG.md) Notes section. **Residual at this PR (pre-tag):** a handful of HEAD-state references remain in `docs/release-gates.md` (an internal-tracker epic reference in the cost-discipline section and a sample feature-branch path in the release-train lifecycle diagram) and in operator-local `CLAUDE.md`. These will close in the v0.1.0 tag preflight sweep; the bulk of the audit subtree and orphan files were redacted in this PR.
 - [ ] License headers consistent across `src/`.
 - [ ] `CONTRIBUTING.md` re-read against current reality.
 - [ ] `pip install bonfire-ai==0.1.0` works in a fresh venv.

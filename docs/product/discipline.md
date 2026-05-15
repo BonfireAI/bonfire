@@ -3,7 +3,7 @@
 > **Disciplines** are the load-bearing guarantees Bonfire makes to its
 > users. Each discipline ships as a deterministic pipeline stage that
 > runs on every PR -- not as a Wizard recommendation or a CI add-on, but
-> as part of the canonical eight-stage build.
+> as part of the canonical nine-stage build.
 
 ## Why discipline?
 

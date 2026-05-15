@@ -21,16 +21,17 @@ fills that gap. Read it once on day one, then come back for the
 
 Bonfire is **a pipeline of role-bound agents over a typed event bus**.
 Each stage of a run is owned by an agent that plays a specific role
-(scout, knight, sage, warrior, bard, wizard, steward, architect); each
+(scout, knight, warrior, cleric, bard, wizard, steward, sage, architect); each
 stage emits typed events on a shared bus; cross-cutting observers — cost
 tracking, session logging, knowledge ingest, display — subscribe to
 those events without ever calling stages back.
 
-The framework ships an opinionated default: TDD-shaped 7-stage builds
-with code review baked in, run against your own model keys, with
-quality gates between stages. Everything else — the agents, the
-backends, the personas, the workflows — is pluggable through small
-``Protocol`` contracts.
+The framework ships an opinionated default: TDD-shaped 9-stage builds
+(scout, knight, warrior, prover, sage_correction_bounce, bard, wizard,
+merge_preflight, steward) with code review baked in, run against your
+own model keys, with quality gates between stages. Everything else —
+the agents, the backends, the personas, the workflows — is pluggable
+through small ``Protocol`` contracts.
 
 Tagline (from `src/bonfire/__init__.py`):
 
@@ -77,7 +78,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 |---|---|
 | `bonfire.cli` | Typer composition root — `app` is the entry point exposed by `[project.scripts]`. |
 | `bonfire.cli.commands` | Per-command Typer modules (`init`, `scan`, `status`, `resume`, `handoff`, `persona`, `cost`). |
-| `bonfire.workflows` | Pre-built workflow plans (`standard_build`, `debug`, `dual_scout`, `triple_scout`, `spike`) — pure data factories that depend only on `bonfire.models`. |
+| `bonfire.workflow` | Pre-built workflow plans (`standard_build`, `debug`, `dual_scout`, `triple_scout`, `spike`) — pure data factories that depend only on `bonfire.models`. |
 
 ### Reserved
 
@@ -96,7 +97,7 @@ A single `bonfire run` follows the same path top-to-bottom every time:
 
 1. **CLI entry.** `bonfire.cli.app` parses the command and instantiates
    the composition root. The user-facing `bonfire run`-style commands
-   resolve a workflow plan from `bonfire.workflows` (e.g.
+   resolve a workflow plan from `bonfire.workflow` (e.g.
    `standard_build`).
 2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
@@ -181,7 +182,7 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
   persona TOML with the required schema and `PersonaLoader.load` will
   pick it up. Personas are display-only — they cannot reach into
   prompts or gates by construction.
-- **Workflows — `bonfire.workflows`**: register a new workflow factory
+- **Workflows — `bonfire.workflow`**: register a new workflow factory
   on the `WorkflowRegistry`. The factory returns a frozen,
   DAG-validated `WorkflowPlan`. The package depends only on
   `bonfire.models`, so new workflows do not need to touch the engine.
@@ -254,23 +255,14 @@ For day-to-day contributor work:
   ship-ready change.
 - [`docs/release-gates.md`](release-gates.md) — the gate-by-gate map of
   what each ticket must clear before it merges.
-- [`docs/release-gate-tickets.md`](release-gate-tickets.md) — the
-  ticket-level expectations that feed the gates.
 
 For decision provenance — reach for these when you want to know *why*
 a contract is shaped the way it is:
 
 - [`docs/adr/ADR-001-naming-vocabulary.md`](adr/ADR-001-naming-vocabulary.md)
   — the locked vocabulary referenced throughout this doc.
-- [`docs/audit/sage-decisions/bon-337-unified-sage-2026-04-18.md`](audit/sage-decisions/bon-337-unified-sage-2026-04-18.md)
-  — the unified Sage decision behind the agent-tool policy.
-- [`docs/audit/sage-decisions/bon-338-unified-sage-2026-04-18.md`](audit/sage-decisions/bon-338-unified-sage-2026-04-18.md)
-  — the security-hook design (the source of the catalogue + the
-  fail-closed semantics).
-- [`docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md`](audit/sage-decisions/bon-341-sage-20260422T235032Z.md)
-  — the knowledge-layer decision that grounds `bonfire.knowledge`.
 
 For surface-level reading, the package-level `__init__.py` docstrings
 (notably `bonfire.handlers`, `bonfire.persona`, and
-`bonfire.workflows`) are the model voice for the rest of the codebase
+`bonfire.workflow`) are the model voice for the rest of the codebase
 and double as quick reference cards.

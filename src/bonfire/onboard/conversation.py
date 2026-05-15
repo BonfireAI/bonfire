@@ -10,6 +10,7 @@ gracefully.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -23,7 +24,11 @@ from bonfire.onboard.protocol import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-__all__ = ["ConversationEngine"]
+__all__ = ["ConversationCompleteError", "ConversationEngine"]
+
+
+class ConversationCompleteError(RuntimeError):
+    """Raised when handle_answer is called after the 3-question conversation has completed."""
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +380,7 @@ class ConversationEngine:
 
     _turn: int = 0  # 0=not started, 1-3=waiting for answer to Q1-Q3
     _profile: dict[str, str] = field(default_factory=dict)
+    _lock: asyncio.Lock | None = field(default=None)
 
     @property
     def is_complete(self) -> bool:
@@ -391,6 +397,7 @@ class ConversationEngine:
         emit: Callable[[FrontDoorMessage], Awaitable[None]],
     ) -> None:
         """Emit ConversationStart + first question."""
+        self._lock = asyncio.Lock()
         await emit(ConversationStart())
         await emit(FalcorMessage(text=_QUESTIONS[0], subtype="question"))
         self._turn = 1
@@ -401,53 +408,56 @@ class ConversationEngine:
         emit: Callable[[FrontDoorMessage], Awaitable[None]],
     ) -> None:
         """Process answer: analyze, reflect, ask next or finish."""
-        if self._turn == 0:
-            msg = "Cannot handle answer before start() has been called."
-            raise RuntimeError(msg)
-        if self._turn > 3:
-            msg = "Conversation is already complete."
-            raise RuntimeError(msg)
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            if self._turn == 0:
+                msg = "Cannot handle answer before start() has been called."
+                raise RuntimeError(msg)
+            if self._turn > 3:
+                msg = "Conversation is already complete."
+                raise ConversationCompleteError(msg)
 
-        question_index = self._turn - 1  # 0-based
+            question_index = self._turn - 1  # 0-based
 
-        # Short answer detection
-        stripped = text.strip()
-        word_count = len(stripped.split()) if stripped else 0
+            # Short answer detection
+            stripped = text.strip()
+            word_count = len(stripped.split()) if stripped else 0
 
-        if word_count < _SHORT_THRESHOLD:
-            reflection_text = _BRIEF_REFLECTION
-            profile_update: dict[str, str] = {}
-        else:
-            analyzer = _ANALYZERS[question_index]
-            reflection_text, profile_update = analyzer(stripped)
+            if word_count < _SHORT_THRESHOLD:
+                reflection_text = _BRIEF_REFLECTION
+                profile_update: dict[str, str] = {}
+            else:
+                analyzer = _ANALYZERS[question_index]
+                reflection_text, profile_update = analyzer(stripped)
 
-        # Emit reflection
-        await emit(
-            FalcorMessage(
-                text=reflection_text,
-                subtype="reflection",
-            )
-        )
-
-        # Accumulate profile
-        for k, v in profile_update.items():
-            self._profile[k] = v
-
-        # Advance turn
-        self._turn += 1
-
-        # Ask next question if not done
-        if self._turn <= 3:
+            # Emit reflection
             await emit(
                 FalcorMessage(
-                    text=_QUESTIONS[self._turn - 1],
-                    subtype="question",
+                    text=reflection_text,
+                    subtype="reflection",
                 )
             )
 
-        # If complete, ensure all expected keys have defaults
-        if self._turn > 3:
-            self._ensure_complete_profile()
+            # Accumulate profile
+            for k, v in profile_update.items():
+                self._profile[k] = v
+
+            # Advance turn
+            self._turn += 1
+
+            # Ask next question if not done
+            if self._turn <= 3:
+                await emit(
+                    FalcorMessage(
+                        text=_QUESTIONS[self._turn - 1],
+                        subtype="question",
+                    )
+                )
+
+            # If complete, ensure all expected keys have defaults
+            if self._turn > 3:
+                self._ensure_complete_profile()
 
     def _ensure_complete_profile(self) -> None:
         """Fill in any missing profile keys with sensible defaults."""

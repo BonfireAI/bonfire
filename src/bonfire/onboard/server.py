@@ -127,6 +127,17 @@ class FrontDoorServer:
             return_exceptions=True,
         )
 
+    async def wait_for_client_connect(self, timeout: float | None = 120.0) -> None:
+        """Wait for the first WebSocket client. Raises asyncio.TimeoutError on timeout.
+
+        If timeout is None, waits indefinitely.
+        """
+        event = self.client_connected  # raises if before start()
+        if timeout is None:
+            await event.wait()
+            return
+        await asyncio.wait_for(event.wait(), timeout=timeout)
+
     @property
     def url(self) -> str:
         """HTTP URL for the served page."""

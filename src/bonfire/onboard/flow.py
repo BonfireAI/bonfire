@@ -18,12 +18,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from bonfire.onboard.config_generator import generate_config, write_config
-from bonfire.onboard.conversation import ConversationEngine
+from bonfire.onboard.conversation import ConversationCompleteError, ConversationEngine
 from bonfire.onboard.narration import NarrationEngine
 from bonfire.onboard.orchestrator import run_scan
 from bonfire.onboard.protocol import (
     FrontDoorMessage,
     ScanUpdate,
+    ServerError,
 )
 
 if TYPE_CHECKING:
@@ -84,7 +85,16 @@ async def run_front_door(
         if data.get("type") != "user_message":
             return
         text = data.get("text", "")
-        await conversation.handle_answer(text, conversation_emit)
+        try:
+            await conversation.handle_answer(text, conversation_emit)
+        except ConversationCompleteError as exc:
+            await server.broadcast(
+                ServerError(
+                    code="conversation_complete",
+                    message=str(exc),
+                ).model_dump()
+            )
+            return
         if conversation.is_complete:
             conversation_done.set()
 

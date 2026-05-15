@@ -328,3 +328,52 @@ class TestScanNoBrowserSemantics:
                 f"got: {captured!r}"
             )
             mock_launch.assert_called_once_with("http://127.0.0.1:8765")
+
+
+# ---------------------------------------------------------------------------
+# Connect-handshake timeout — regression coverage for the hang-forever bug
+# ---------------------------------------------------------------------------
+
+
+class TestScanConnectTimeout:
+    """Bug: _run_scan calls client_connected.wait() with no timeout.
+
+    When the browser tab closes before the WS handshake completes, the CLI
+    hangs forever. The hardened _run_scan must call
+    server.wait_for_client_connect(timeout=120.0) instead, and handle
+    asyncio.TimeoutError with a clear stderr message and a non-zero exit code.
+    """
+
+    def test_scan_exits_nonzero_on_connect_timeout(self) -> None:
+        """CLI exits non-zero and prints a timeout message when connect times out.
+
+        Patches FrontDoorServer directly so wait_for_client_connect raises
+        asyncio.TimeoutError, simulating a browser that never arrives.
+        """
+        with patch("bonfire.cli.commands.scan.FrontDoorServer") as mock_server_cls:
+            mock_server = MagicMock()
+            mock_server.start = AsyncMock(return_value=None)
+            mock_server.stop = AsyncMock(return_value=None)
+            mock_server.url = "http://127.0.0.1:9998"
+            mock_server.ws_url = "ws://127.0.0.1:9998/ws"
+            mock_server.wait_for_client_connect = AsyncMock(side_effect=TimeoutError())
+            mock_server_cls.return_value = mock_server
+
+            result = runner.invoke(app, ["scan", "--no-browser"])
+
+        assert result.exit_code != 0, (
+            f"scan must exit with non-zero code when wait_for_client_connect "
+            f"raises asyncio.TimeoutError; got exit_code={result.exit_code}"
+        )
+        output_lower = result.output.lower()
+        # Output must name the timeout context so headless operators know why
+        # the command stopped. Either "client connected", "timeout", or "120" is
+        # sufficient to satisfy the user-visible contract.
+        timeout_mentioned = any(
+            marker in output_lower for marker in ("client connected", "timeout", "120", "no client")
+        )
+        assert timeout_mentioned, (
+            f"scan timeout output must mention the timeout context "
+            f"(e.g. 'No client connected within 120s' or '--no-browser'); "
+            f"got: {result.output!r}"
+        )

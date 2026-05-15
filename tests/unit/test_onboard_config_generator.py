@@ -244,17 +244,42 @@ class TestBuildGit:
 
 
 class TestBuildClaudeMemory:
+    """``_build_claude_memory`` must produce parseable TOML even under hostile
+    inputs.
+
+    The original contract round-tripped sentinel values (``model``,
+    ``permissions``, ``extensions``) as TOML strings — but the
+    ``claude_memory`` scanner emits **redaction sentinels** for those
+    labels (per its privacy posture), so stamping them as TOML values
+    produced unreadable noise like ``model = "set"``. The new contract:
+    sentinel labels are surfaced as TOML comments, not values; hostile
+    payloads must still parse cleanly and MUST NOT smuggle extra
+    structure.
+    """
+
     @pytest.mark.parametrize("payload", _HOSTILE_PAYLOADS)
     @pytest.mark.parametrize("label", ["model", "permissions", "extensions"])
-    def test_claude_memory_value_round_trips(self, payload: str, label: str) -> None:
+    def test_claude_memory_hostile_payload_does_not_break_toml(
+        self, payload: str, label: str
+    ) -> None:
+        """Hostile sentinel payloads still produce parseable TOML with no smuggling."""
         scans = [_scan("claude_memory", label, payload)]
         result = _build_claude_memory(scans)
         assert result is not None
         fragment, _ = result
         parsed = _parse_or_fail(fragment, writer_name="_build_claude_memory", payload=payload)
-        cm = parsed.get("bonfire", {}).get("claude_memory", {})
-        assert cm.get(label) == payload, (
-            f"_build_claude_memory lost {label}={payload!r}. Parsed: {cm!r}"
+        # Contract: sentinel labels are NOT emitted as TOML values
+        # (regardless of hostile content). The section parses cleanly
+        # with no smuggled sibling tables.
+        bonfire = parsed.get("bonfire", {})
+        assert set(bonfire.keys()) == {"claude_memory"} or bonfire == {}, (
+            f"_build_claude_memory smuggled extra top-level keys for "
+            f"{label}={payload!r}; got: {bonfire!r}"
+        )
+        cm = bonfire.get("claude_memory", {})
+        assert label not in cm, (
+            f"sentinel label {label!r} must not be emitted as a TOML value; "
+            f"parsed section: {cm!r}\nFragment:\n{fragment}"
         )
 
 
@@ -390,7 +415,7 @@ class TestGenerateConfigEndToEnd:
         )
 
         # Pin 4: round-trip preservation on every hostile value the
-        # writers consumed.
+        # writers consumed AS A TOML VALUE.
         assert bonfire["name"] == hostile
         assert bonfire["persona"]["companion_mode"] == hostile
         assert bonfire["project"]["primary_language"] == hostile
@@ -398,7 +423,11 @@ class TestGenerateConfigEndToEnd:
         assert bonfire["tools"]["detected"] == [hostile]
         assert bonfire["git"]["remote"] == hostile
         assert bonfire["git"]["branch"] == hostile
-        assert bonfire["claude_memory"]["model"] == hostile
-        assert bonfire["claude_memory"]["permissions"] == hostile
+        # ``claude_memory.model`` / ``claude_memory.permissions`` are
+        # sentinel labels — surfaced as TOML comments, not values. The
+        # parsed section MUST NOT carry them as keys (no smuggling), but
+        # there is nothing to round-trip as a value either.
+        assert "model" not in bonfire["claude_memory"]
+        assert "permissions" not in bonfire["claude_memory"]
         assert bonfire["mcp"]["servers"] == [hostile]
         assert bonfire["vault"]["seed_documents"] == [hostile]

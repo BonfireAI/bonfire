@@ -70,6 +70,15 @@ async def _run_scan(port: int, no_browser: bool) -> None:
         await server.shutdown_event.wait()
     except asyncio.CancelledError:
         pass
+    except FileExistsError as exc:
+        # TOCTOU: a concurrent process created ``bonfire.toml`` between
+        # the CLI's pre-flow ``Path.exists()`` check and ``write_config``
+        # inside ``run_front_door``. Surface the same actionable message
+        # the pre-flow guard prints, exit non-zero cleanly. Without this
+        # the user would see a raw Python traceback. ``server.stop`` is
+        # idempotent and runs in the ``finally`` below.
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     finally:
         await server.stop()
 
@@ -87,6 +96,21 @@ def scan(
     ),
 ) -> None:
     """Launch The Front Door — WS-driven onboarding scan."""
+    # Fail fast — before starting the Front Door server / browser dance —
+    # if bonfire.toml already exists. A user with a hand-tuned config must
+    # not silently lose it; tell them how to recover. Mirrors the existing
+    # guard in ``bonfire init``. ``write_config`` also raises
+    # ``FileExistsError`` as a defense-in-depth check; this early exit
+    # spares the user the conversation flow when the outcome is doomed.
+    toml_path = Path.cwd() / "bonfire.toml"
+    if toml_path.exists():
+        typer.echo(
+            f"bonfire.toml already exists at {toml_path}. Refusing to "
+            "overwrite. Remove or move the existing file and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     try:
         asyncio.run(_run_scan(port=port, no_browser=no_browser))
     except KeyboardInterrupt:

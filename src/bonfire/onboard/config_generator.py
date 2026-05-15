@@ -137,10 +137,52 @@ def _build_tools(
     return "\n".join(lines), annotations
 
 
+# Non-remote labels the git_state scanner emits inside the ``git_state``
+# panel. Anything else with a non-error value is treated as a remote-shaped
+# event (the scanner uses the remote NAME — ``origin``, ``upstream`` — as
+# the label and the sanitised URL as the value).
+_GIT_NON_REMOTE_LABELS: frozenset[str] = frozenset(
+    {
+        "repository",
+        "branch",
+        "branches",
+        "working tree",
+        "last commit",
+        "remotes",  # bulk-command error event name from _run_with_emit
+    }
+)
+
+
+def _pick_git_remote(scans: list[ScanUpdate]) -> str | None:
+    """Return the URL of the preferred git remote, or None.
+
+    The git_state scanner emits one event per remote with
+    ``label=<remote_name>`` and ``value=<sanitised-url>``. Prefer
+    ``origin``; otherwise return the URL of the first remote-shaped event
+    in scan order. Error events (``value == "error"``) are skipped — a
+    failed git-remote call must not become a TOML remote value.
+    """
+    remote_scans = [
+        s for s in scans if s.label not in _GIT_NON_REMOTE_LABELS and s.value != "error"
+    ]
+    if not remote_scans:
+        return None
+    for s in remote_scans:
+        if s.label == "origin":
+            return s.value
+    return remote_scans[0].value
+
+
 def _build_git(
     scans: list[ScanUpdate],
 ) -> tuple[str, dict[str, str]] | None:
-    """Build [bonfire.git] from git_state scan events."""
+    """Build [bonfire.git] from git_state scan events.
+
+    The git_state scanner emits remote events with the remote NAME as the
+    label (``origin``, ``upstream``) and the sanitised URL as the value;
+    the writer here promotes the preferred remote (origin > first) to a
+    single ``remote = "..."`` line.
+    """
     if not scans:
         return None
 
@@ -151,7 +193,7 @@ def _build_git(
         "# Derived from scan: git_state panel",
     ]
 
-    remote = _find_scan_value(scans, "remote")
+    remote = _pick_git_remote(scans)
     if remote:
         lines.append(f'remote = "{escape_basic_string(remote)}"')
         annotations["git.remote"] = "Scan: git_state"
@@ -183,10 +225,47 @@ def _build_mcp(
     return "\n".join(lines), annotations
 
 
+def _sanitize_toml_comment(text: str) -> str:
+    """Strip characters that would break a single-line TOML comment.
+
+    TOML 1.0 rejects every byte in U+0000-U+001F and U+007F inside a
+    comment, with tab (U+0009) the sole exception. A hostile scanner
+    detail (e.g. a top-level key from ``~/.claude/settings.json``
+    containing a NUL or DEL byte) would otherwise flow through here into
+    the comment line and crash ``tomllib.loads`` at config round-trip.
+
+    Newlines / carriage returns are folded to a single space first so a
+    hostile detail can't smuggle a fake table header by inserting a
+    line break. Every remaining U+0000-U+001F byte (except tab, which
+    TOML allows) and U+007F is dropped. The result is safe to append
+    after a leading ``# `` on its own line.
+    """
+    # Step 1: fold line breaks to spaces so the comment stays single-line
+    # (and a hostile detail can't smuggle a synthetic table header).
+    folded = text.replace("\r", " ").replace("\n", " ")
+    # Step 2: drop the rest of the TOML-rejected control range. Tab
+    # (U+0009) is the only whitespace control char TOML allows inside a
+    # comment; preserve it. \r and \n were already handled above.
+    return "".join(ch for ch in folded if ch == "\t" or (ord(ch) >= 0x20 and ord(ch) != 0x7F))
+
+
 def _build_claude_memory(
     scans: list[ScanUpdate],
 ) -> tuple[str, dict[str, str]] | None:
-    """Build [bonfire.claude_memory] from claude_memory scan events."""
+    """Build [bonfire.claude_memory] from claude_memory scan events.
+
+    The scanner emits redaction sentinels (``model="set"``,
+    ``permissions="3 keys"``, ``extensions="3 enabled"``) — strings that
+    describe *presence/structure*, never literal values (see
+    ``scanners/claude_memory.py`` privacy posture). Stamping those as TOML
+    string values produces unreadable noise that LOOKS like real config.
+
+    The writer here surfaces sentinel labels as TOML **comments** inside
+    the section, so the section keeps its diagnostic value (the operator
+    sees that Claude Code was detected) without claiming real values.
+    Real numeric data (memory-type counts) is preserved as actual TOML
+    values.
+    """
     if not scans:
         return None
 
@@ -197,22 +276,25 @@ def _build_claude_memory(
         "# Derived from scan: claude_memory panel",
     ]
 
-    model = _find_scan_value(scans, "model")
-    if model:
-        lines.append(f'model = "{escape_basic_string(model)}"')
-        annotations["claude_memory.model"] = "Scan: claude_memory"
+    # Sentinel labels: emit as comments rather than quoted values.
+    # ``model``, ``permissions``, ``extensions`` are all redaction sentinels
+    # per the scanner's privacy posture — never stamp them as values.
+    sentinel_labels = ("model", "permissions", "extensions")
+    for label in sentinel_labels:
+        value = _find_scan_value(scans, label)
+        if value:
+            # Find the originating scan to read the optional ``detail``
+            # so the comment surfaces structural metadata when present.
+            detail = ""
+            for s in scans:
+                if s.label == label:
+                    detail = s.detail
+                    break
+            note = f"{label}: {value}" if not detail else f"{label}: {value} ({detail})"
+            lines.append(f"# {_sanitize_toml_comment(note)}")
+            annotations[f"claude_memory.{label}"] = "Scan: claude_memory"
 
-    permissions = _find_scan_value(scans, "permissions")
-    if permissions:
-        lines.append(f'permissions = "{escape_basic_string(permissions)}"')
-        annotations["claude_memory.permissions"] = "Scan: claude_memory"
-
-    extensions = _find_scan_value(scans, "extensions")
-    if extensions:
-        lines.append(f'extensions = "{escape_basic_string(extensions)}"')
-        annotations["claude_memory.extensions"] = "Scan: claude_memory"
-
-    # Memory counts by type
+    # Memory counts by type — REAL numeric data, keep as TOML values.
     memory_types = [s for s in scans if s.label.endswith(" memories")]
     for mem_scan in memory_types:
         key = mem_scan.label.replace(" memories", "_memories")
@@ -324,7 +406,28 @@ def generate_config(
 
 
 def write_config(config_toml: str, project_path: Path) -> Path:
-    """Write bonfire.toml to project root. Returns the written path."""
+    """Write bonfire.toml to ``project_path``. Return the written path.
+
+    Refuses to overwrite an existing ``bonfire.toml`` — a user who runs
+    ``bonfire scan`` against a directory with a hand-tuned config must not
+    silently lose that work. Mirrors the existing guard in
+    ``bonfire.cli.commands.init`` (where the file is only written when it
+    does not already exist).
+
+    Raises
+    ------
+    FileExistsError
+        If ``project_path / "bonfire.toml"`` already exists. The error
+        message names the path and tells the user how to recover
+        (``mv bonfire.toml bonfire.toml.bak``). No ``--force`` flag in
+        v0.1.
+    """
     target = project_path / "bonfire.toml"
+    if target.exists():
+        msg = (
+            f"bonfire.toml already exists at {target}. Refusing to "
+            "overwrite. Remove or move the existing file and re-run."
+        )
+        raise FileExistsError(msg)
     target.write_text(config_toml)
     return target

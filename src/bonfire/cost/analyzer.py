@@ -62,6 +62,7 @@ class CostAnalyzer:
         "cost_usd",
         "duration_seconds",
     )
+    _DISPATCH_NUMERIC_FIELDS = ("timestamp", "cost_usd", "duration_seconds")
     _PIPELINE_REQUIRED_FIELDS = (
         "timestamp",
         "session_id",
@@ -69,21 +70,49 @@ class CostAnalyzer:
         "duration_seconds",
         "stages_completed",
     )
+    _PIPELINE_NUMERIC_FIELDS = (
+        "timestamp",
+        "total_cost_usd",
+        "duration_seconds",
+        "stages_completed",
+    )
+
+    @staticmethod
+    def _is_floatable(value: Any) -> bool:
+        """True iff ``float(value)`` would succeed.
+
+        The raw-dict aggregation paths call ``float()`` on these fields; a
+        non-numeric value (e.g. a malformed ledger row with ``cost_usd: null``
+        or ``"n/a"``) would otherwise raise and crash the whole aggregation.
+        Skipping such rows matches the prior ``model_validate``-then-skip
+        behaviour without paying Pydantic on the hot path.
+        """
+        try:
+            float(value)
+        except (TypeError, ValueError):
+            return False
+        return True
 
     @classmethod
     def _dispatch_is_valid(cls, data: dict[str, Any]) -> bool:
-        """Cheap schema check: required ``DispatchRecord`` fields are present.
+        """Cheap schema check: required ``DispatchRecord`` fields are present
+        and numeric fields are float-coercible.
 
         Mirrors the prior ``model_validate``-then-skip behaviour for callers
         that aggregate off the raw dicts. Same skip semantics, no Pydantic
         cost on the hot path.
         """
-        return all(field in data for field in cls._DISPATCH_REQUIRED_FIELDS)
+        if not all(field in data for field in cls._DISPATCH_REQUIRED_FIELDS):
+            return False
+        return all(cls._is_floatable(data[field]) for field in cls._DISPATCH_NUMERIC_FIELDS)
 
     @classmethod
     def _pipeline_is_valid(cls, data: dict[str, Any]) -> bool:
-        """Cheap schema check: required ``PipelineRecord`` fields are present."""
-        return all(field in data for field in cls._PIPELINE_REQUIRED_FIELDS)
+        """Cheap schema check: required ``PipelineRecord`` fields are present
+        and numeric fields are float-coercible."""
+        if not all(field in data for field in cls._PIPELINE_REQUIRED_FIELDS):
+            return False
+        return all(cls._is_floatable(data[field]) for field in cls._PIPELINE_NUMERIC_FIELDS)
 
     def _current_signature(self) -> tuple[float, int] | None:
         """Return ``(mtime, size)`` for the ledger, or ``None`` if absent.

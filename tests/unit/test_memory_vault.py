@@ -220,9 +220,9 @@ class TestIngestScalesLinearly:
         implementations produced a flat ~2.2x median with the same outlier
         tail, so the cap caught flakes from BOTH equally and discriminated
         nothing. At n=10_000 the asymptotic separation is clean:
-        characterized GREEN (set-indexed exists) shows median 1.77x,
-        max 2.48x over 10 runs; characterized PRE-FIX (linear-scan exists)
-        shows median 4.09x, min 3.57x over 5 runs. The 3.0x cap now sits
+        characterized GREEN (set-indexed exists) shows median ~2.05x,
+        max ~2.48x over 10 runs; characterized PRE-FIX (linear-scan exists)
+        shows median ~4.09x, min ~3.57x over 5 runs. The 3.0x cap now sits
         between two well-separated distributions instead of in their
         overlapping noise floor. GREEN ingest of 30k entries (n + 2n)
         completes in ~0.25s on a developer machine, so test budget is

@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
 
@@ -76,28 +77,61 @@ async def _run_cmd(
 
 
 def sanitize_remote_url(url: str) -> str:
-    """Normalize a git remote URL to ``host/path`` format.
+    """Normalize a git remote URL to ``host[:port]/path`` format.
 
-    Strips credentials, removes ``.git`` suffix, normalizes SSH to host/path.
+    Strips credentials wholesale: userinfo (``user[:password]@``) AND the
+    entire query string (``?token=...``) are dropped. Removes the ``.git``
+    suffix and normalizes SSH shapes to host/path.
+
+    The persisted ``remote`` field in ``bonfire.toml`` is a host/path
+    identifier, not a fetch URL — a surviving ``?`` or userinfo is both a
+    credential-leak vector and a normalisation bug.
 
     Handles:
     - ``https://user:token@github.com/org/repo.git``
     - ``http://token@github.com/org/repo.git``
+    - ``https://github.com/org/repo.git?token=foo`` (query-string credential)
+    - ``https://x-access-token:GHSA...@github.com/org/repo.git`` (GitHub Apps)
+    - ``https://user@host:port/org/repo.git`` (port-with-userinfo)
     - ``git@github.com:org/repo.git``
     - ``ssh://git@github.com/org/repo.git``
     - ``https://github.com/org/repo.git``
     """
-    # Remove credentials from HTTP(S) URLs and normalise to https
-    url = re.sub(r"https?://[^@]+@", "https://", url)
-    # Normalize ssh://git@host/path to host/path
-    url = re.sub(r"ssh://[^@]+@", "", url)
-    # Normalize git@host:path to host/path
-    url = re.sub(r"^[^@]+@([^:]+):", r"\1/", url)
-    # Strip protocol prefix
-    url = re.sub(r"^https?://", "", url)
-    # Remove .git suffix
-    url = re.sub(r"\.git$", "", url)
-    return url
+    # SCP-style ``git@host:path`` is not a URL urlsplit understands — convert
+    # it to an ssh:// form first so the same parser path handles both shapes.
+    scp_match = re.match(r"^[^@/:]+@([^:/]+):(.+)$", url)
+    if scp_match:
+        host, path = scp_match.groups()
+        url = f"ssh://{host}/{path}"
+
+    parts = urlsplit(url)
+
+    # ``hostname`` lowercases and excludes userinfo; ``port`` is parsed out.
+    host = parts.hostname or ""
+    if parts.port is not None:
+        host = f"{host}:{parts.port}"
+
+    path = parts.path
+    # Strip protocol-relative leading slash so we get host/path, not host//path.
+    if path.startswith("/"):
+        path = path[1:]
+    # Drop the .git suffix.
+    if path.endswith(".git"):
+        path = path[: -len(".git")]
+
+    # If urlsplit couldn't extract a host (e.g. a bare ``host/path`` string),
+    # fall back to a minimal cleanup of the original input — strip a leading
+    # scheme, any userinfo, any query string, any trailing ``.git``.
+    if not host:
+        fallback = url
+        fallback = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", "", fallback)
+        fallback = re.sub(r"^[^/@]+@", "", fallback)
+        fallback = fallback.split("?", 1)[0]
+        if fallback.endswith(".git"):
+            fallback = fallback[: -len(".git")]
+        return fallback
+
+    return f"{host}/{path}" if path else host
 
 
 # ---------------------------------------------------------------------------

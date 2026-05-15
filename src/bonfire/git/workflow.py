@@ -33,8 +33,22 @@ def _validate_ref_name(name: str) -> None:
         )
 
 
-async def _run_git(repo_path: Path, *args: str) -> str:
-    """Run a git command and return stdout. Raise RuntimeError on failure."""
+async def _run_git(repo_path: Path, *args: str, verbose: bool = False) -> str:
+    """Run a git command and return stdout. Raise RuntimeError on failure.
+
+    On non-zero exit, the default ``RuntimeError`` message is redacted: it
+    names only the git subcommand (the first positional arg) and the exit
+    code. It does NOT include the full arg list (which can carry user-supplied
+    commit messages) or stderr (which can echo caller-supplied content back).
+
+    The redacted shape exists because ``_do_execute`` in ``sdk_backend.py``
+    captures the RuntimeError into a traceback envelope that is persisted as
+    JSONL. Commit messages and stderr can carry user content from prior agent
+    stages; persisting them into long-lived error artifacts is a leak.
+
+    Pass ``verbose=True`` to opt back into the full message — the joined
+    arg list and stderr — for callers that explicitly need the detail.
+    """
     proc = await asyncio.create_subprocess_exec(
         "git",
         *args,
@@ -44,10 +58,13 @@ async def _run_git(repo_path: Path, *args: str) -> str:
     )
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"git command failed (exit {proc.returncode}): "
-            f"git {' '.join(args)}\n{stderr.decode().strip()}"
-        )
+        subcommand = args[0] if args else "?"
+        if verbose:
+            raise RuntimeError(
+                f"git command failed (exit {proc.returncode}): "
+                f"git {' '.join(args)}\n{stderr.decode().strip()}"
+            )
+        raise RuntimeError(f"git {subcommand} failed (exit {proc.returncode})")
     return stdout.decode().strip()
 
 

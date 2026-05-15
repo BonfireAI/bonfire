@@ -83,7 +83,20 @@ async def scan(
 
 
 async def _scan_settings(claude_dir: Path, emit: ScanCallback) -> int:
-    """Read settings.json and report model, permissions, extensions."""
+    """Read settings.json and report structural metadata for model, permissions, extensions.
+
+    Per the module's privacy posture ("Settings: report structure, not values"):
+    ``model`` and ``permissions`` are emitted as *presence/structure* signals
+    only — the literal values never appear in any event field. This mirrors
+    the existing ``extensions`` handling, which only emits a count.
+
+    The persisted output (``bonfire.toml [bonfire.claude_memory]`` via
+    ``config_generator._build_claude_memory``) and the WS broadcast both
+    consume the ``value`` / ``detail`` fields; a leak in either is durable.
+    Claude Code's ``permissions`` block can carry deny-list rules and ``env``
+    values today, and may grow auth-bearing fields in future — emitting the
+    raw value or its ``str(dict)`` repr would commit those into config.
+    """
     settings_path = claude_dir / "settings.json"
     if not settings_path.is_file():
         return 0
@@ -95,16 +108,27 @@ async def _scan_settings(claude_dir: Path, emit: ScanCallback) -> int:
 
     count = 0
 
-    # Model override
-    model = data.get("model")
-    if model:
-        await emit(ScanUpdate(panel=PANEL, label="model", value=str(model)))
+    # Model override — emit presence/structure, NOT the value. The literal
+    # model identifier can itself carry token-like segments for custom
+    # endpoints; presence is the only safe signal.
+    if "model" in data:
+        await emit(ScanUpdate(panel=PANEL, label="model", value="set"))
         count += 1
 
-    # Permissions mode
-    permissions = data.get("permissions")
-    if permissions:
-        await emit(ScanUpdate(panel=PANEL, label="permissions", value=str(permissions)))
+    # Permissions — emit structural metadata (top-level key names + count),
+    # NOT the nested values. The deny-list bodies and any env values stay
+    # out of the event entirely.
+    if "permissions" in data:
+        permissions = data.get("permissions")
+        if isinstance(permissions, dict):
+            keys = sorted(permissions.keys())
+            value = f"{len(keys)} key{'s' if len(keys) != 1 else ''}"
+            detail = ", ".join(keys)
+        else:
+            # Non-dict permissions (legacy string form, etc.): report type only.
+            value = type(permissions).__name__
+            detail = ""
+        await emit(ScanUpdate(panel=PANEL, label="permissions", value=value, detail=detail))
         count += 1
 
     # Extensions count

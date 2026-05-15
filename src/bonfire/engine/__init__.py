@@ -21,8 +21,13 @@ Public surface:
   :class:`CostLimitGate`) plus :class:`GateChain` for sequential
   evaluation with short-circuit on error severity.
 - The checkpoint trio (:class:`CheckpointManager`,
-  :class:`CheckpointData`, :class:`CheckpointSummary`) — durable
-  resume state written between stages.
+  :class:`CheckpointData`, :class:`CheckpointSummary`) — an opt-in
+  persistence surface a caller can drive around
+  :meth:`PipelineEngine.run`. The engine does not write checkpoints
+  between stages; callers persist a :class:`PipelineResult` via
+  :meth:`CheckpointManager.save` and resume by passing the loaded
+  ``completed`` mapping back into :meth:`PipelineEngine.run` on the
+  next invocation.
 """
 
 from bonfire.engine.checkpoint import CheckpointData, CheckpointManager, CheckpointSummary

@@ -5,14 +5,15 @@
 
 This package walks a frozen :class:`~bonfire.models.plan.WorkflowPlan`
 in topological order and turns each stage into an envelope-carrying
-agent dispatch with quality gates, checkpoints, and observable cost.
+agent dispatch with quality gates, observable cost, and an opt-in
+checkpoint persistence surface.
 
 Public surface:
 
 - :class:`PipelineEngine` / :class:`PipelineResult` — top-level
   orchestrator and its terminal result type.
 - :class:`StageExecutor` — runs a single stage: build input, dispatch
-  the handler, evaluate gates, emit events.
+  via handler or backend, emit events.
 - :class:`ContextBuilder` — assembles per-stage prompt context from
   prior stage results and project state.
 - The six shipped quality gates (:class:`CompletionGate`,

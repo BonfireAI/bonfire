@@ -64,8 +64,11 @@ class FrontDoorServer:
         self._server: Server | None = None
         self._clients: set[ServerConnection] = set()
         self._html: bytes = b""
-        self._shutdown_event: asyncio.Event = asyncio.Event()
-        self._client_connected: asyncio.Event = asyncio.Event()
+        # Created lazily in start() — an asyncio.Event binds to the loop
+        # current at construction time, so eager creation in __init__ would
+        # break reuse of a server instance across separate event loops.
+        self._shutdown_event: asyncio.Event | None = None
+        self._client_connected: asyncio.Event | None = None
         self._had_clients: bool = False
 
     # ------------------------------------------------------------------
@@ -75,15 +78,23 @@ class FrontDoorServer:
     @property
     def shutdown_event(self) -> asyncio.Event:
         """Set when the last WebSocket client disconnects (after at least one connected)."""
+        if self._shutdown_event is None:
+            raise RuntimeError("shutdown_event is unavailable before start()")
         return self._shutdown_event
 
     @property
     def client_connected(self) -> asyncio.Event:
         """Set when the first WebSocket client connects."""
+        if self._client_connected is None:
+            raise RuntimeError("client_connected is unavailable before start()")
         return self._client_connected
 
     async def start(self) -> int:
         """Start the server and return the bound port."""
+        # Create the events here so they bind to the loop running start() —
+        # this also rebinds them when a server instance is reused across loops.
+        self._shutdown_event = asyncio.Event()
+        self._client_connected = asyncio.Event()
         self._html = _load_html()
         self._server = await serve(
             self._ws_handler,
@@ -163,6 +174,9 @@ class FrontDoorServer:
 
     async def _ws_handler(self, websocket: ServerConnection) -> None:
         """Handle a single WebSocket connection lifecycle."""
+        # _ws_handler only runs after start(), so the events are set.
+        assert self._client_connected is not None
+        assert self._shutdown_event is not None
         self._clients.add(websocket)
         self._had_clients = True
         self._client_connected.set()

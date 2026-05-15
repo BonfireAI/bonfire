@@ -360,3 +360,121 @@ class TestMessageDispatchShape:
             assert received[0].get("type") == expected_type
         else:
             assert received == [], f"payload={payload!r} should be dropped without callback"
+
+
+# ---------------------------------------------------------------------------
+# EVENT-LOOP BINDING CONTRACT — BON-895
+#
+# FrontDoorServer must NOT construct ``asyncio.Event`` instances in
+# ``__init__``. An ``asyncio.Event`` binds to whatever loop is running on its
+# first await; constructing one in ``__init__`` and awaiting it in a *later*
+# loop raises ``RuntimeError: <Event ...> is bound to a different event loop``.
+#
+# The contract these tests pin:
+#   1. The events are created lazily inside ``start()`` (or an equivalent
+#      first-await entry-point), not in ``__init__``.
+#   2. A single ``FrontDoorServer`` instance can be driven across two
+#      separate ``asyncio.run(...)`` blocks without a loop-binding error.
+#
+# Reproduction (pre-fix) verified by the Knight before writing this file:
+# a module-level ``FrontDoorServer`` whose ``shutdown_event``/``client_connected``
+# is awaited under two ``asyncio.run`` calls raises the loop-binding
+# ``RuntimeError`` on the second run — exactly the hazard the CLI ``_run_scan``
+# path (``await server.shutdown_event.wait()``) is exposed to under any
+# embedding that reuses a server across loops.
+# ---------------------------------------------------------------------------
+
+
+class TestEventLoopBindingContract:
+    """BON-895: events are loop-bound lazily, not eagerly in ``__init__``."""
+
+    async def _start_and_wait(self, server: FrontDoorServer) -> None:
+        """Faithful slice of CLI ``_run_scan``: start, await an event, stop.
+
+        Mirrors ``bonfire.cli.commands.scan._run_scan`` which does
+        ``await server.start()`` then ``await server.shutdown_event.wait()``.
+        The ``wait_for`` timeout stands in for "a client eventually
+        disconnects" so the test stays deterministic and offline.
+        """
+        await server.start()
+        try:
+            await asyncio.wait_for(server.shutdown_event.wait(), timeout=0.05)
+        except TimeoutError:
+            pass
+        finally:
+            await server.stop()
+
+    def test_init_does_not_create_asyncio_events(self) -> None:
+        """``__init__`` must not eagerly construct loop-bound ``asyncio.Event``s.
+
+        An ``asyncio.Event`` constructed here binds to the loop current at
+        construction time (or the loop of its first await). The acceptance
+        criterion: after ``__init__`` and before ``start()``, neither event
+        is a live, loop-bound ``asyncio.Event`` instance — they are lazily
+        created inside ``start()``.
+
+        This asserts on the private attributes ``_shutdown_event`` and
+        ``_client_connected`` because that is exactly where the hazard lives
+        (``server.py:67-69``). Pre-fix: both are ``asyncio.Event()`` already.
+        Post-fix: both are ``None`` (or otherwise not yet instantiated) until
+        ``start()`` runs.
+        """
+        server = FrontDoorServer()
+        assert server._shutdown_event is None, (
+            "FrontDoorServer.__init__ must NOT create _shutdown_event "
+            "(asyncio.Event binds to the construction-time loop); it must be "
+            "lazily created inside start()"
+        )
+        assert server._client_connected is None, (
+            "FrontDoorServer.__init__ must NOT create _client_connected "
+            "(asyncio.Event binds to the construction-time loop); it must be "
+            "lazily created inside start()"
+        )
+
+    async def test_events_bound_after_start(self) -> None:
+        """After ``start()`` the events exist and are usable in the running loop."""
+        server = FrontDoorServer()
+        try:
+            await server.start()
+            assert isinstance(server._shutdown_event, asyncio.Event)
+            assert isinstance(server._client_connected, asyncio.Event)
+            # The public properties expose live events post-start.
+            assert isinstance(server.shutdown_event, asyncio.Event)
+            assert isinstance(server.client_connected, asyncio.Event)
+            # And they are usable in this loop without a binding error.
+            assert not server.shutdown_event.is_set()
+            assert not server.client_connected.is_set()
+        finally:
+            await server.stop()
+
+    def test_server_reusable_across_two_asyncio_run_blocks(self) -> None:
+        """Core BON-895 regression: one server, two separate ``asyncio.run`` loops.
+
+        This is the falsifiable contract. A single module-level
+        ``FrontDoorServer`` is started and has one of its events awaited under
+        two distinct ``asyncio.run(...)`` calls — the second of which runs on
+        a brand-new event loop after the first has closed.
+
+        Pre-fix (events created in ``__init__``): the second ``asyncio.run``
+        raises ``RuntimeError: <asyncio.locks.Event ...> is bound to a
+        different event loop``.
+
+        Post-fix (events created lazily in ``start()``): both runs complete
+        clean because each ``start()`` rebinds the events to the loop that is
+        actually current.
+        """
+        server = FrontDoorServer()
+
+        # First loop — binds whatever the pre-fix __init__ events bound to.
+        asyncio.run(self._start_and_wait(server))
+
+        # Second loop — a fresh event loop. Pre-fix this raises the
+        # "bound to a different event loop" RuntimeError.
+        try:
+            asyncio.run(self._start_and_wait(server))
+        except RuntimeError as exc:  # pragma: no cover - fails pre-fix
+            pytest.fail(
+                "FrontDoorServer reused across two asyncio.run blocks raised "
+                f"a loop-binding RuntimeError: {exc!r}. Events must be created "
+                "lazily in start(), not eagerly in __init__ (server.py:67-69)."
+            )

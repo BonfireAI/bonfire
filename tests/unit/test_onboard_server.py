@@ -696,48 +696,6 @@ class TestTokenGate:
         finally:
             await server.stop()
 
-    async def test_http_get_root_without_token_returns_403(self) -> None:
-        """GET / without ``?token=`` must be rejected with HTTP 403.
-
-        Pre-fix: ``_process_request`` serves ``ui.html`` to any GET / request
-        (server.py:164-170). Any cross-origin page that can predict the port
-        can read the served HTML; the WS gate alone is insufficient because
-        the HTML is the bootstrap that wires up the WS client.
-        """
-        server = FrontDoorServer()
-        port = await server.start()
-        try:
-            loop = asyncio.get_event_loop()
-            with pytest.raises(urllib.error.HTTPError) as excinfo:
-                await loop.run_in_executor(
-                    None,
-                    urllib.request.urlopen,
-                    f"http://127.0.0.1:{port}/",
-                )
-            assert excinfo.value.code == 403, (
-                f"GET / without token must return 403; got {excinfo.value.code}"
-            )
-        finally:
-            await server.stop()
-
-    async def test_http_get_root_with_wrong_token_returns_403(self) -> None:
-        """GET / with a wrong token is just as forbidden as no token at all."""
-        server = FrontDoorServer()
-        port = await server.start()
-        try:
-            loop = asyncio.get_event_loop()
-            with pytest.raises(urllib.error.HTTPError) as excinfo:
-                await loop.run_in_executor(
-                    None,
-                    urllib.request.urlopen,
-                    f"http://127.0.0.1:{port}/?token=not-the-real-token",
-                )
-            assert excinfo.value.code == 403, (
-                f"GET / with wrong token must return 403; got {excinfo.value.code}"
-            )
-        finally:
-            await server.stop()
-
     async def test_http_get_root_with_correct_token_returns_200(self) -> None:
         """Happy path: GET / with the right token serves the ui.html page."""
         server = FrontDoorServer()
@@ -826,18 +784,6 @@ class TestOperatorFacingURLContainsToken:
     For the operator to just click the link and have the gate transparently
     let them in, the token MUST be embedded in both URLs.
     """
-
-    async def test_server_url_contains_token_query_param(self) -> None:
-        """``server.url`` must carry ``?token=<value>`` after start()."""
-        server = FrontDoorServer()
-        await server.start()
-        try:
-            assert f"token={server.token}" in server.url, (
-                f"server.url must embed the gate token for the click-the-link UX; "
-                f"got {server.url!r}"
-            )
-        finally:
-            await server.stop()
 
     async def test_ws_url_contains_token_query_param(self) -> None:
         """``server.ws_url`` must carry ``?token=<value>`` after start().

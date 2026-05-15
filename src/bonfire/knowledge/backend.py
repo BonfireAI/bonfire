@@ -82,17 +82,21 @@ class LanceDBBackend:
         return [self._record_to_entry(r) for r in results]
 
     async def exists(self, content_hash: str) -> bool:
+        """Return True when a row with this content_hash is stored.
+
+        Uses LanceDB's filter-only search path -- no query vector is
+        supplied, so the answer is determined entirely by the where-clause
+        on the indexed ``content_hash`` column. The earlier implementation
+        routed the lookup through ``search([0.0]*dim)``, scoring a zero
+        vector against the ANN index even though the answer was fully
+        determined by the filter. The ``count_rows()`` short-circuit is
+        also removed -- the empty-table case naturally returns an empty
+        result set.
+        """
         self._ensure_connected()
-        if self._table.count_rows() == 0:
-            return False
         safe_hash = content_hash.replace("'", "''")
         try:
-            results = (
-                self._table.search([0.0] * self._embedder.dim)
-                .where(f"content_hash = '{safe_hash}'")
-                .limit(1)
-                .to_list()
-            )
+            results = self._table.search().where(f"content_hash = '{safe_hash}'").limit(1).to_list()
             return len(results) > 0
         except Exception:
             return False

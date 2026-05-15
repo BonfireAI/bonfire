@@ -214,8 +214,21 @@ class TestIngestScalesLinearly:
         fail above 3.0x — comfortably between the two so timing jitter on a
         loaded machine does not flake a correct linear implementation, but a
         genuine quadratic regression (4x+) is caught.
+
+        Scale: n = 10_000. At smaller n (e.g. 4_000) the O(n²) signal does
+        not yet rise out of timing noise — both buggy and fixed
+        implementations produced a flat ~2.2x median with the same outlier
+        tail, so the cap caught flakes from BOTH equally and discriminated
+        nothing. At n=10_000 the asymptotic separation is clean:
+        characterized GREEN (set-indexed exists) shows median 1.77x,
+        max 2.48x over 10 runs; characterized PRE-FIX (linear-scan exists)
+        shows median 4.09x, min 3.57x over 5 runs. The 3.0x cap now sits
+        between two well-separated distributions instead of in their
+        overlapping noise floor. GREEN ingest of 30k entries (n + 2n)
+        completes in ~0.25s on a developer machine, so test budget is
+        preserved.
         """
-        n = 4000
+        n = 10_000
 
         backend_n = InMemoryVaultBackend()
         start = time.perf_counter()

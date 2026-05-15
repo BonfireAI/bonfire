@@ -182,7 +182,8 @@ passes" mean what it should on the integration branch.
   `ToolPolicy` and passing it into `StageExecutor` / `PipelineEngine`
   via the `tool_policy=` kwarg.
 
-[0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0
+<!-- TODO restore the permalink line below when v0.1.0 tag actually cuts -->
+<!-- [0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0 -->
 
 ## [0.1.0a2] — 2026-05-05
 

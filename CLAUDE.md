@@ -21,7 +21,6 @@ Supporting files:
 - [`docs/architecture.md`](docs/architecture.md) — module map and pipeline flow (read first)
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records, with ADR-001 binding the naming vocabulary
 - [`docs/release-policy.md`](docs/release-policy.md) + [`docs/release-gates.md`](docs/release-gates.md) — what blocks a v0.1.0 tag
-- [`docs/audit/sage-decisions/`](docs/audit/sage-decisions/) — design decisions that produced today's contracts
 
 ## Tech Stack
 

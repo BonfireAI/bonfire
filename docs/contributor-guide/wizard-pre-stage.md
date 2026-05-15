@@ -190,9 +190,6 @@ the playbook follows.
 - `docs/style.md` — divider style and `# type: ignore` ban.
 - `docs/release-gates.md` — release-gate ladder (the pre-merge gate is the
   Integration tier).
-- `docs/audit/sage-decisions/_template-sage-memo.md` — the Sage memo template
-  (which Wizards use to validate that a PR's contract is internally
-  consistent).
 
 ---
 

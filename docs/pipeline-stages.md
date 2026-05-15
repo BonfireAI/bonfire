@@ -1,6 +1,6 @@
 # Pipeline Stages
 
-> Reference for the eight handlers that compose the standard Bonfire build
+> Reference for the nine handlers that compose the standard Bonfire build
 > pipeline. Each stage implements the
 > [`StageHandler`](../src/bonfire/protocols.py) protocol and returns an
 > envelope; the [`PipelineEngine`](../src/bonfire/engine/pipeline.py)
@@ -9,15 +9,17 @@
 
 ## Overview
 
-Bonfire's standard build is the eight-stage pipeline produced by
-`bonfire.workflows.standard.standard_build()`:
+Bonfire's standard build is the nine-stage pipeline produced by
+`bonfire.workflow.standard.standard_build()`:
 
 ```
-scout -> knight -> warrior -> prover -> bard -> wizard -> merge_preflight -> steward
+scout -> knight -> warrior -> prover -> sage_correction_bounce -> bard -> wizard -> merge_preflight -> steward
 ```
 
 The first four stages (scout, knight, warrior, prover) are LLM-driven and
-route through the dispatch backend. The last four (bard, wizard,
+route through the dispatch backend. `sage_correction_bounce` is a
+synthesizer stage that runs after the prover gate and can bounce back to
+warrior when correction is required. The last four (bard, wizard,
 merge_preflight, steward) are deterministic stage handlers that wrap
 external tools (`gh` CLI, git, pytest) and never invoke an LLM.
 

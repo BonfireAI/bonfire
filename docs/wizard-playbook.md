@@ -60,5 +60,3 @@ After approval and a green gate, squash-merge to the integration branch
 - [`docs/style.md`](style.md) — code-style canon (divider style,
   `# type: ignore` ban).
 - [`docs/release-gates.md`](release-gates.md) — release-gate tier ladder.
-- [`docs/audit/sage-decisions/_template-sage-memo.md`](audit/sage-decisions/_template-sage-memo.md)
-  — Sage memo template the Wizard cross-references during review.

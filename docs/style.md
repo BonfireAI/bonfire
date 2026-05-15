@@ -172,13 +172,8 @@ The downstream consumer is now forced (by the type system) to check for
 
 ### Scope
 
-This rule binds:
-
-- All Sage memos under `docs/audit/sage-decisions/` — code blocks (python
-  fences) are linted by the cluster-350 doc-invariant smoke test.
-- All Knight memos under `docs/audit/knight-memos/` — same lint.
-- All `src/bonfire/` python files — ruff and mypy will pin this once
-  the v0.2 strict-mode upgrade lands.
+This rule binds all `src/bonfire/` python files — ruff and mypy will pin
+this once the v0.2 strict-mode upgrade lands.
 
 The rule does NOT bind prose mentions of `# type: ignore` (this very
 section is one — discussion of the anti-pattern is fine).
@@ -212,9 +207,6 @@ This style guide cites:
 
 - `pyproject.toml` for ruff configuration (line length, target Python version).
 - `docs/adr/ADR-001-naming-vocabulary.md` for module-name conventions.
-- `docs/audit/sage-decisions/_template-sage-memo.md` for the canonical Sage
-  memo shape (the `# type: ignore` ban here is enforced by the template's
-  `§F Anti-patterns to avoid` section).
 - `docs/contributor-guide/wizard-pre-stage.md` for pre-merge gate procedure.
 
 When this file is updated, the linking files SHOULD be re-verified in the

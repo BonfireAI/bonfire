@@ -7,7 +7,7 @@ silently emits nothing. Non-zero git rc (e.g. corrupt ``.git/HEAD``)
 also goes silent today — only the ``repository: initialized`` event
 fires before each git invocation drops its result.
 
-This file pins down three contracts:
+This file pins down four contracts:
 
   1. ``returncode is None`` from the subprocess MUST surface as a
      scanner-visible error event, NOT a silent drop.
@@ -16,6 +16,10 @@ This file pins down three contracts:
      command and the rc.
   3. ``asyncio.wait_for`` ``TimeoutError`` must produce a
      "git command timed out" event, not a silent drop.
+  4. A freshly ``git init``'d repo with NO commits is a *healthy*
+     state — ``git log -1`` exiting 128 ("does not have any commits
+     yet") must NOT surface as a ``value="error"`` event. The
+     no-commit condition is benign, not a failure.
 
 The happy path is covered by
 ``tests/unit/test_onboard_scanner_git_state.py``; this file is the
@@ -220,4 +224,61 @@ class TestTimeoutIsSurfaced:
         assert timeout_events, (
             f"git command timeout must surface as a 'timed out' event; "
             f"got events: {[(e.label, e.value, e.detail) for e in events]!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 4. A no-commit repo is healthy — `git log` rc 128 must NOT be an error event
+# ---------------------------------------------------------------------------
+
+
+class TestNoCommitRepoIsNotAnError:
+    """A freshly ``git init``'d repo with no commits is a normal state.
+
+    ``git log -1 --format=%ci`` exits 128 on such a repo ("does not
+    have any commits yet"). The error-emitting ``_run_with_emit``
+    path treats *any* non-zero rc as an error and emits a spurious
+    ``("last commit", "error", ...)`` event — so ``bonfire scan``
+    onboarding a brand-new project falsely flags a healthy repo.
+
+    Contract: scanning a no-commit repo must NOT produce a
+    ``value="error"`` event for the missing-commits condition. The
+    scanner should report the absence of commits benignly (or simply
+    not emit a "last commit" event at all) — never as an error.
+    """
+
+    async def test_no_commit_repo_emits_no_error_event(self, tmp_path: Path) -> None:
+        """``git init`` with ``commit=False`` must not surface an error event."""
+        from bonfire.onboard.scanners.git_state import scan
+
+        # Freshly initialised repo, NO first commit — a healthy state.
+        _git_init(tmp_path, commit=False)
+
+        emit = AsyncMock()
+        await scan(tmp_path, emit)
+
+        events = _events(emit)
+        error_events = [e for e in events if _is_error_event(e)]
+        assert not error_events, (
+            f"a no-commit repo is healthy — `git log -1` exiting 128 must "
+            f"NOT surface as an error event; got error events: "
+            f"{[(e.label, e.value, e.detail) for e in error_events]!r} "
+            f"(all events: {[(e.label, e.value, e.detail) for e in events]!r})"
+        )
+
+    async def test_no_commit_repo_last_commit_is_not_error_value(self, tmp_path: Path) -> None:
+        """If a "last commit" event is emitted at all, its value is not "error"."""
+        from bonfire.onboard.scanners.git_state import scan
+
+        _git_init(tmp_path, commit=False)
+
+        emit = AsyncMock()
+        await scan(tmp_path, emit)
+
+        events = _events(emit)
+        last_commit_events = [e for e in events if e.label == "last commit"]
+        assert all(e.value != "error" for e in last_commit_events), (
+            f'a no-commit repo must not yield a ("last commit", "error", ...) '
+            f"event; got: "
+            f"{[(e.label, e.value, e.detail) for e in last_commit_events]!r}"
         )

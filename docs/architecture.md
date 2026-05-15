@@ -10,8 +10,6 @@ other docs in this directory:
   project ships.
 - `docs/adr/ADR-001-naming-vocabulary.md` locks the naming vocabulary
   used throughout the source.
-- `docs/audit/sage-decisions/` records the design decisions that
-  produced today's contracts.
 
 What's missing from those is a single map of the territory. This doc
 fills that gap. Read it once on day one, then come back for the

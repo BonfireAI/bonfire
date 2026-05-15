@@ -203,11 +203,21 @@ async def scan(project_path: Path, emit: ScanCallback) -> int:
             await _emit("working tree", "clean")
 
     # 6. Last commit date
-    commit_date = await _run_with_emit(
-        "last commit",
-        ["git", "-C", str(project_path), "log", "-1", "--format=%ci"],
-    )
-    if commit_date:
-        await _emit("last commit", commit_date)
+    #
+    # ``git log -1`` exits 128 on a freshly ``git init``'d repo with no
+    # commits ("does not have any commits yet"). That is a *healthy*
+    # state, not a failure — represent it benignly rather than routing
+    # rc=128 through the error-emitting ``_run_with_emit`` path. Genuine
+    # failures (timeout sentinel, ``None`` returncode, any other rc)
+    # still surface as error events.
+    log_cmd = ["git", "-C", str(project_path), "log", "-1", "--format=%ci"]
+    rc, commit_date = await _run_cmd(log_cmd, cwd=project_path)
+    if rc == 0:
+        if commit_date:
+            await _emit("last commit", commit_date)
+    elif rc == 128:
+        await _emit("last commit", "none", "no commits yet")
+    else:
+        await _emit("last commit", "error", _error_detail(rc, log_cmd))
 
     return count

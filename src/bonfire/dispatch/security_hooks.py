@@ -572,11 +572,31 @@ def build_preexec_hook(
 
     Each call produces a distinct callable so that concurrent dispatches
     (different agents, different sessions) don't share state.
+
+    User-supplied ``extra_deny_patterns`` are compiled ONCE here at
+    factory time: on a long agent dispatch the compile result is stable
+    (config is frozen, patterns are captured) so per-call ``re.compile``
+    would be wasted work. A broken user pattern is captured as an
+    exception and re-raised inside the hook body, where the outer
+    try/except turns it into the Sage-mandated DENY + ``_infra.error``
+    event — preserving the existing fail-safe contract.
     """
     sid = session_id or ""
     aname = agent_name or ""
     user_patterns_source = tuple(config.extra_deny_patterns)
     emit = bool(config.emit_denial_events)
+
+    # Compile user patterns once at factory time. Defer any compile
+    # error to the hook body so it lands in the existing outer-except
+    # DENY path (fail-safe semantics preserved).
+    _user_patterns_compiled: tuple[tuple[str, re.Pattern[str]], ...] | None
+    _user_patterns_error: Exception | None
+    try:
+        _user_patterns_compiled = _compile_user_patterns(list(user_patterns_source))
+        _user_patterns_error = None
+    except Exception as exc:  # noqa: BLE001 — surface as DENY in hook body
+        _user_patterns_compiled = None
+        _user_patterns_error = exc
 
     async def _hook(
         input_data: dict,
@@ -598,11 +618,15 @@ def build_preexec_hook(
             if not command:
                 return {}
 
-            # Compile user patterns FIRST — a broken pattern must DENY
-            # even for benign commands that would otherwise skip via the
-            # keyword prefilter. Failure here lands in the outer except,
-            # which is the Sage-mandated _infra.error DENY path.
-            user_patterns = _compile_user_patterns(list(user_patterns_source))
+            # User patterns were compiled at factory time. If any
+            # pattern was invalid, raise here so the outer except turns
+            # it into the Sage-mandated _infra.error DENY path — this
+            # preserves the fail-CLOSED contract even for benign commands
+            # that would otherwise skip via the keyword prefilter.
+            if _user_patterns_error is not None:
+                raise _user_patterns_error
+            user_patterns = _user_patterns_compiled
+            assert user_patterns is not None  # narrow for type-checker
 
             normalized = _normalize(command)
 

@@ -70,6 +70,15 @@ async def _run_scan(port: int, no_browser: bool) -> None:
         await server.shutdown_event.wait()
     except asyncio.CancelledError:
         pass
+    except FileExistsError as exc:
+        # TOCTOU: a concurrent process created ``bonfire.toml`` between
+        # the CLI's pre-flow ``Path.exists()`` check and ``write_config``
+        # inside ``run_front_door``. Surface the same actionable message
+        # the pre-flow guard prints, exit non-zero cleanly. Without this
+        # the user would see a raw Python traceback. ``server.stop`` is
+        # idempotent and runs in the ``finally`` below.
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     finally:
         await server.stop()
 

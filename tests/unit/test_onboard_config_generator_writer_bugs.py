@@ -51,6 +51,7 @@ import tomllib
 from bonfire.onboard.config_generator import (
     _build_claude_memory,
     _build_git,
+    _sanitize_toml_comment,
     generate_config,
 )
 from bonfire.onboard.protocol import ScanUpdate
@@ -344,3 +345,96 @@ class TestGenerateConfigEndToEndAfterFixes:
         assert "permissions" not in cm
         # Real numeric data preserved.
         assert cm.get("feedback_memories") == 5
+
+
+# ===========================================================================
+# MEDIUM 1 — _sanitize_toml_comment strips full control-char range
+# ===========================================================================
+
+
+class TestSanitizeTomlCommentStripsControlChars:
+    """``_sanitize_toml_comment`` must strip every byte rejected by TOML 1.0.
+
+    TOML 1.0 rejects U+0000-U+001F and U+007F inside comments. A hostile
+    ``~/.claude/settings.json`` with top-level keys containing those bytes
+    would flow through ``_scan_settings -> detail -> comment line ->
+    tomllib.loads`` and crash. The sanitizer is the chokepoint.
+
+    Tab (U+0009) is preserved (it is the one whitespace character TOML
+    allows inside comments).
+    """
+
+    def test_nul_byte_stripped(self) -> None:
+        """NUL (U+0000) must not survive into a TOML comment."""
+        result = _sanitize_toml_comment("before\x00after")
+        assert "\x00" not in result, f"NUL must be stripped from comment text; got: {result!r}"
+        # And the cleaned line must round-trip through tomllib as a comment.
+        tomllib.loads(f"# {result}\n")
+
+    def test_del_char_stripped(self) -> None:
+        """DEL (U+007F) must not survive into a TOML comment."""
+        result = _sanitize_toml_comment("before\x7fafter")
+        assert "\x7f" not in result, f"DEL must be stripped from comment text; got: {result!r}"
+        tomllib.loads(f"# {result}\n")
+
+    def test_representative_c0_control_chars_stripped(self) -> None:
+        """Other C0 control chars (excluding tab) must be stripped too."""
+        # Representative selection across the 0x01-0x1F range; tab (0x09)
+        # is whitespace TOML allows and is preserved separately.
+        codepoints = [0x01, 0x07, 0x0B, 0x0C, 0x1B, 0x1F]
+        for cp in codepoints:
+            ch = chr(cp)
+            result = _sanitize_toml_comment(f"x{ch}y")
+            assert ch not in result, f"control char U+{cp:04X} must be stripped; got: {result!r}"
+            # The output must be valid as a TOML comment.
+            tomllib.loads(f"# {result}\n")
+
+    def test_tab_preserved(self) -> None:
+        """Tab (U+0009) is the one whitespace control char TOML allows."""
+        result = _sanitize_toml_comment("a\tb")
+        # The cleaned line must still round-trip — tab inside a comment
+        # is legal TOML.
+        tomllib.loads(f"# {result}\n")
+        # And the visible "a" and "b" survive (the sanitizer is allowed
+        # to preserve OR strip the tab, but not corrupt the surrounding
+        # text).
+        assert "a" in result
+        assert "b" in result
+
+    def test_newline_still_folded(self) -> None:
+        """Regression guard: \\n and \\r still don't smuggle table headers."""
+        result = _sanitize_toml_comment("safe\n[evil.section]\nstill")
+        assert "\n" not in result, f"newline must be folded out; got: {result!r}"
+        assert "\r" not in result
+        tomllib.loads(f"# {result}\n")
+
+    def test_full_control_range_round_trip(self) -> None:
+        """A string containing every C0 + DEL byte must produce valid TOML."""
+        hostile = "x" + "".join(chr(c) for c in range(0x00, 0x20)) + "\x7f" + "y"
+        result = _sanitize_toml_comment(hostile)
+        # The sanitized output as a comment must parse cleanly.
+        parsed = tomllib.loads(f"# {result}\n")
+        # No keys — the line is a pure comment.
+        assert parsed == {}
+
+    def test_emission_path_with_hostile_detail_round_trips(self) -> None:
+        """End-to-end: a ScanUpdate detail full of control chars survives.
+
+        The full ``_build_claude_memory`` -> ``_sanitize_toml_comment`` ->
+        ``tomllib.loads`` path must not crash on a hostile detail string.
+        """
+        hostile_detail = "env\x00deny\x7fextra\x01key"
+        scans = [
+            _scan(
+                "claude_memory",
+                "permissions",
+                "3 keys",
+                detail=hostile_detail,
+            )
+        ]
+        result = _build_claude_memory(scans)
+        assert result is not None
+        fragment, _ = result
+        # The end-to-end fragment must parse — this is the contract that
+        # the previous sanitizer (\r\n-only) failed on hostile input.
+        tomllib.loads(fragment)

@@ -192,3 +192,157 @@ class TestScanCommandRefusesOverwrite:
 # call path, including the one inside ``run_front_door``. Pinning the flow
 # layer would require constructing a fully-mocked Front Door server +
 # conversation engine and is fragile — the function-level pin is enough.
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 — TOCTOU between pre-flow check and post-flow write_config
+# ---------------------------------------------------------------------------
+
+
+class TestScanRunHandlesPostFlowFileExistsError:
+    """``_run_scan`` must catch FileExistsError from the post-flow write.
+
+    The CLI's pre-flow ``Path.exists()`` check (line 97 of scan.py) catches
+    the happy path. But the conversation flow inside ``run_front_door`` is
+    where ``write_config`` is actually called. If a concurrent process
+    creates ``bonfire.toml`` AFTER the pre-flow check and BEFORE
+    ``write_config`` writes, the function-level ``FileExistsError`` raised
+    by ``write_config`` would propagate as a raw traceback through
+    ``_run_scan``. Users see Python noise instead of a clean exit.
+
+    This test simulates the TOCTOU: ``run_front_door`` is mocked to raise
+    ``FileExistsError`` (matching the post-flow write that found the file
+    already in place). ``_run_scan`` must catch it, exit cleanly via
+    ``typer.Exit(code=1)`` with a stderr message, and not propagate the
+    traceback.
+    """
+
+    def test_toctou_post_flow_fileexists_clean_exit(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """run_front_door raising FileExistsError post-flow -> clean Exit(1).
+
+        Pre-flow check sees a clean directory; the conversation engine
+        races a concurrent process; ``write_config`` raises mid-flow.
+        ``_run_scan`` must surface a clean stderr message and exit 1.
+        """
+        monkeypatch.chdir(tmp_path)
+        # Sanity: directory clean at the start (pre-flow check passes).
+        assert not (tmp_path / "bonfire.toml").exists()
+
+        target = tmp_path / "bonfire.toml"
+        post_flow_msg = (
+            f"bonfire.toml already exists at {target}. Refusing to "
+            "overwrite. Remove or move the existing file and re-run."
+        )
+
+        # Mock the Front Door server constructor (used inside _run_scan)
+        # so we don't bind a real socket. The server object only needs
+        # the methods _run_scan touches before the run_front_door call.
+        mock_server = AsyncMock()
+        mock_server.start = AsyncMock(return_value=None)
+        mock_server.stop = AsyncMock(return_value=None)
+        mock_server.wait_for_client_connect = AsyncMock(return_value=None)
+        mock_server.url = "http://localhost:0"
+        mock_server.ws_url = "ws://localhost:0/ws"
+
+        # Have run_front_door raise FileExistsError as if a concurrent
+        # process created bonfire.toml between pre-flow check and write.
+        # Simulate the TOCTOU side effect (file appears mid-flow) so the
+        # filesystem state at exit matches reality.
+        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+            target.write_text('[bonfire]\nname = "raced"\n')
+            raise FileExistsError(post_flow_msg)
+
+        with (
+            patch(
+                "bonfire.cli.commands.scan.FrontDoorServer",
+                return_value=mock_server,
+            ),
+            patch(
+                "bonfire.onboard.flow.run_front_door",
+                new=fake_run_front_door,
+            ),
+        ):
+            result = runner.invoke(app, ["scan", "--no-browser"])
+
+        # Clean non-zero exit — NOT a raw traceback.
+        assert result.exit_code != 0, (
+            f"_run_scan must exit non-zero on post-flow FileExistsError; "
+            f"got exit_code={result.exit_code}, output={result.output!r}"
+        )
+        # No Python traceback in the user-visible output.
+        combined = (result.output or "") + (result.stderr or "")
+        assert "Traceback" not in combined, (
+            f"FileExistsError must NOT propagate as a raw traceback; got output: {combined!r}"
+        )
+        assert "FileExistsError" not in combined, (
+            f"FileExistsError exception class must not leak to the user; got output: {combined!r}"
+        )
+        # The stderr message must mention the blocked file and a recovery hint.
+        assert "bonfire.toml" in combined, (
+            f"post-flow error must mention bonfire.toml; got: {combined!r}"
+        )
+        recovery_markers = ("remove", "move", "rename", "delete", "rerun", "re-run")
+        combined_lower = combined.lower()
+        assert any(m in combined_lower for m in recovery_markers), (
+            f"post-flow error must hint at recovery; got: {combined!r}"
+        )
+
+    def test_toctou_other_exceptions_not_swallowed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Only FileExistsError is caught; other exceptions still propagate.
+
+        We must not turn ``_run_scan`` into a blanket except-Exception
+        sink. A RuntimeError from the conversation engine should still
+        surface (so bug reports retain their traceback signal).
+        """
+        monkeypatch.chdir(tmp_path)
+
+        mock_server = AsyncMock()
+        mock_server.start = AsyncMock(return_value=None)
+        mock_server.stop = AsyncMock(return_value=None)
+        mock_server.wait_for_client_connect = AsyncMock(return_value=None)
+        mock_server.url = "http://localhost:0"
+        mock_server.ws_url = "ws://localhost:0/ws"
+
+        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+            raise RuntimeError("conversation engine exploded")
+
+        with (
+            patch(
+                "bonfire.cli.commands.scan.FrontDoorServer",
+                return_value=mock_server,
+            ),
+            patch(
+                "bonfire.onboard.flow.run_front_door",
+                new=fake_run_front_door,
+            ),
+        ):
+            result = runner.invoke(app, ["scan", "--no-browser"])
+
+        # A non-FileExistsError must still surface as an error (non-zero
+        # exit). The CliRunner captures the exception in result.exception
+        # when it isn't a SystemExit / typer.Exit.
+        assert result.exit_code != 0, (
+            f"non-FileExistsError must still exit non-zero; got exit_code={result.exit_code}"
+        )
+        # The exception kind must NOT be quietly converted into a clean
+        # FileExistsError-style exit. Either typer surfaces the
+        # RuntimeError (CliRunner stores it on result.exception) OR the
+        # output contains a traceback that names RuntimeError.
+        runtime_visible = (
+            isinstance(result.exception, RuntimeError)
+            or "RuntimeError" in (result.output or "")
+            or "conversation engine exploded" in (result.output or "")
+        )
+        assert runtime_visible, (
+            f"RuntimeError must not be silently swallowed by the "
+            f"FileExistsError handler; got exception={result.exception!r}, "
+            f"output={result.output!r}"
+        )

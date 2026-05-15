@@ -228,11 +228,25 @@ def _build_mcp(
 def _sanitize_toml_comment(text: str) -> str:
     """Strip characters that would break a single-line TOML comment.
 
-    Newlines / carriage returns are folded to a single space so a hostile
-    scanner detail can't smuggle a fake table header. The result is safe
-    to append after a leading ``# `` on its own line.
+    TOML 1.0 rejects every byte in U+0000-U+001F and U+007F inside a
+    comment, with tab (U+0009) the sole exception. A hostile scanner
+    detail (e.g. a top-level key from ``~/.claude/settings.json``
+    containing a NUL or DEL byte) would otherwise flow through here into
+    the comment line and crash ``tomllib.loads`` at config round-trip.
+
+    Newlines / carriage returns are folded to a single space first so a
+    hostile detail can't smuggle a fake table header by inserting a
+    line break. Every remaining U+0000-U+001F byte (except tab, which
+    TOML allows) and U+007F is dropped. The result is safe to append
+    after a leading ``# `` on its own line.
     """
-    return text.replace("\r", " ").replace("\n", " ")
+    # Step 1: fold line breaks to spaces so the comment stays single-line
+    # (and a hostile detail can't smuggle a synthetic table header).
+    folded = text.replace("\r", " ").replace("\n", " ")
+    # Step 2: drop the rest of the TOML-rejected control range. Tab
+    # (U+0009) is the only whitespace control char TOML allows inside a
+    # comment; preserve it. \r and \n were already handled above.
+    return "".join(ch for ch in folded if ch == "\t" or (ord(ch) >= 0x20 and ord(ch) != 0x7F))
 
 
 def _build_claude_memory(

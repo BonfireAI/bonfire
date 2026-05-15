@@ -143,9 +143,20 @@ async def test_panel_is_always_claude_memory(tmp_path):
 
 
 async def test_reads_settings_model(tmp_path):
-    """Reports model override from settings.json."""
+    """Reports model override presence (structure, not value).
+
+    Updated under the BON-914 scoped test-author exception (Wave-2 leak
+    hardening): the OLD contract asserted the literal model value
+    (``value == "claude-sonnet-4-20250514"``) — that contract is superseded
+    by the redacted contract pinned in ``tests/unit/test_claude_memory_scan.py``
+    (``_scan_settings`` must NOT echo the value verbatim, since custom-endpoint
+    identifiers can carry token-like segments). The NEW assertion mirrors
+    that contract: exactly one ``model`` event is emitted when ``model`` is
+    set, and the literal value does NOT appear in any event field.
+    """
     home = tmp_path / "home"
-    _build_claude_dir(home, settings={"model": "claude-sonnet-4-20250514"})
+    sensitive_model_value = "claude-sonnet-4-20250514"
+    _build_claude_dir(home, settings={"model": sensitive_model_value})
     project = tmp_path / "project"
     project.mkdir()
 
@@ -157,13 +168,28 @@ async def test_reads_settings_model(tmp_path):
     events = _events(emit)
     model_events = [e for e in events if e.label == "model"]
     assert len(model_events) == 1
-    assert model_events[0].value == "claude-sonnet-4-20250514"
+    # NEW contract: presence/structure signal, NOT the literal value.
+    assert sensitive_model_value not in model_events[0].value
+    assert sensitive_model_value not in model_events[0].detail
 
 
 async def test_reads_settings_permissions(tmp_path):
-    """Reports permissions mode from settings.json."""
+    """Reports permissions presence (structure, not value).
+
+    Updated under the BON-914 scoped test-author exception (Wave-2 leak
+    hardening): the OLD contract asserted the literal permissions value
+    (``value == "auto-approve"``) — that contract is superseded by the
+    redacted contract pinned in ``tests/unit/test_claude_memory_scan.py``
+    (``_scan_settings`` must emit structural metadata about ``permissions``,
+    never the literal contents — Claude Code's permissions block can carry
+    deny-list rules and ``env`` values, and any future auth material would
+    land in committed ``bonfire.toml``). The NEW assertion mirrors that
+    contract: exactly one ``permissions`` event is emitted, and the literal
+    value does NOT appear in any event field.
+    """
     home = tmp_path / "home"
-    _build_claude_dir(home, settings={"permissions": "auto-approve"})
+    sensitive_permissions_value = "auto-approve"
+    _build_claude_dir(home, settings={"permissions": sensitive_permissions_value})
     project = tmp_path / "project"
     project.mkdir()
 
@@ -175,7 +201,9 @@ async def test_reads_settings_permissions(tmp_path):
     events = _events(emit)
     perm_events = [e for e in events if e.label == "permissions"]
     assert len(perm_events) == 1
-    assert perm_events[0].value == "auto-approve"
+    # NEW contract: structural metadata, NOT the literal value.
+    assert sensitive_permissions_value not in perm_events[0].value
+    assert sensitive_permissions_value not in perm_events[0].detail
 
 
 async def test_missing_settings_still_works(tmp_path):

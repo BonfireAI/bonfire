@@ -15,12 +15,18 @@ An unbounded ``Path.read_text()`` against any of those hangs the scanner
 indefinitely or exhausts RAM. This module centralises a *fail-safe*
 read that:
 
-  1. Calls ``stat()`` (NOT ``lstat()``) so the cap applies to the symlink
-     target's size — checking the link's own size would be useless.
-  2. Compares ``st_size`` against an env-var-overridable cap.
+  1. Opens the path in binary mode (following symlinks, so the cap
+     applies to the link target's content) and reads at most
+     ``cap + 1`` bytes from the file descriptor.
+  2. Resolves the cap from an env-var override, falling back to the
+     supplied default.
   3. On cap-exceeded: emits a ``WARNING`` log + truncates to the cap.
   4. Appends a deterministic sentinel marker so callers parsing the
      content can detect the truncation.
+
+The bounded read is the only mechanism gating output size — there is
+no separate stat() check, which means a file growing between an
+external check and the read cannot bypass the cap (no TOCTOU race).
 
 The sentinel is a fixed marker that consumers may scan for to skip
 partial content. It is appended only when truncation occurred — the
@@ -84,50 +90,74 @@ def safe_read_text(
     env_var: str,
     default_bytes: int,
     encoding: str = "utf-8",
-    errors: str = "strict",
+    errors: str = "replace",
 ) -> str:
     """Read *path* as text with a byte-cap applied.
 
     Behaviour:
 
-    * If ``path.stat().st_size`` is at or under the resolved cap, the
-      file is read normally.
-    * If oversized: a WARNING is logged and at most ``cap`` bytes are
-      read; the returned string carries the
-      :data:`SAFE_READ_TRUNCATION_MARKER` appended.
+    * At most ``cap + 1`` bytes are read from the file. If the read
+      returns ``> cap`` bytes the content is truncated to ``cap`` bytes
+      and the :data:`SAFE_READ_TRUNCATION_MARKER` is appended; a WARNING
+      is also logged.
+    * Otherwise the full content is returned (no marker).
     * If the file is unreadable (broken symlink, perms, device error),
       :class:`OSError` propagates — callers already wrap their reads in
       ``try/except OSError`` so this preserves their existing contract.
 
-    ``stat()`` follows symlinks so a symlink to a 5 GB target is capped
+    The bounded read is the *only* mechanism gating output size. No
+    separate ``stat()`` check is performed, which closes a TOCTOU race
+    where a file growing between a ``stat()`` and a ``read()`` would
+    otherwise bypass the cap.
+
+    ``open()`` follows symlinks so a symlink to a 5 GB target is capped
     on the target's size, not the link's.
 
     The cap is recomputed from the env var on every call so tests can
     monkeypatch the env between cases without module reload.
+
+    Decode errors default to ``"replace"`` so a binary or partially
+    binary file does not crash the scanner — the intended use case
+    walks operator-controlled trees and only inspects partial content
+    for fingerprints.
+
+    .. note::
+
+       The truncation sentinel is an HTML-style comment and is **not**
+       valid TOML. Callers that pass the output of this helper to a
+       TOML parser must either re-validate the bytes or check for the
+       :data:`SAFE_READ_TRUNCATION_MARKER` substring and skip parsing
+       when present.
     """
     cap = resolve_cap_bytes(env_var, default_bytes)
 
-    # stat() (NOT lstat()) — follow symlinks so the target's size is
-    # what we cap on.
-    st = path.stat()
-    size = st.st_size
+    # Bounded read is the only thing that gates output size — read
+    # ``cap + 1`` bytes so we can distinguish "fit exactly" from
+    # "needs truncation". A file growing between any earlier stat()
+    # and this read() cannot bypass the cap because we never read
+    # more than ``cap + 1`` bytes regardless of advertised size.
+    #
+    # open() (not lstat-based) follows symlinks so a symlink to a
+    # 5 GB target reads against the target's bytes. OSError on a
+    # genuinely unreadable path propagates — callers already wrap
+    # ``safe_read_text`` in ``try/except OSError``.
+    with path.open("rb") as fh:
+        raw = fh.read(cap + 1)
 
-    if size <= cap:
-        return path.read_text(encoding=encoding, errors=errors)
+    if len(raw) <= cap:
+        # File fit within the cap. ``errors="replace"`` (default)
+        # keeps decode non-fatal on partially binary content.
+        return raw.decode(encoding, errors=errors)
 
     _log.warning(
-        "%s exceeds size cap (%d bytes > %d bytes); truncating read to cap",
+        "%s exceeds size cap (read > %d bytes); truncating read to cap",
         path,
-        size,
         cap,
     )
 
-    # Open in binary mode and read up to cap bytes — read_text() has no
-    # length parameter. Decode with replacement on cap boundary to avoid
-    # UnicodeDecodeError on a sliced multi-byte character.
-    with path.open("rb") as fh:
-        data = fh.read(cap)
-    # When the slice falls mid-character, "replace" keeps the call
-    # non-fatal; callers downstream parse line-by-line and tolerate junk.
-    text = data.decode(encoding, errors="replace")
+    # When the slice falls mid-character, ``errors="replace"`` keeps
+    # the call non-fatal; callers downstream parse line-by-line and
+    # tolerate junk.
+    truncated = raw[:cap]
+    text = truncated.decode(encoding, errors="replace")
     return text + SAFE_READ_TRUNCATION_MARKER

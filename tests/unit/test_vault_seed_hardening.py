@@ -219,3 +219,103 @@ async def test_existing_pytest_detection_unbroken(tmp_path) -> None:
     events = _events(emit)
     test_events = [e for e in events if e.label == "test config"]
     assert any("pyproject.toml" in e.value for e in test_events)
+
+
+# ---------------------------------------------------------------------------
+# Cross-platform — Windows fallback path
+# ---------------------------------------------------------------------------
+
+
+async def test_windows_fallback_uses_os_walk(monkeypatch, tmp_path) -> None:
+    """When ``sys.platform == "win32"`` the scanner uses ``os.walk``.
+
+    ``os.fwalk`` is Unix-only — on Windows it does not exist and calling
+    it raises ``AttributeError``. This test pins the cross-platform
+    contract by forcing the Windows branch via monkeypatch and asserts:
+
+      1. The scan completes without raising (no stray ``os.fwalk`` call
+         leaking into the Windows path).
+      2. ``os.walk`` is invoked with ``followlinks=False`` so the same
+         symlink-loop guard the POSIX branch provides is preserved.
+      3. The returned file count matches the real tree.
+    """
+    (tmp_path / "main.py").write_text("a = 1\n")
+
+    monkeypatch.setattr(vault_seed.sys, "platform", "win32")
+
+    seen: dict[str, object] = {}
+    real_walk = os.walk
+
+    def spy_walk(top, *args, **kwargs):
+        seen["followlinks"] = kwargs.get("followlinks", "MISSING")
+        return real_walk(top, *args, **kwargs)
+
+    monkeypatch.setattr(vault_seed.os, "walk", spy_walk)
+
+    emit = AsyncMock()
+    await vault_seed._scan_project_size(tmp_path, emit)
+
+    assert seen.get("followlinks") is False, (
+        f"Windows fallback must pass followlinks=False to os.walk; got {seen}"
+    )
+
+    events = _events(emit)
+    size_events = [e for e in events if e.label == "project size"]
+    assert len(size_events) == 1
+    assert size_events[0].value == "~1 files"
+
+
+async def test_windows_fallback_survives_missing_fwalk(monkeypatch, tmp_path) -> None:
+    """Windows branch must NOT touch ``os.fwalk``.
+
+    Mirrors the literal Windows runtime: ``os.fwalk`` is missing as an
+    attribute, so any code path that references it raises
+    ``AttributeError``. Deletes ``fwalk`` from the ``vault_seed.os``
+    namespace and forces ``sys.platform`` to ``"win32"``; the scan must
+    still complete.
+    """
+    (tmp_path / "main.py").write_text("a = 1\n")
+
+    monkeypatch.setattr(vault_seed.sys, "platform", "win32")
+    monkeypatch.delattr(vault_seed.os, "fwalk", raising=False)
+
+    emit = AsyncMock()
+    # Must not raise AttributeError.
+    await vault_seed._scan_project_size(tmp_path, emit)
+
+    events = _events(emit)
+    size_events = [e for e in events if e.label == "project size"]
+    assert len(size_events) == 1
+
+
+# ---------------------------------------------------------------------------
+# Entry cap — counts directories too
+# ---------------------------------------------------------------------------
+
+
+async def test_entry_cap_counts_directories(tmp_path, caplog, monkeypatch) -> None:
+    """An all-empty-dirs tree triggers the cap via the directory budget.
+
+    A pathological tree of nested empty directories would previously walk
+    unbounded because the cap only incremented inside the per-file loop.
+    The fix counts dirs + files per iteration, so a tree with many
+    subdirectories and zero files still hits the cap.
+    """
+    monkeypatch.setattr(vault_seed, "_SCAN_ENTRY_CAP", 3)
+
+    # 10 empty directories at the root, zero code files.
+    for i in range(10):
+        (tmp_path / f"d_{i}").mkdir()
+
+    emit = AsyncMock()
+    with caplog.at_level(logging.WARNING, logger=vault_seed._log.name):
+        await vault_seed._scan_project_size(tmp_path, emit)
+
+    # The walk emits exactly one size event and bails after the cap.
+    events = _events(emit)
+    size_events = [e for e in events if e.label == "project size"]
+    assert len(size_events) == 1
+    # No code files were created.
+    assert size_events[0].value == "~0 files"
+    # WARNING was logged.
+    assert any("entry cap" in rec.message for rec in caplog.records)

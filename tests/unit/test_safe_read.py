@@ -21,6 +21,7 @@ size-agnostic.
 from __future__ import annotations
 
 import logging
+import os
 
 import pytest
 
@@ -108,8 +109,9 @@ def test_symlink_to_large_file_capped_on_target(tmp_path) -> None:
     """A symlink to an oversize file is capped on the target's size.
 
     This is the ``/dev/zero``-symlink threat model in miniature:
-    the helper must ``stat()`` (follow symlinks) so the link's tiny
-    self-size does not bypass the cap.
+    ``open()`` follows symlinks so the link's tiny self-size does not
+    bypass the cap (the bounded read against the target is what
+    actually fires).
     """
     big = tmp_path / "big.txt"
     big.write_text("Z" * 4096)
@@ -120,3 +122,119 @@ def test_symlink_to_large_file_capped_on_target(tmp_path) -> None:
 
     assert out.endswith(SAFE_READ_TRUNCATION_MARKER)
     assert out.startswith("Z" * 1024)
+
+
+# ---------------------------------------------------------------------------
+# Bounded-read TOCTOU defense
+# ---------------------------------------------------------------------------
+
+
+def test_file_at_exactly_cap_bytes_returns_full_content(tmp_path) -> None:
+    """A file *exactly* the cap size returns full content, no marker.
+
+    Boundary pin: the cap is inclusive — a file of exactly ``cap``
+    bytes is NOT truncated. The implementation reads ``cap + 1`` bytes
+    and only truncates when the read returns ``> cap`` bytes.
+    """
+    f = tmp_path / "exact.txt"
+    payload = "A" * 1024
+    f.write_text(payload)
+
+    out = safe_read_text(f, env_var="BONFIRE_TEST_UNUSED_ENV", default_bytes=1024)
+
+    assert out == payload
+    assert SAFE_READ_TRUNCATION_MARKER not in out
+
+
+def test_file_at_cap_plus_one_byte_truncates(tmp_path, caplog) -> None:
+    """A file *one byte* over the cap triggers truncation.
+
+    Pair with :func:`test_file_at_exactly_cap_bytes_returns_full_content`
+    — together they pin the off-by-one boundary of the bounded read.
+    """
+    f = tmp_path / "over.txt"
+    payload = "B" * 1025  # cap + 1
+    f.write_text(payload)
+
+    with caplog.at_level(logging.WARNING, logger="bonfire._safe_read"):
+        out = safe_read_text(f, env_var="BONFIRE_TEST_UNUSED_ENV", default_bytes=1024)
+
+    assert out.endswith(SAFE_READ_TRUNCATION_MARKER)
+    assert out.startswith("B" * 1024)
+    assert any("exceeds size cap" in rec.message for rec in caplog.records)
+
+
+def test_bounded_read_caps_growing_file(tmp_path, monkeypatch) -> None:
+    """A file growing between stat() and read() cannot bypass the cap.
+
+    Models the TOCTOU race the docstring lists as a threat: a slowly
+    growing log file. The bounded read is the only mechanism gating
+    output size, so even if an external observer would have seen a
+    smaller ``st_size`` before the read, the returned content is still
+    capped at ``cap`` bytes + marker.
+
+    We simulate the race by monkeypatching ``Path.stat`` to lie about
+    the size (claim under-cap) while the on-disk file is over-cap. A
+    pre-fix implementation would have read the file unbounded; the
+    fixed implementation reads at most ``cap + 1`` bytes regardless.
+    """
+    from pathlib import Path
+
+    f = tmp_path / "growing.log"
+    payload = b"C" * 4096  # well over the test cap
+    f.write_bytes(payload)
+
+    # Make stat() report a size well under the cap, mimicking a file
+    # that grew after an earlier check.
+    real_stat = Path.stat
+
+    def lying_stat(self, *args, **kwargs):
+        result = real_stat(self, *args, **kwargs)
+        # Pretend the file is empty so any stat-gated branch would
+        # take the fast path. The bounded read must still cap output.
+        return os.stat_result(
+            (
+                result.st_mode,
+                result.st_ino,
+                result.st_dev,
+                result.st_nlink,
+                result.st_uid,
+                result.st_gid,
+                0,  # st_size — the LIE
+                result.st_atime,
+                result.st_mtime,
+                result.st_ctime,
+            )
+        )
+
+    monkeypatch.setattr(Path, "stat", lying_stat)
+
+    out = safe_read_text(f, env_var="BONFIRE_TEST_UNUSED_ENV", default_bytes=512)
+
+    # Output is bounded by the cap regardless of what stat reported.
+    # Either the full file fit (it did not — 4096 > 512) or the
+    # truncation path fired. Assert the latter.
+    assert out.endswith(SAFE_READ_TRUNCATION_MARKER)
+    # Body is exactly the first ``cap`` bytes.
+    assert out[: -len(SAFE_READ_TRUNCATION_MARKER)] == "C" * 512
+
+
+def test_binary_content_does_not_crash(tmp_path) -> None:
+    """A file with binary bytes decodes with replacement, not a crash.
+
+    Default ``errors="replace"`` keeps the scanner non-fatal on a
+    pyproject.toml replaced with a binary blob (or a partially-corrupt
+    file). Pins the uniform encoding behaviour across small-file and
+    truncation paths.
+    """
+    f = tmp_path / "binary.bin"
+    f.write_bytes(b"\xff\xfe\xfd\x00valid\x00")
+
+    # Small-file path (the file is well under the cap).
+    out = safe_read_text(f, env_var="BONFIRE_TEST_UNUSED_ENV", default_bytes=1024)
+
+    # Did not raise UnicodeDecodeError. The replacement character is
+    # used for invalid bytes — exact form depends on the platform's
+    # default behaviour, so we only assert non-empty + valid-substring.
+    assert "valid" in out
+    assert isinstance(out, str)

@@ -1251,3 +1251,95 @@ def test_bard_handler_satisfies_stage_handler_protocol(
 
     handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
     assert isinstance(handler, StageHandler)
+
+
+# ---------------------------------------------------------------------------
+# ``base_branch`` default is ``"main"`` (modern OSS convention)
+# ---------------------------------------------------------------------------
+
+
+class TestBaseBranchDefault:
+    """The ``base_branch`` default must be ``"main"`` for v0.1 first-impression.
+
+    Pre-fix the default was ``"master"``, which made ``bonfire`` look stale on
+    modern OSS repos (GitHub's default has been ``main`` since 2020). These
+    tests pin both the constructor default AND that the default is actually
+    EXERCISED on the happy path (``rev_parse`` + ``create_pr`` both receive
+    ``"main"``).
+    """
+
+    def test_constructor_default_base_branch_is_main(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """``BardHandler()`` with no ``base_branch=`` kwarg defaults to ``"main"``."""
+        handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
+        assert handler._base_branch == "main"
+
+    @pytest.mark.asyncio
+    async def test_default_base_branch_exercised_in_rev_parse(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Happy-path call to ``rev_parse`` passes ``"main"`` when default is used.
+
+        Patches a value-check (not just a default assertion) so a future
+        refactor that drops the default-to-attribute wiring would still trip
+        this test.
+        """
+        handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
+        await handler.handle(bard_stage, artifacts_envelope, {})
+        git_workflow.rev_parse.assert_awaited_once_with("main")
+
+    @pytest.mark.asyncio
+    async def test_default_base_branch_exercised_in_create_pr(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        git_workflow: AsyncMock,
+    ) -> None:
+        """Happy-path call to ``create_pr`` passes ``"main"`` as the base.
+
+        ``MockGitHubClient.actions`` records every operation as a dict;
+        the ``create_pr`` entry has a ``"base"`` key that must be ``"main"``.
+        """
+        gh = MockGitHubClient()
+        handler = BardHandler(git_workflow=git_workflow, github_client=gh)
+        await handler.handle(bard_stage, artifacts_envelope, {})
+        create_pr_actions = [a for a in gh.actions if a.get("type") == "create_pr"]
+        assert len(create_pr_actions) == 1, (
+            f"Expected exactly one create_pr action; got {create_pr_actions!r}"
+        )
+        assert create_pr_actions[0]["base"] == "main", (
+            f"create_pr was called with base={create_pr_actions[0]['base']!r}; expected 'main'."
+        )
+
+    def test_explicit_master_override_still_honored(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Repos still on ``master`` can pass ``base_branch="master"`` explicitly."""
+        handler = BardHandler(
+            git_workflow=git_workflow,
+            github_client=github_client,
+            base_branch="master",
+        )
+        assert handler._base_branch == "master"
+
+    def test_explicit_arbitrary_branch_override_honored(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Caller-specified branch name passes through unchanged."""
+        handler = BardHandler(
+            git_workflow=git_workflow,
+            github_client=github_client,
+            base_branch="release/v2",
+        )
+        assert handler._base_branch == "release/v2"

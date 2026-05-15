@@ -1284,3 +1284,60 @@ def test_parse_verdict_handles_many_nested_tags_deterministically() -> None:
     verdict, reason = _parse_verdict(repeated)
     assert verdict == "reject"
     assert reason == "multiple_verdicts"
+
+
+# ---------------------------------------------------------------------------
+# User-configured ``max_budget_usd`` flows through to the review dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestUserBudgetPlumbing:
+    """Pre-fix, ``WizardHandler`` hard-coded ``max_budget_usd=0.0`` on every
+    review dispatch, silently bypassing the user-configured cap. These tests
+    pin that ``self._config.max_budget_usd`` is what reaches ``DispatchOptions``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_default_pipeline_budget_reaches_dispatch_options(self) -> None:
+        """Default ``PipelineConfig.max_budget_usd=5.0`` reaches ``DispatchOptions``."""
+        handler, backend, _ = _make_handler(config=_make_config(max_budget_usd=5.0))
+        await handler.handle(_make_stage(), _make_envelope(), {})
+        assert backend.captured_options.max_budget_usd == 5.0
+
+    @pytest.mark.asyncio
+    async def test_custom_pipeline_budget_reaches_dispatch_options(self) -> None:
+        """Non-default budget plumbed through unchanged."""
+        handler, backend, _ = _make_handler(config=_make_config(max_budget_usd=12.5))
+        await handler.handle(_make_stage(), _make_envelope(), {})
+        assert backend.captured_options.max_budget_usd == 12.5
+
+    @pytest.mark.asyncio
+    async def test_zero_budget_still_plumbs_through_when_user_chose_zero(self) -> None:
+        """Explicit user-configured ``0.0`` IS honored.
+
+        Distinguishes from the pre-fix hard-code: the previous behavior
+        was 0.0-regardless-of-config. Post-fix, 0.0 only appears when
+        the user-configured it.
+        """
+        handler, backend, _ = _make_handler(config=_make_config(max_budget_usd=0.0))
+        await handler.handle(_make_stage(), _make_envelope(), {})
+        assert backend.captured_options.max_budget_usd == 0.0
+
+    @pytest.mark.asyncio
+    async def test_hard_coded_zero_no_longer_present(self) -> None:
+        """Regression guard: handler source must not hard-code ``max_budget_usd=0.0``.
+
+        Pins the budget-plumbing fix at the source-level. Reads ``wizard.py`` and
+        checks that ``max_budget_usd=0.0`` does NOT appear as a literal
+        in the ``options = DispatchOptions(...)`` construction. Catches
+        a stealth revert that re-introduces the hard-code.
+        """
+        import bonfire.handlers.wizard as wizard_mod
+
+        src = Path(wizard_mod.__file__).read_text()
+        # The exact literal that was the bug. Tolerates whitespace variants
+        # but locks the obvious revert shape.
+        assert "max_budget_usd=0.0" not in src, (
+            "wizard.py contains the literal 'max_budget_usd=0.0' -- budget-plumbing regression. "
+            "Thread self._config.max_budget_usd instead."
+        )

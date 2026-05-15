@@ -181,21 +181,21 @@ def scan(
     _lazy_run("bonfire.cli.commands.scan", "scan")(port=port, no_browser=no_browser)
 
 
-@app.command("status")
+@app.command("status", help="(stub -- implementation lands in 0.1.x)")
 def status() -> None:
-    """Show current Bonfire session status."""
+    """Show current Bonfire session status (stub -- implementation lands in 0.1.x)."""
     _lazy_run("bonfire.cli.commands.status", "status")()
 
 
-@app.command("resume")
+@app.command("resume", help="(stub -- implementation lands in 0.1.x)")
 def resume() -> None:
-    """Resume a previous Bonfire session."""
+    """Resume a previous Bonfire session (stub -- implementation lands in 0.1.x)."""
     _lazy_run("bonfire.cli.commands.resume", "resume")()
 
 
-@app.command("handoff")
+@app.command("handoff", help="(stub -- implementation lands in 0.1.x)")
 def handoff() -> None:
-    """Generate a session handoff document."""
+    """Generate a session handoff document (stub -- implementation lands in 0.1.x)."""
     _lazy_run("bonfire.cli.commands.handoff", "handoff")()
 
 

@@ -58,14 +58,14 @@ bonfire init .
 # Launch the browser-based onboarding scan
 bonfire scan
 
-# Inspect cumulative cost across all sessions
-bonfire cost
+# Inspect per-session cost (or `bonfire cost --help` for all subcommands)
+bonfire cost session
 
 # List installed personas
 bonfire persona list
 ```
 
-Available subcommands in `v0.1.0a1`: `init`, `scan`, `status`, `resume`,
+Available subcommands in `v0.1.0a2`: `init`, `scan`, `status`, `resume`,
 `handoff`, `persona`, `cost`. Run `bonfire --help` for the full surface
 or `bonfire <command> --help` for any single command.
 
@@ -218,7 +218,7 @@ Bonfire ships persona-driven CLI output. The persona affects
 quality standards. The cadre is what runs; the persona is what
 speaks.
 
-The default persona for `v0.1.0a1` is **Falcor** — gentle,
+The default persona for `v0.1.0a2` is **Falcor** — gentle,
 encouraging, warm. The friend who tells you not to let it
 end.[^falcor] Falcor narrates pipeline events, greets you on
 `bonfire scan`, and names lifecycle moments of the Vault.

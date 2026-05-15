@@ -4,6 +4,182 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] — 2026-05-15
+
+The first stable release of `bonfire-ai`. Bonfire is a pipeline runtime
+for AI agents — it wires role-bound stages over a typed event bus, enforces
+TDD at the role boundary, and ships the four extension Protocols
+(`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`) that
+together form the trust triangle a production deployment composes against.
+This release closes every item on the v0.1.0 release-gate ladder; the PyPI
+`Development Status` classifier advances from `3 - Alpha` to `4 - Beta`.
+
+Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
+hardening pass across the dispatch, scanner, persona, git, and Front Door
+modules, and a performance pass that takes knowledge-vault ingest from
+quadratic to linear. Everything else is sharpening: a clarified `bonfire
+scan --no-browser` contract, a documented WebSocket protocol for the
+onboarding flow, and the CI and pre-commit wiring that make "the suite
+passes" mean what it should on the integration branch.
+
+### Added
+
+- **WebSocket protocol specification for `bonfire scan`.** A complete spec
+  of the `FrontDoorServer` ↔ client message exchange ships at
+  `docs/scan-front-door-protocol.md`. Every event and message in the spec
+  carries a `file:line` citation back to its emit or handler site, so
+  third-party clients can implement against the spec rather than
+  re-deriving the protocol from source.
+- **Headless scan driver script.** `scripts/petri_conversational_driver.py`
+  is a minimal Python WebSocket client that drives `bonfire scan
+  --no-browser` end-to-end without a browser — spawn, parse the URL, log
+  every event, reply to onboarding questions, and exit cleanly on
+  `config_generated`. Surfaces a `scan_phase` state-machine discriminator
+  (`pending`/`scanning`/`conversing`/`done`) and a configurable
+  per-message receive timeout (`--timeout-seconds`, default 120s).
+- **Pre-commit configuration.** `.pre-commit-config.yaml` ships at the
+  repo root with `ruff check` and `ruff format` hooks that mirror the CI
+  gate. Run `pre-commit install` once after cloning to catch lint and
+  format issues locally before pushing.
+
+### Changed
+
+- **Version bump to `0.1.0`.** PyPI classifier advances from `Development
+  Status :: 3 - Alpha` to `4 - Beta` per
+  [`docs/release-policy.md`](docs/release-policy.md). The
+  `bonfire-ai==0.1.0` install is the first non-alpha drop.
+- **`DispatchOptions.permission_mode` default flipped to `"default"`
+  (SDK ask-mode).** The previous default `"dontAsk"` is now framed as
+  defense-in-depth rather than the primary trust gate; explicit
+  `permission_mode="dontAsk"` opt-ins in `handlers/wizard.py` and
+  `handlers/sage_correction_bounce.py` continue to behave as before.
+  Callers that today inherit the default will now run agents in
+  SDK ask-mode. Handlers that need autonomous behavior must opt in
+  explicitly. **This is a behavior-changing default flip; review your
+  call sites before upgrading.**
+- **`bonfire scan --no-browser` is documented as WebSocket-driven, not
+  browser-suppressed.** The flag never disabled the Front Door server —
+  it only suppressed `typer.launch(url)`. Help text, runtime echo, and
+  module docstrings now say so. With `--no-browser` set, the wait line
+  reads `Waiting for client connection at <ws_url>` instead of the prior
+  `Waiting for browser connection...`. The default browser-launch path
+  is unchanged.
+- **`InMemoryVaultBackend.exists()` is now O(1).** A parallel hash-set
+  index turns the previous linear scan into a constant-time membership
+  check. n-entry ingest was O(n²) before this change; it is now O(n).
+- **Knowledge-vault query lowercasing is now cached.** `query()` no
+  longer re-lowercases each entry's content on every call; a lazy
+  parallel cache fills on first query, and ingest-heavy workloads that
+  never query never pay the cost.
+- **LanceDB `exists()` is filter-only.** The zero-vector ANN search is
+  gone; existence checks no longer carry per-call embedding cost.
+  Semantics preserved.
+- **Cost-ledger parsing is memoized.** `cost.analyzer` now caches the
+  parsed ledger keyed by `(mtime, size)`; repeated `bonfire cost`
+  invocations within a session reuse the parsed structure. A new
+  raw-dict aggregation path on cold queries skips the Pydantic
+  round-trip.
+- **CLI cold-start is ~6× faster.** `bonfire --version` and
+  `bonfire --help` no longer drag `websockets`, `bonfire.onboard.server`,
+  or `bonfire.cost.analyzer` into the import graph. Cold start measured
+  ~451 ms before this change and ~73 ms after, on the same machine. A
+  forbidden-modules contract test pins the boundary so future imports
+  cannot silently re-inflate the cold path.
+- **`dispatch/` package surface.** `ToolPolicy`, `DefaultToolPolicy`, and
+  `SecurityHooksConfig` are now re-exported at `bonfire.dispatch` so
+  contributors implementing custom tool policies do not have to reach
+  into submodules. The package docstring is corrected to describe
+  `TierGate` accurately as a no-op stub (the prior text claimed it
+  enforced quotas, which it does not).
+- **`bonfire scan` documentation rephrased as "WS-driven" instead of
+  "browser-based".** The short-form docstrings on `scan` and `_run_scan`
+  drop the browser-only framing.
+
+### Fixed
+
+- **Front Door server survives multiple `asyncio.run()` calls.**
+  `FrontDoorServer.__init__` previously constructed its `asyncio.Event`
+  instances eagerly, binding them to whichever loop was current at
+  construction time. Embedders that reused a server across loops hit
+  `RuntimeError: <Event> is bound to a different event loop` on the
+  second `await`. Events are now created lazily inside `start()`, so
+  every `start()` rebinds them to the current loop.
+- **`bonfire persona set <name>` no longer corrupts `bonfire.toml` with
+  hostile names.** All three TOML write sites route through a shared
+  `escape_basic_string` helper; persona names containing quotes,
+  newlines, control characters, or fake section headers are escaped
+  rather than written through.
+- **`PersonaLoader.load(name)` validates names with a slug pattern.**
+  Path-traversal probes like `PersonaLoader.load("../../etc/passwd")`
+  now short-circuit with a single WARNING and never touch the
+  filesystem.
+- **MCP scanner is bounded, symlink-safe, and non-blocking.**
+  `_read_servers_from_config` enforces a 1 MiB size cap (overridable via
+  `BONFIRE_MCP_SCAN_MAX_BYTES`), rejects symlinks whose resolved target
+  escapes the home or project root, and reads via `asyncio.to_thread`
+  to keep the event loop unblocked.
+- **`git_state` scanner emits error events instead of silently dropping
+  panels.** `_run_cmd`'s return type tightened to
+  `tuple[int | None, str]`; non-zero git exit codes (corrupt
+  `.git/HEAD`), `returncode is None`, and timeouts now produce a
+  recognizable `ScanUpdate`. The scanner also treats a no-commit repo
+  (where `git log` legitimately fails) as a benign empty state.
+- **`rm -rf` security pattern matches ephemeral tokens at path-segment
+  boundaries.** The previous substring lookahead let unsafe paths like
+  `rm -rf __pycache__-backup/db` slip through DENY. The lookahead now
+  requires the ephemeral token (`__pycache__`, `node_modules`, `.venv`,
+  `dist`, `build`) to sit at a real path-segment boundary.
+- **User-supplied security-hook regexes compile once.** Patterns are
+  hoisted to compile time in the hook factory; the broken-pattern
+  fail-safe DENY path is preserved.
+
+### Security
+
+- **Remote-URL sanitization is now `urlsplit`-based.** The previous
+  five-step `re.sub` chain has been replaced with a single
+  `urllib.parse.urlsplit` parse. SCP-style `git@host:path` URLs are
+  rewritten to `ssh://host/path` first so the same parser handles both
+  shapes. Userinfo and the entire query string are dropped, so
+  `?token=...` and GHSA-style credentials no longer leak through scan
+  output.
+- **Git subprocess errors no longer echo subcommand args, stderr, or
+  commit messages.** `_run_git` now raises a redacted `RuntimeError`
+  naming only the subcommand and exit code. A new `verbose: bool = False`
+  keyword opts in to full detail for debugging.
+- **Claude-memory settings scan reports structure, not values.** When
+  scanning `~/.claude/settings.json` and project-local equivalents,
+  `model` is reported as `value="set"` (no literal); `permissions` is
+  reported as `value=f"{N} key(s)"` with `detail` listing only the
+  sorted top-level keys. Nested contents are never emitted.
+- **SDK backend traceback redaction.** `ClaudeSDKBackend.execute` no
+  longer stores `traceback.format_exc()` on persisted envelopes by
+  default. The `ErrorDetail.traceback` field is a single-frame
+  `file:line: ExceptionType: message` summary, so prompts and agent
+  options can no longer leak through tracebacks into long-lived session
+  JSONL. Set `BONFIRE_DEBUG_TRACEBACKS=1` to restore the full traceback
+  during debugging.
+
+### Internal
+
+- CI now runs on the `v0.1` integration branch in addition to `main`, so
+  required status checks actually fire on the branch where feature work
+  lands.
+- `ruff` is pinned to an exact version in both pre-commit and CI to keep
+  the two surfaces from drifting.
+- The release-gate Box image puts `claude-code` on `PATH` for the
+  unprivileged `box` user and bakes in `python3-pytest` and
+  `python3-yaml` so the in-box gate-verdict script can actually run.
+  `claude --version` is asserted at image build time — a broken install
+  now fails the build instead of surfacing as a runtime `exit:127`.
+- W4.1 framing reconciled across `dispatch/tool_policy.py`,
+  `docs/release-policy.md`, and `CLAUDE.md`: the `ToolPolicy` extension
+  Protocol IS the user-configurable surface; no TOML loader ships in
+  v0.1. Users override the default allow-list floor by implementing
+  `ToolPolicy` and passing it into `StageExecutor` / `PipelineEngine`
+  via the `tool_policy=` kwarg.
+
+[0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0
+
 ## [0.1.0a2] — 2026-05-05
 
 Lands the first declarative integration surface — Instruction Set Markup

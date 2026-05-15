@@ -8,13 +8,15 @@ to the project.
 
 ## Release Status
 
-`bonfire-ai` ships a public functional release line at `v0.1.x`. The
-PyPI classifier is `Development Status :: 4 - Beta`. Pipeline
-primitives, BYOK model routing, and the browser-based onboarding scan
-are wired and exercised by the test suite. Knowledge-graph storage
-("the vault") and the end-to-end project workflow remain in progress
-and ship in subsequent 0.1.x releases. The vocabulary, the protocols,
-and the config schema are stable for 0.1.x. See
+`bonfire-ai` is in alpha at `v0.1.0aN`. The PyPI classifier is
+`Development Status :: 3 - Alpha`; it advances to
+`Development Status :: 4 - Beta` when the stable `v0.1.0` tag cuts.
+Pipeline primitives, BYOK model routing, and the browser-based
+onboarding scan are wired and exercised by the test suite.
+Knowledge-graph storage ("the Vault") and the end-to-end `bonfire run`
+verb remain in progress and ship in subsequent 0.1.x releases. The
+vocabulary, the protocols, and the config schema are stable for
+0.1.x. See
 [`docs/release-policy.md`](docs/release-policy.md) for the full
 versioning policy and what counts as a breaking change, and
 [`CHANGELOG.md`](CHANGELOG.md) for per-release notes.
@@ -118,12 +120,16 @@ Tests use `pytest`. The project is configured with
 automatically — you do not need to decorate them with
 `@pytest.mark.asyncio`.
 
-Tests are organized into two directories:
+Tests are organized into four directories:
 
 - `tests/unit/` — fast, isolated tests for individual modules.
   These run on every CI invocation and must stay deterministic.
 - `tests/integration/` — broader tests that exercise multiple
   modules together. Still deterministic; no network calls.
+- `tests/smoke/` — high-level invariant checks (CI on every push;
+  also runs under `.github/workflows/smoke.yml`).
+- `tests/e2e/` — fixture-driven release-gate Box runs. LOCAL ONLY,
+  never in CI; see [`docs/release-gates.md`](docs/release-gates.md).
 
 Tests that require a real API key are marked with
 `@pytest.mark.live` and are skipped by default.
@@ -138,7 +144,10 @@ coverage report
 
 ## Pull Request Process
 
-1. **Branch naming.** Create a branch off `main` using
+1. **Branch naming.** During v0.1 pre-release, the integration
+   branch is `v0.1` — create your branch off `v0.1`, and target
+   `v0.1` in the PR. (`main` is the release branch and is only
+   merged into when a stable tag cuts.) Use
    `your-name/short-description` or `topic/short-description`.
    Keep the description lowercase and hyphenated.
 
@@ -156,7 +165,13 @@ coverage report
 4. **CI must pass.** Your PR needs green checks on `pytest`,
    `ruff check`, and `ruff format --check` before it can be merged.
 
-5. **PR description.** Include a short summary of the change and a
+5. **Two-lens review.** Every PR into a protected branch (`v0.1`
+   during pre-release, `main` for release tags) requires two
+   independent reviews before merge: a reviewer-agent pass (the
+   prompt-architect lens) and a `code-reviewer` pass (an
+   independent lens). Address feedback rather than re-arguing.
+
+6. **PR description.** Include a short summary of the change and a
    test plan — the specific commands a reviewer can run to verify
    the behavior. Link to any relevant documents under `docs/`.
 

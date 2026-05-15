@@ -13,6 +13,11 @@ who wish to override the floor implement :class:`ToolPolicy` and pass their
 implementation into ``StageExecutor`` / ``PipelineEngine`` via the
 ``tool_policy=`` constructor kwarg. No TOML loader ships in v0.1; the Protocol
 seam is the public surface.
+
+The floor table's gamified role keys (``scout``, ``knight``, ``warrior``, ...)
+are a ratified exception to ADR-001's "all code uses generic names" rule —
+see ``docs/adr/ADR-001-naming-vocabulary.md`` § Ratified Exceptions and the
+pin test ``tests/unit/test_adr_001_ratified_exceptions.py``.
 """
 
 from __future__ import annotations

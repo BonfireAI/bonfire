@@ -42,8 +42,11 @@ pre-commit install
 ```
 
 The pre-commit hooks run `ruff check` and `ruff format --check` on
-staged files before each commit — the same lint gates CI enforces. To
-run them against the whole tree at any time:
+staged files before each commit — the same lint gates CI enforces.
+The hooks run in check-only mode (`--no-fix`): a lint or formatting
+violation *blocks the commit* rather than auto-fixing it, so you fix
+the issue and re-stage before committing again. To run them against
+the whole tree at any time:
 
 ```bash
 pre-commit run --all-files

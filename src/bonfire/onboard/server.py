@@ -12,11 +12,14 @@ Uses ``websockets`` >= 13.0 with the asyncio API.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
+import secrets
 from collections.abc import Callable, Coroutine
 from importlib import resources
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from websockets.asyncio.server import Server, ServerConnection, serve
 from websockets.datastructures import Headers
@@ -70,6 +73,11 @@ class FrontDoorServer:
         self._shutdown_event: asyncio.Event | None = None
         self._client_connected: asyncio.Event | None = None
         self._had_clients: bool = False
+        # The gate token is generated lazily inside start() so each launch
+        # mints a fresh value (mirroring the lazy-event-binding pattern):
+        # even if a single FrontDoorServer is reused across asyncio.run blocks,
+        # a previous-launch URL cannot drive a current-launch session.
+        self._token: str | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -95,7 +103,20 @@ class FrontDoorServer:
         # this also rebinds them when a server instance is reused across loops.
         self._shutdown_event = asyncio.Event()
         self._client_connected = asyncio.Event()
+        # Mint a fresh per-launch URL-safe gate token. 16 bytes of entropy
+        # (~22 chars of urlsafe-base64) defeats brute-force from same-host
+        # processes during the short scan lifetime. Regenerated on every
+        # start() so re-using a server instance does NOT re-open the
+        # previous launch's CSWSH window.
+        self._token = secrets.token_urlsafe(16)
         self._html = _load_html()
+        # Origin enforcement happens in ``_process_request`` (rather than via
+        # the ``serve(origins=...)`` kwarg) because the allow-list must
+        # include the bound port, which isn't known until ``serve`` returns
+        # for the random-port case (``port=0``). ``_process_request`` runs
+        # AFTER bind and BEFORE the WS upgrade, so it can enforce both the
+        # Origin allow-list and the token gate in one place for both HTTP
+        # and WS paths.
         self._server = await serve(
             self._ws_handler,
             self._host,
@@ -139,14 +160,50 @@ class FrontDoorServer:
         await asyncio.wait_for(event.wait(), timeout=timeout)
 
     @property
+    def token(self) -> str | None:
+        """Per-launch gate token. ``None`` before ``start()``.
+
+        Regenerated on every ``start()`` so a re-used ``FrontDoorServer``
+        instance does NOT re-open the previous launch's CSWSH window.
+        """
+        return self._token
+
+    @property
     def url(self) -> str:
-        """HTTP URL for the served page."""
-        return f"http://{self._host}:{self._port}"
+        """HTTP URL for the served page, including the gate token.
+
+        Embeds ``?token=<value>`` so the operator can just click the printed
+        link and the gate transparently lets them in. ``self._token`` is
+        ``None`` before ``start()`` — the URL is returned with the literal
+        ``None`` only in that pre-start window; callers should not rely on
+        the value of ``url`` before ``start()``.
+        """
+        if self._token is None:
+            return f"http://{self._host}:{self._port}"
+        return f"http://{self._host}:{self._port}/?token={self._token}"
 
     @property
     def ws_url(self) -> str:
-        """WebSocket URL for client connections."""
-        return f"ws://{self._host}:{self._port}/ws"
+        """WebSocket URL for client connections, including the gate token.
+
+        The HTML page reads this URL via its embedded JS and opens a WS
+        with the embedded token — that is how the browser path completes
+        the gated handshake without manual token typing.
+        """
+        if self._token is None:
+            return f"ws://{self._host}:{self._port}/ws"
+        return f"ws://{self._host}:{self._port}/ws?token={self._token}"
+
+    @property
+    def origin(self) -> str:
+        """Same-origin allow-list value (host:port only — no token, no path).
+
+        Mirrors the ``Origin`` header a browser stamps onto a request from
+        the served ``ui.html``: scheme + host + port. The allow-list lives
+        inside ``_process_request``; this property is exposed for callers
+        and tests that want to construct same-origin requests explicitly.
+        """
+        return f"http://{self._host}:{self._port}"
 
     @property
     def on_message(self) -> MessageCallback | None:
@@ -171,17 +228,87 @@ class FrontDoorServer:
         connection: ServerConnection,
         request: Request,
     ) -> Response | None:
-        """Serve HTML on GET /, pass /ws through to WebSocket handler."""
-        if request.path == "/":
+        """Front Door gate + dispatch (W5.A).
+
+        Order of checks for both ``/`` (HTTP) and ``/ws`` (WS upgrade):
+
+        1. ``Origin`` allow-list — same-origin (or no Origin header at all,
+           which signals a non-browser local process) is allowed; anything
+           else returns 403. Browsers do NOT enforce CORS on WebSocket
+           handshakes, so this check is the only thing standing between a
+           cross-origin page during ``bonfire scan`` and the conversation
+           engine.
+
+        2. Token gate — ``?token=<value>`` query parameter must match the
+           per-launch token minted in ``start()``. Both ``/`` and ``/ws``
+           require it; missing or wrong → 403. ``hmac.compare_digest`` is
+           used for the compare to avoid leaking timing information on the
+           token value (even though same-host timing leaks are barely
+           exploitable, the defense-in-depth cost is one function call).
+
+        On success: serve ``ui.html`` for ``/`` and return ``None`` for
+        ``/ws`` so the library completes the WS upgrade.
+        """
+        # 1. Origin allow-list. ``None`` (no Origin header, e.g. Python
+        # ``websockets`` client) is allowed because it cannot originate
+        # from a CSWSH page — only same-host local processes can send a
+        # no-Origin request. Browser pages always send an Origin.
+        origin_header = request.headers.get("Origin")
+        if origin_header is not None and origin_header != self.origin:
+            logger.warning(
+                "Front Door rejected request from disallowed Origin %r (allow=%r)",
+                origin_header,
+                self.origin,
+            )
+            return Response(
+                403,
+                "Forbidden",
+                Headers({"Content-Type": "text/plain; charset=utf-8"}),
+                b"403 Forbidden: origin not allowed",
+            )
+
+        # 2. Path routing + token gate. Token check runs for both ``/``
+        # and ``/ws``; any other path is a flat 404.
+        if request.path.startswith("/ws") or request.path == "/" or request.path.startswith("/?"):
+            if not self._token_matches(request.path):
+                logger.warning(
+                    "Front Door rejected request without matching token (path=%r)",
+                    request.path,
+                )
+                return Response(
+                    403,
+                    "Forbidden",
+                    Headers({"Content-Type": "text/plain; charset=utf-8"}),
+                    b"403 Forbidden: missing or invalid token",
+                )
+            # Gate passed. Serve HTML for / or hand off to the WS handler.
+            if request.path.startswith("/ws"):
+                return None
             return Response(
                 200,
                 "OK",
                 Headers({"Content-Type": "text/html; charset=utf-8"}),
                 self._html,
             )
-        if request.path != "/ws":
-            return Response(404, "Not Found", Headers({}), b"Not Found")
-        return None
+        return Response(404, "Not Found", Headers({}), b"Not Found")
+
+    def _token_matches(self, raw_path: str) -> bool:
+        """Constant-time check that ``?token=`` in ``raw_path`` matches ``self._token``.
+
+        ``raw_path`` is the value from ``Request.path`` — already URL-encoded
+        path + query, e.g. ``"/?token=abc123"`` or ``"/ws?token=abc123"``.
+        Returns ``False`` if the token is missing, mismatched, or if the
+        server has no token yet (``start()`` not called — defensive; should
+        not happen because ``_process_request`` only runs after ``serve``).
+        """
+        if self._token is None:
+            return False
+        query = urlsplit(raw_path).query
+        # parse_qs returns ``{"token": ["abc123"]}`` for the happy case and
+        # ``{}`` if the parameter is absent.
+        params = parse_qs(query, keep_blank_values=True)
+        candidate = params.get("token", [""])[0]
+        return hmac.compare_digest(candidate, self._token)
 
     async def _ws_handler(self, websocket: ServerConnection) -> None:
         """Handle a single WebSocket connection lifecycle."""

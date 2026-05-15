@@ -12,11 +12,21 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Max byte/char length of a single ``user_message.text`` frame. Closes the
+# Mirror Probe finding S1.8 CPU-DOS: ``websockets`` defaults to 1 MiB per
+# frame, and ``ConversationEngine`` analyzers iterate ``text.lower().split()``
+# on the single event loop. 4 KiB is the Sage default — long enough for the
+# real Q1/Q2/Q3 free-text answers, short enough to bound per-frame analyzer
+# cost. Tightening this constant is fine; widening requires a fresh DoS
+# bracket.
+MAX_USER_MESSAGE_LEN: Final = 4096
 
 __all__ = [
+    "MAX_USER_MESSAGE_LEN",
     "AllScansComplete",
     "ConfigGenerated",
     "ConversationStart",
@@ -126,10 +136,15 @@ class ServerError(FrontDoorMessage):
 
 
 class UserMessage(FrontDoorMessage):
-    """User's free-text response in the conversation."""
+    """User's free-text response in the conversation.
+
+    ``text`` is capped at ``MAX_USER_MESSAGE_LEN`` (4 KiB) at construction
+    time. Overlong payloads raise ``pydantic.ValidationError`` before any
+    downstream analyzer sees them, closing the WebSocket CPU-DOS surface.
+    """
 
     type: Literal["user_message"] = "user_message"
-    text: str
+    text: Annotated[str, Field(max_length=MAX_USER_MESSAGE_LEN)]
 
 
 # ---------------------------------------------------------------------------

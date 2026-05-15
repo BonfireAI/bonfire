@@ -42,6 +42,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -69,11 +70,18 @@ class TestServerLifecycle:
         await server.stop()  # Should not raise
 
     async def test_server_url_property(self) -> None:
+        # W5.A: server.url and server.ws_url now embed ?token=<value> so the
+        # operator just clicks the printed link. The legacy assertions
+        # (``== f"http://127.0.0.1:{port}"``) are superseded by the W5.A
+        # contract; the strengthened baseline asserts on the host:port prefix
+        # via ``startswith`` so this lifecycle test still exercises the
+        # ``url``/``ws_url`` properties without conflicting with the token
+        # gate. Full token coverage lives in TestOperatorFacingURLContainsToken.
         server = FrontDoorServer()
         port = await server.start()
         try:
-            assert server.url == f"http://127.0.0.1:{port}"
-            assert server.ws_url == f"ws://127.0.0.1:{port}/ws"
+            assert server.url.startswith(f"http://127.0.0.1:{port}")
+            assert server.ws_url.startswith(f"ws://127.0.0.1:{port}/ws")
         finally:
             await server.stop()
 
@@ -82,8 +90,11 @@ class TestHTMLServing:
     """HTTP serving of ui.html on GET /."""
 
     async def test_serves_html_on_root(self) -> None:
+        # W5.A: the HTTP root is now gated by ?token=<value>; use
+        # ``server.url`` (which embeds the token) so the legacy behaviour
+        # is exercised against the gated server.
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             import urllib.request
@@ -91,7 +102,7 @@ class TestHTMLServing:
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             body = response.read()
             assert response.status == 200
@@ -101,8 +112,9 @@ class TestHTMLServing:
             await server.stop()
 
     async def test_html_content_type(self) -> None:
+        # W5.A: see ``test_serves_html_on_root`` — token-gated root.
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             import urllib.request
@@ -110,7 +122,7 @@ class TestHTMLServing:
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             content_type = response.headers.get("Content-Type", "")
             assert "text/html" in content_type
@@ -123,27 +135,27 @@ class TestWebSocketConnection:
 
     async def test_websocket_connects(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 assert ws.protocol.state.name == "OPEN"
         finally:
             await server.stop()
 
     async def test_send_json_message(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 await ws.send(json.dumps({"type": "user_message", "text": "hello"}))
         finally:
             await server.stop()
 
     async def test_broadcast_to_clients(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 await asyncio.sleep(0.05)
                 await server.broadcast({"type": "scan_start", "panels": ["test"]})
                 raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
@@ -155,11 +167,11 @@ class TestWebSocketConnection:
 
     async def test_broadcast_to_multiple_clients(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             async with (
-                websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws1,
-                websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws2,
+                websockets.connect(server.ws_url) as ws1,
+                websockets.connect(server.ws_url) as ws2,
             ):
                 await asyncio.sleep(0.05)
                 await server.broadcast(
@@ -178,10 +190,10 @@ class TestClientTracking:
 
     async def test_client_count_increments(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             assert server.client_count == 0
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws"):
+            async with websockets.connect(server.ws_url):
                 await asyncio.sleep(0.05)
                 assert server.client_count == 1
         finally:
@@ -189,9 +201,9 @@ class TestClientTracking:
 
     async def test_client_count_decrements_on_disconnect(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
-            ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws")
+            ws = await websockets.connect(server.ws_url)
             await asyncio.sleep(0.05)
             assert server.client_count == 1
             await ws.close()
@@ -206,10 +218,10 @@ class TestShutdownEvent:
 
     async def test_shutdown_event_set_when_last_client_disconnects(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             assert not server.shutdown_event.is_set()
-            ws = await websockets.connect(f"ws://127.0.0.1:{port}/ws")
+            ws = await websockets.connect(server.ws_url)
             await asyncio.sleep(0.05)
             await ws.close()
             await asyncio.sleep(0.05)
@@ -219,10 +231,10 @@ class TestShutdownEvent:
 
     async def test_shutdown_event_not_set_while_clients_remain(self) -> None:
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
-            ws1 = await websockets.connect(f"ws://127.0.0.1:{port}/ws")
-            ws2 = await websockets.connect(f"ws://127.0.0.1:{port}/ws")
+            ws1 = await websockets.connect(server.ws_url)
+            ws2 = await websockets.connect(server.ws_url)
             await asyncio.sleep(0.05)
             await ws1.close()
             await asyncio.sleep(0.05)
@@ -244,9 +256,9 @@ class TestMessageCallback:
             raise RuntimeError("boom")
 
         server = FrontDoorServer(on_message=exploding_callback)
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 # Send a message that triggers the failing callback
                 await ws.send(json.dumps({"type": "user_message", "text": "crash"}))
                 await asyncio.sleep(0.1)
@@ -267,9 +279,9 @@ class TestMessageCallback:
             received.append(msg)
 
         server = FrontDoorServer(on_message=on_message)
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 await ws.send(json.dumps({"type": "user_message", "text": "hi"}))
                 await asyncio.sleep(0.1)
             assert len(received) == 1
@@ -350,9 +362,9 @@ class TestMessageDispatchShape:
             received.append(msg)
 
         server = FrontDoorServer(on_message=callback)
-        port = await server.start()
+        await server.start()
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            async with websockets.connect(server.ws_url) as ws:
                 await ws.send(payload)
                 await asyncio.sleep(0.1)
         finally:
@@ -483,6 +495,369 @@ class TestEventLoopBindingContract:
             )
 
 
+# ---------------------------------------------------------------------------
+# W5.A — Origin allow-list + token gate on the Front Door WebSocket
+#
+# Mirror Probe N+1 finding S1.1 (CSWSH on ``bonfire scan``):
+#   ``src/bonfire/onboard/server.py:99-104`` invokes ``serve(...)`` without
+#   an ``origins=`` argument. Any cross-origin page the user visits during a
+#   ``bonfire scan`` can connect to ``ws://127.0.0.1:<port>/ws`` and drive the
+#   conversation engine → arbitrary ``bonfire.toml`` write. Browsers do NOT
+#   enforce CORS for WebSocket connections; port is locally probable; the
+#   ``ui.html`` script runs unauthenticated post-handshake.
+#
+# Contract these RED tests pin (Warrior implements):
+#
+#   1. ``FrontDoorServer`` MUST expose a one-time, per-launch URL-safe token
+#      (~16-32 bytes of entropy) on the instance as ``server.token`` after
+#      ``start()``. The token is generated inside ``start()`` (not
+#      ``__init__``) so each launch is unique even if a single
+#      ``FrontDoorServer`` instance is reused across calls (mirrors the
+#      lazy-event-binding pattern already in the codebase).
+#
+#   2. The operator-facing URLs (``server.url`` and ``server.ws_url``) MUST
+#      include the token as a ``?token=<value>`` query parameter so the
+#      operator just clicks the printed link — no manual typing.
+#
+#   3. HTTP GET requests to ``/`` WITHOUT a matching token MUST be rejected
+#      with HTTP 403 inside ``_process_request``. The ui.html page is gated.
+#
+#   4. WebSocket handshakes to ``/ws`` WITHOUT a matching token MUST be
+#      rejected with HTTP 403 at handshake (server-side rejection, before
+#      the WS upgrade completes).
+#
+#   5. WebSocket handshakes from an Origin that is NOT in the server's
+#      allow-list MUST be rejected at handshake. The allow-list is exactly
+#      ``[server.url]`` (where ``server.url`` is the no-token host:port form
+#      — i.e. ``http://127.0.0.1:<port>``); cross-origin pages cannot drive
+#      the scan. Implementation: pass ``origins=[...]`` to
+#      ``websockets.asyncio.server.serve``.
+#
+#   6. Happy path: a request that carries a matching token AND a same-origin
+#      ``Origin`` header succeeds end-to-end — proves the gate doesn't
+#      break the legitimate browser path.
+#
+# Open design questions surfaced to the Warrior (none of these are pinned by
+# the RED tests; tests assert the *outcome* — gate rejects vs. allows — not
+# the wire-format choice):
+#
+#   * Token transport: the tests assume ``?token=<value>`` query parameter on
+#      both ``/`` and ``/ws``. A URL fragment would not survive the WS
+#      handshake (fragments are client-side only); a custom header is not
+#      browser-reachable from an ``<a href>`` click. Query param is the
+#      smallest surface that works for the click-the-link UX. The Warrior
+#      MAY choose path-based (``/<token>/ws``) instead, but tests below
+#      assume query param; if path is chosen, the Warrior must update tests
+#      to match.
+#
+#   * Origin allow-list source: the tests assume ``[server.url]`` is the
+#      sole allowed origin. The Warrior may widen this (e.g. accept
+#      ``http://localhost:<port>`` as an alias for ``http://127.0.0.1:<port>``)
+#      but MUST NOT widen beyond same-host/same-port.
+# ---------------------------------------------------------------------------
+
+
+def _url_with_token(base: str, token: str, /, *, override: str | None = None) -> str:
+    """Build a URL that carries ``?token=<value>``.
+
+    ``override`` lets a test substitute a different token (e.g. a wrong one)
+    while keeping the rest of the URL shape identical. If ``override`` is
+    explicitly an empty string, the resulting URL has no token query param
+    at all (used to model the "token missing" case).
+    """
+    if override is None:
+        return f"{base}?token={token}"
+    if override == "":
+        return base
+    return f"{base}?token={override}"
+
+
+class TestOriginAllowList:
+    """W5.A: WebSocket handshake must reject non-allowed Origin headers."""
+
+    async def test_ws_handshake_rejects_cross_origin_evil_dot_com(self) -> None:
+        """A WS connect from Origin=http://evil.example must be rejected at handshake.
+
+        Browsers do NOT enforce CORS for WebSocket; without a server-side
+        ``origins=`` allow-list, any cross-origin page during a ``bonfire scan``
+        can hijack the WS and drive the conversation engine. The Warrior must
+        pass ``origins=[server.url]`` to ``serve()``; websockets then rejects
+        any handshake whose ``Origin`` header is not in that list with HTTP 403
+        (raising ``websockets.exceptions.InvalidStatus`` on the client).
+        """
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            ws_url = _url_with_token(f"ws://127.0.0.1:{port}/ws", server.token)
+            with pytest.raises(websockets.exceptions.InvalidStatus) as excinfo:
+                async with websockets.connect(
+                    ws_url,
+                    origin="http://evil.example",
+                ):
+                    pass
+            # 403 is the canonical reject status for Origin mismatch in
+            # websockets >= 13; assert it explicitly so a regression that
+            # widens the allow-list (e.g. accidentally allowing "*") is caught.
+            assert excinfo.value.response.status_code == 403, (
+                f"WebSocket handshake from a non-allowed Origin must return HTTP 403; "
+                f"got {excinfo.value.response.status_code}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_ws_handshake_accepts_same_origin(self) -> None:
+        """Happy path: a same-origin Origin header is accepted by the allow-list.
+
+        Mirrors the browser's behaviour when the operator clicks the
+        ``http://127.0.0.1:<port>/?token=...`` link — the browser stamps the
+        Origin header as ``http://127.0.0.1:<port>`` and the WS upgrade
+        succeeds.
+        """
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            ws_url = _url_with_token(f"ws://127.0.0.1:{port}/ws", server.token)
+            async with websockets.connect(
+                ws_url,
+                origin=f"http://127.0.0.1:{port}",
+            ) as ws:
+                assert ws.protocol.state.name == "OPEN"
+        finally:
+            await server.stop()
+
+
+class TestTokenGate:
+    """W5.A: HTTP GET / and WS /ws must require a matching one-time token."""
+
+    def test_token_is_unavailable_before_start(self) -> None:
+        """``server.token`` MUST be unset before start (mirrors event lazy-binding).
+
+        Generating the token inside ``start()`` means each launch produces a
+        fresh token even if a single ``FrontDoorServer`` instance is reused
+        across two ``asyncio.run`` blocks. ``__init__`` MUST NOT generate it.
+        """
+        server = FrontDoorServer()
+        # The Warrior MAY surface this as None or as a RuntimeError; either
+        # is acceptable as long as the token is not a fixed value at __init__
+        # time. We assert the safer of the two: the attribute exists but is
+        # falsy (None) until start() runs. If the Warrior chooses a property
+        # that raises before start(), they should adjust this single assert.
+        assert getattr(server, "token", "PLACEHOLDER") is None, (
+            "FrontDoorServer.__init__ must NOT generate the gate token; it "
+            "must be created lazily inside start() so each launch is unique."
+        )
+
+    async def test_token_is_high_entropy_url_safe_string(self) -> None:
+        """After start() the token must be a non-trivial URL-safe string.
+
+        Floor: at least 16 characters of URL-safe alphabet (letters, digits,
+        ``-``, ``_``). The Warrior is free to use ``secrets.token_urlsafe(16)``
+        or any equivalent; this assertion only fences against a placeholder
+        value (e.g. ``"TODO"``, an empty string, or a fixed constant).
+        """
+        server = FrontDoorServer()
+        await server.start()
+        try:
+            tok = server.token
+            assert isinstance(tok, str)
+            assert len(tok) >= 16, (
+                f"Token must carry at least 16 chars of entropy; got len={len(tok)} "
+                f"(use secrets.token_urlsafe(16) or similar)"
+            )
+            url_safe_alphabet = set(
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            )
+            assert set(tok) <= url_safe_alphabet, (
+                f"Token must be URL-safe (letters, digits, '-', '_'); got {tok!r}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_token_regenerated_on_each_start(self) -> None:
+        """Two start() calls on the same instance must yield different tokens.
+
+        A single ``FrontDoorServer`` instance can be driven across two
+        sequential ``asyncio.run`` blocks (the same property the lazy-event
+        contract pins). Each ``start()`` must mint a fresh token so a
+        previous-launch URL cannot drive a current-launch session.
+        """
+        server = FrontDoorServer()
+        await server.start()
+        first = server.token
+        await server.stop()
+        await server.start()
+        second = server.token
+        try:
+            assert first != second, (
+                "Each start() must generate a new gate token; reusing a token "
+                "across launches re-opens the CSWSH window for the duration "
+                "of the previous URL's lifetime."
+            )
+        finally:
+            await server.stop()
+
+    async def test_http_get_root_without_token_returns_403(self) -> None:
+        """GET / without ``?token=`` must be rejected with HTTP 403.
+
+        Pre-fix: ``_process_request`` serves ``ui.html`` to any GET / request
+        (server.py:164-170). Any cross-origin page that can predict the port
+        can read the served HTML; the WS gate alone is insufficient because
+        the HTML is the bootstrap that wires up the WS client.
+        """
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            loop = asyncio.get_event_loop()
+            with pytest.raises(urllib.error.HTTPError) as excinfo:
+                await loop.run_in_executor(
+                    None,
+                    urllib.request.urlopen,
+                    f"http://127.0.0.1:{port}/",
+                )
+            assert excinfo.value.code == 403, (
+                f"GET / without token must return 403; got {excinfo.value.code}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_http_get_root_with_wrong_token_returns_403(self) -> None:
+        """GET / with a wrong token is just as forbidden as no token at all."""
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            loop = asyncio.get_event_loop()
+            with pytest.raises(urllib.error.HTTPError) as excinfo:
+                await loop.run_in_executor(
+                    None,
+                    urllib.request.urlopen,
+                    f"http://127.0.0.1:{port}/?token=not-the-real-token",
+                )
+            assert excinfo.value.code == 403, (
+                f"GET / with wrong token must return 403; got {excinfo.value.code}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_http_get_root_with_correct_token_returns_200(self) -> None:
+        """Happy path: GET / with the right token serves the ui.html page."""
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                urllib.request.urlopen,
+                f"http://127.0.0.1:{port}/?token={server.token}",
+            )
+            body = response.read()
+            assert response.status == 200
+            assert b"<!DOCTYPE html>" in body
+            assert b"BONFIRE" in body
+        finally:
+            await server.stop()
+
+    async def test_ws_handshake_without_token_returns_403(self) -> None:
+        """WS handshake to /ws without a token must be rejected with HTTP 403.
+
+        The handshake-time check lives inside ``_process_request`` (which
+        runs for BOTH HTTP and WS paths). The Warrior may either reject the
+        bare ``/ws`` URL at ``_process_request`` (preferred — it short-circuits
+        before the WS upgrade) or inject the check inside ``_ws_handler``.
+        Either way, the observable behaviour at the client is the same: the
+        handshake fails with an HTTP 403 status.
+        """
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            with pytest.raises(websockets.exceptions.InvalidStatus) as excinfo:
+                async with websockets.connect(
+                    f"ws://127.0.0.1:{port}/ws",
+                    origin=f"http://127.0.0.1:{port}",
+                ):
+                    pass
+            assert excinfo.value.response.status_code == 403, (
+                f"WS handshake without token must return HTTP 403; "
+                f"got {excinfo.value.response.status_code}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_ws_handshake_with_wrong_token_returns_403(self) -> None:
+        """WS handshake with a wrong token is just as forbidden as no token at all."""
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            with pytest.raises(websockets.exceptions.InvalidStatus) as excinfo:
+                async with websockets.connect(
+                    f"ws://127.0.0.1:{port}/ws?token=not-the-real-token",
+                    origin=f"http://127.0.0.1:{port}",
+                ):
+                    pass
+            assert excinfo.value.response.status_code == 403, (
+                f"WS handshake with wrong token must return HTTP 403; "
+                f"got {excinfo.value.response.status_code}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_ws_handshake_with_correct_token_and_same_origin_succeeds(
+        self,
+    ) -> None:
+        """Happy path: token + same-origin together pass the gate."""
+        server = FrontDoorServer()
+        port = await server.start()
+        try:
+            async with websockets.connect(
+                f"ws://127.0.0.1:{port}/ws?token={server.token}",
+                origin=f"http://127.0.0.1:{port}",
+            ) as ws:
+                # Connection is open and conversational once gated.
+                await ws.send(json.dumps({"type": "user_message", "text": "hello"}))
+                assert ws.protocol.state.name == "OPEN"
+        finally:
+            await server.stop()
+
+
+class TestOperatorFacingURLContainsToken:
+    """W5.A bonus: the printed URL must be self-sufficient — no manual typing.
+
+    The CLI ``bonfire scan`` flow (cli/commands/scan.py:40-47) echoes
+    ``server.url`` and ``server.ws_url`` and invokes ``typer.launch(url)``.
+    For the operator to just click the link and have the gate transparently
+    let them in, the token MUST be embedded in both URLs.
+    """
+
+    async def test_server_url_contains_token_query_param(self) -> None:
+        """``server.url`` must carry ``?token=<value>`` after start()."""
+        server = FrontDoorServer()
+        await server.start()
+        try:
+            assert f"token={server.token}" in server.url, (
+                f"server.url must embed the gate token for the click-the-link UX; "
+                f"got {server.url!r}"
+            )
+        finally:
+            await server.stop()
+
+    async def test_ws_url_contains_token_query_param(self) -> None:
+        """``server.ws_url`` must carry ``?token=<value>`` after start().
+
+        The HTML page reads ``server.ws_url`` (via its embedded JS) and opens
+        a WebSocket to it. If the URL doesn't carry the token, the page can't
+        complete the WS handshake against the gated server.
+        """
+        server = FrontDoorServer()
+        await server.start()
+        try:
+            assert f"token={server.token}" in server.ws_url, (
+                f"server.ws_url must embed the gate token so the auto-launched "
+                f"browser's ui.html can open the WS without manual token typing; "
+                f"got {server.ws_url!r}"
+            )
+        finally:
+            await server.stop()
+
+
 class TestConnectHandshakeTimeout:
     """Bug: client_connected.wait() has no timeout; CLI hangs forever on missed connect.
 
@@ -507,12 +882,12 @@ class TestConnectHandshakeTimeout:
     ) -> None:
         """wait_for_client_connect returns without exception when client connects in time."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
 
             async def _connect() -> None:
                 await asyncio.sleep(0.05)
-                async with websockets.connect(f"ws://127.0.0.1:{port}/ws"):
+                async with websockets.connect(server.ws_url):
                     await asyncio.sleep(0.05)
 
             connect_task = asyncio.create_task(_connect())
@@ -630,13 +1005,13 @@ class TestUiHtmlNoThirdPartyEgress:
     async def test_served_html_has_no_google_fonts(self) -> None:
         """Served HTML must not contain the fonts.googleapis.com domain."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             body = response.read()
             assert b"fonts.googleapis.com" not in body, (
@@ -649,13 +1024,13 @@ class TestUiHtmlNoThirdPartyEgress:
     async def test_served_html_has_no_third_party_https_references(self) -> None:
         """Served HTML must not contain any third-party https:// references."""
         server = FrontDoorServer()
-        port = await server.start()
+        await server.start()
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
                 urllib.request.urlopen,
-                f"http://127.0.0.1:{port}/",
+                server.url,
             )
             body = response.read().decode("utf-8", errors="replace")
 

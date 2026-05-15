@@ -280,7 +280,10 @@
 <script>
 (function() {
   'use strict';
-  var wsUrl = 'ws://' + window.location.host + '/ws';
+  // The page is gated by ?token=<value> on / — propagate that token to
+  // the WS handshake so the server's token gate lets the upgrade through.
+  // window.location.search includes the leading '?'.
+  var wsUrl = 'ws://' + window.location.host + '/ws' + window.location.search;
   var statusEl = document.getElementById('status');
   var narrationEl = document.getElementById('narration');
   var chatEl = document.getElementById('chat');

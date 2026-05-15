@@ -28,8 +28,7 @@ class ToolPolicy(Protocol):
 
     Callers pass a role string (e.g. ``"scout"``, ``"warrior"``) and receive
     the list of SDK tool names that role is allowed to invoke. An empty list
-    means "no tools permitted" (the SDK interprets ``allowed_tools=[]``
-    combined with ``permission_mode='dontAsk'`` as deny-all).
+    means "no tools permitted".
 
     Implementations MUST be pure (same role → same list) and MUST return a
     fresh list each call so callers may mutate.

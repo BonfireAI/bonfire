@@ -17,6 +17,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from bonfire.onboard.config_generator import generate_config, write_config
 from bonfire.onboard.conversation import ConversationCompleteError, ConversationEngine
 from bonfire.onboard.narration import NarrationEngine
@@ -25,16 +27,72 @@ from bonfire.onboard.protocol import (
     FrontDoorMessage,
     ScanUpdate,
     ServerError,
+    UserMessage,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
 
     from bonfire.onboard.server import FrontDoorServer
 
-__all__ = ["run_front_door"]
+__all__ = ["dispatch_user_message", "run_front_door"]
 
 _log = logging.getLogger(__name__)
+
+
+async def dispatch_user_message(
+    data: dict[str, Any],
+    *,
+    conversation: ConversationEngine,
+    broadcast: Callable[[FrontDoorMessage], Awaitable[None]],
+    conversation_done: asyncio.Event,
+) -> None:
+    """Route a single client frame into the conversation engine.
+
+    Extracted from ``run_front_door``'s ``on_message`` closure so it is
+    unit-testable. Mirrors the original closure semantics:
+
+    - Non-``user_message`` frames are ignored.
+    - Overlong payloads (>``MAX_USER_MESSAGE_LEN``) trigger a
+      ``server_error`` frame with code ``message_too_long`` and never reach
+      the conversation analyzer.
+    - ``ConversationCompleteError`` after the third answer is broadcast as
+      a polite ``server_error`` and is NOT propagated.
+    - Once the conversation is complete, ``conversation_done`` is signalled
+      so the outer ``run_front_door`` can advance to Act III.
+
+    ``broadcast`` is the model-accepting emit callable (same shape as the
+    ``ConversationEngine``'s ``emit`` parameter); ``run_front_door`` wraps
+    it around ``server.broadcast`` with a ``model_dump`` adapter.
+    """
+    if data.get("type") != "user_message":
+        return
+
+    try:
+        msg = UserMessage.model_validate(data)
+    except ValidationError:
+        await broadcast(
+            ServerError(
+                code="message_too_long",
+                message="Message too long; please keep under 4 KiB.",
+            )
+        )
+        return
+
+    try:
+        await conversation.handle_answer(msg.text, broadcast)
+    except ConversationCompleteError as exc:
+        await broadcast(
+            ServerError(
+                code="conversation_complete",
+                message=str(exc),
+            )
+        )
+        return
+
+    if conversation.is_complete:
+        conversation_done.set()
 
 
 async def run_front_door(
@@ -82,21 +140,12 @@ async def run_front_door(
 
     async def on_message(data: dict[str, Any]) -> None:
         """Route incoming user messages to the conversation engine."""
-        if data.get("type") != "user_message":
-            return
-        text = data.get("text", "")
-        try:
-            await conversation.handle_answer(text, conversation_emit)
-        except ConversationCompleteError as exc:
-            await server.broadcast(
-                ServerError(
-                    code="conversation_complete",
-                    message=str(exc),
-                ).model_dump()
-            )
-            return
-        if conversation.is_complete:
-            conversation_done.set()
+        await dispatch_user_message(
+            data,
+            conversation=conversation,
+            broadcast=conversation_emit,
+            conversation_done=conversation_done,
+        )
 
     # Start conversation (emits ConversationStart + Q1)
     await conversation.start(conversation_emit)

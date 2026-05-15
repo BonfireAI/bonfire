@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from bonfire.onboard.protocol import ConfigGenerated, ScanUpdate
+from bonfire.persona._toml_writer import escape_basic_string
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,7 +49,7 @@ def _find_scan_value(
 
 def _format_toml_list(items: list[str]) -> str:
     """Format a Python list as a TOML inline array of quoted strings."""
-    quoted = ", ".join(f'"{item}"' for item in items)
+    quoted = ", ".join(f'"{escape_basic_string(item)}"' for item in items)
     return f"[{quoted}]"
 
 
@@ -62,7 +63,7 @@ def _build_header(project_name: str) -> tuple[str, dict[str, str]]:
     lines = [
         "[bonfire]",
         "# Project identity",
-        f'name = "{project_name}"',
+        f'name = "{escape_basic_string(project_name)}"',
     ]
     return "\n".join(lines), {}
 
@@ -80,7 +81,7 @@ def _build_persona(
         "# Derived from conversation",
     ]
     for key, value in profile.items():
-        lines.append(f'{key} = "{value}"')
+        lines.append(f'{key} = "{escape_basic_string(value)}"')
         annotations[f"persona.{key}"] = "Conversation"
     return "\n".join(lines), annotations
 
@@ -101,17 +102,17 @@ def _build_project(
 
     lang = _find_scan_value(scans, "language")
     if lang:
-        lines.append(f'primary_language = "{lang}"')
+        lines.append(f'primary_language = "{escape_basic_string(lang)}"')
         annotations["project.primary_language"] = "Scan: project_structure"
 
     framework = _find_scan_value(scans, "framework")
     if framework:
-        lines.append(f'framework = "{framework}"')
+        lines.append(f'framework = "{escape_basic_string(framework)}"')
         annotations["project.framework"] = "Scan: project_structure"
 
     test_fw = _find_scan_value(scans, "test_framework")
     if test_fw:
-        lines.append(f'test_framework = "{test_fw}"')
+        lines.append(f'test_framework = "{escape_basic_string(test_fw)}"')
         annotations["project.test_framework"] = "Scan: project_structure"
 
     return "\n".join(lines), annotations
@@ -152,12 +153,12 @@ def _build_git(
 
     remote = _find_scan_value(scans, "remote")
     if remote:
-        lines.append(f'remote = "{remote}"')
+        lines.append(f'remote = "{escape_basic_string(remote)}"')
         annotations["git.remote"] = "Scan: git_state"
 
     branch = _find_scan_value(scans, "branch")
     if branch:
-        lines.append(f'branch = "{branch}"')
+        lines.append(f'branch = "{escape_basic_string(branch)}"')
         annotations["git.branch"] = "Scan: git_state"
 
     return "\n".join(lines), annotations
@@ -198,17 +199,17 @@ def _build_claude_memory(
 
     model = _find_scan_value(scans, "model")
     if model:
-        lines.append(f'model = "{model}"')
+        lines.append(f'model = "{escape_basic_string(model)}"')
         annotations["claude_memory.model"] = "Scan: claude_memory"
 
     permissions = _find_scan_value(scans, "permissions")
     if permissions:
-        lines.append(f'permissions = "{permissions}"')
+        lines.append(f'permissions = "{escape_basic_string(permissions)}"')
         annotations["claude_memory.permissions"] = "Scan: claude_memory"
 
     extensions = _find_scan_value(scans, "extensions")
     if extensions:
-        lines.append(f'extensions = "{extensions}"')
+        lines.append(f'extensions = "{escape_basic_string(extensions)}"')
         annotations["claude_memory.extensions"] = "Scan: claude_memory"
 
     # Memory counts by type

@@ -80,45 +80,34 @@ class TestStubCommandLabeling:
         }
         assert "handoff" in names
 
-    def _help_command_lines(self, command: str) -> list[str]:
-        """Return ``bonfire --help`` lines that mention *command* as a name.
+    def _command_help_text(self, command: str) -> str:
+        """Return the registered ``help=`` (or callback docstring) for *command*.
 
-        Typer's rich-box rendering wraps each subcommand row with box-drawing
-        characters (e.g. ``│ status   ...`` ). Strip surrounding whitespace +
-        leading box chars before matching on a word-boundary command name.
+        Uses ``app.registered_commands`` introspection rather than parsing
+        rendered ``--help`` output. Rich-box rendering varies by terminal
+        width and rendering mode; the registry is the stable source of truth.
         """
-        result = runner.invoke(app, ["--help"])
-        assert result.exit_code == 0, (
-            f"--help should exit zero; got {result.exit_code}: {result.output!r}"
-        )
-        matched: list[str] = []
-        for raw in result.output.splitlines():
-            # Strip whitespace + Typer box-drawing chars from the left so we
-            # can anchor on the command name itself.
-            stripped = raw.lstrip(" \t│|┃║").rstrip()
-            # Match the command at start, followed by whitespace (so we do
-            # not match ``status-foo`` or similar).
-            if stripped.startswith(command + " ") or stripped == command:
-                matched.append(raw)
-        return matched
+        for c in app.registered_commands:
+            name = c.name or (c.callback.__name__ if c.callback else None)
+            if name == command:
+                return c.help or (c.callback.__doc__ if c.callback else None) or ""
+        return ""
 
     def test_top_level_help_marks_status_as_stub(self) -> None:
-        """``bonfire --help`` short-help for ``status`` flags it as a stub."""
-        lines = self._help_command_lines("status")
-        assert lines, "`status` not listed in --help output"
-        joined = "\n".join(lines).lower()
-        assert "stub" in joined, f"status help line must mark the command as a stub; got: {lines!r}"
+        """``status`` command's registered help text marks it as a stub."""
+        help_text = self._command_help_text("status").lower()
+        assert "stub" in help_text, (
+            f"status help text must mark the command as a stub; got: {help_text!r}"
+        )
 
     def test_top_level_help_marks_resume_as_stub(self) -> None:
-        lines = self._help_command_lines("resume")
-        assert lines, "`resume` not listed in --help output"
-        joined = "\n".join(lines).lower()
-        assert "stub" in joined, f"resume help line must mark the command as a stub; got: {lines!r}"
+        help_text = self._command_help_text("resume").lower()
+        assert "stub" in help_text, (
+            f"resume help text must mark the command as a stub; got: {help_text!r}"
+        )
 
     def test_top_level_help_marks_handoff_as_stub(self) -> None:
-        lines = self._help_command_lines("handoff")
-        assert lines, "`handoff` not listed in --help output"
-        joined = "\n".join(lines).lower()
-        assert "stub" in joined, (
-            f"handoff help line must mark the command as a stub; got: {lines!r}"
+        help_text = self._command_help_text("handoff").lower()
+        assert "stub" in help_text, (
+            f"handoff help text must mark the command as a stub; got: {help_text!r}"
         )

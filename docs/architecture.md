@@ -55,13 +55,12 @@ to verify the implementation against the failing tests; with
 ``allowed_tools = ["Read", "Bash", "Grep", "Glob"]`` per
 ``DefaultToolPolicy._FLOOR``, it is the read-and-execute counterpart to
 Warrior's read-write-edit toolset. Display translation resolves through
-``ROLE_DISPLAY["verifier"]`` (→ "Verify Agent" / "Cleric"); ``"prover"``
-itself is not a key in ``ROLE_DISPLAY``, which is intentional — the
-gamified workflow-stage name aliases to the canonical verifier role for
-display. **Note for ADR-001:** workflow-factory emission of gamified
-strings into ``StageSpec.role`` is a second ratified surface alongside
-``DefaultToolPolicy._FLOOR`` keys; ADR-001 § Ratified Exceptions should
-be amended in a follow-up to formally enumerate it.
+``ROLE_DISPLAY["verifier"]`` (→ "Verify Agent" / "Cleric"); ``ROLE_DISPLAY``
+also ships a ``"prover"`` alias entry mirroring those same display
+strings so consumers that look up the raw factory-emitted role string
+resolve cleanly. Both the alias entry and the ``_FLOOR`` gamified keys
+are enumerated in ADR-001 § Ratified Exceptions; no other gamified-keyed
+code surfaces ship.
 
 Tagline (from `src/bonfire/__init__.py`):
 

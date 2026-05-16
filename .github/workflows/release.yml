@@ -101,16 +101,12 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        # Pinned to a commit SHA (v1.12.2) rather than the floating
-        # `release/v1` ref for supply-chain hardening.
-        uses: pypa/gh-action-pypi-publish@15c56dba361d8335944d31a2ecd17d700fc7bcbc
-        with:
-          # The twine version bundled in v1.12.2 rejects Metadata-Version
-          # 2.4 (PEP 639 SPDX license expression — emitted by hatchling
-          # when `pyproject.toml` uses `license = "Apache-2.0"`) at the
-          # pre-upload local metadata check. PyPI itself accepts 2.4 and
-          # runs its own validation server-side, so the local check is
-          # the only failure surface. Disable it so the wheel + sdist
-          # reach PyPI's validator. Re-enable once the action bumps to a
-          # twine release that knows 2.4 (>= 6.x).
-          verify-metadata: false
+        # Pinned to a commit SHA (v1.14.0) rather than the floating
+        # `release/v1` ref for supply-chain hardening. v1.14.0 bundles
+        # a twine release (>= 6.x) that supports Metadata-Version 2.4
+        # — needed because hatchling emits 2.4 wheels for `pyproject.toml`
+        # that uses the SPDX license expression (`license = "Apache-2.0"`).
+        # v1.12.2 (the previous pin) bundled a twine that rejected those
+        # wheels with `InvalidDistribution: Metadata is missing required
+        # fields: Name, Version` during upload.
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b

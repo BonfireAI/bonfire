@@ -260,7 +260,7 @@ bonfire persona list
 bonfire persona set default
 
 # Override per command without changing config
-bonfire scan --persona minimal
+bonfire --persona minimal scan
 ```
 
 Custom personas live in `~/.bonfire/personas/`. The persona slot is

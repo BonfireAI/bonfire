@@ -23,17 +23,23 @@ containing a newline plus a fake table header smuggles attacker-chosen
 
 The canonical fix already exists in
 ``src/bonfire/persona/_toml_writer.escape_basic_string`` --- this file
-pins the SAME contract for the seven writer functions in
-``config_generator.py``:
+pins the SAME contract for the writer functions in
+``config_generator.py`` that still emit into the project-portable
+``bonfire.toml``:
 
-* ``_format_toml_list`` (used by ``_build_tools``, ``_build_mcp``,
-  ``_build_vault``);
+* ``_format_toml_list`` (used by ``_build_mcp``, ``_build_vault``, and
+  by the operator-local ``_split_tools_local`` materialiser);
 * ``_build_header``;
 * ``_build_project``;
 * ``_build_git``;
 * ``_build_claude_memory``;
 * ``_build_vault``;
 * ``_build_persona``.
+
+(``_build_tools`` is no longer covered here — per W8.G it returns
+``None`` unconditionally and the tool inventory now flows to
+``.bonfire/tools.local.toml`` via a sentinel comment; that contract
+is pinned in ``test_tools_section_is_local.py``.)
 
 The contract every writer must satisfy:
 
@@ -54,6 +60,7 @@ the location of the fix is the Warrior's call.
 from __future__ import annotations
 
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -64,10 +71,10 @@ from bonfire.onboard.config_generator import (
     _build_mcp,
     _build_persona,
     _build_project,
-    _build_tools,
     _build_vault,
     _format_toml_list,
     generate_config,
+    write_config,
 )
 from bonfire.onboard.protocol import ScanUpdate
 
@@ -303,28 +310,23 @@ class TestBuildVault:
 
 
 # ---------------------------------------------------------------------------
-# 8. Adjacent writers that route through ``_format_toml_list``
+# 8. Adjacent writer that routes through ``_format_toml_list``
 # ---------------------------------------------------------------------------
 #
-# ``_build_tools`` and ``_build_mcp`` are not in the dispatch's named-7
-# but inherit the bug via ``_format_toml_list``. They are pinned here
-# because the warrior's fix touches the same surface and the contract
-# must hold for them too. The MCP case is the canonical
-# table-smuggling attack vector (a hostile ``.mcp.json`` key).
-
-
-class TestBuildToolsViaList:
-    @pytest.mark.parametrize("payload", _HOSTILE_PAYLOADS)
-    def test_tools_label_round_trips(self, payload: str) -> None:
-        scans = [_scan("cli_toolchain", payload, "ignored")]
-        result = _build_tools(scans)
-        assert result is not None
-        fragment, _ = result
-        parsed = _parse_or_fail(fragment, writer_name="_build_tools", payload=payload)
-        detected = parsed.get("bonfire", {}).get("tools", {}).get("detected")
-        assert detected == [payload], (
-            f"_build_tools lost tool label {payload!r}. Parsed: {detected!r}"
-        )
+# ``_build_mcp`` is not in the dispatch's named-7 but inherits the bug
+# via ``_format_toml_list``. It is pinned here because the warrior's
+# fix touches the same surface and the contract must hold for it too.
+# The MCP case is the canonical table-smuggling attack vector (a
+# hostile ``.mcp.json`` key).
+#
+# Note: ``_build_tools`` is intentionally NOT covered here — under
+# W8.G it returns ``None`` unconditionally and routes the operator-local
+# tool inventory to ``.bonfire/tools.local.toml`` instead. The
+# sanitization-coverage assertion for that flow lives in
+# ``TestGenerateConfigEndToEnd`` below (it exercises
+# ``_build_tools_sentinel`` + ``_split_tools_local`` end-to-end via
+# ``write_config``). The full operator-local contract is pinned in
+# ``test_tools_section_is_local.py``.
 
 
 class TestBuildMcpServerKeyInjection:
@@ -366,8 +368,28 @@ class TestBuildMcpServerKeyInjection:
 class TestGenerateConfigEndToEnd:
     """The public entry point must produce valid TOML regardless of hostile inputs."""
 
-    def test_generate_config_full_round_trip_with_hostile_inputs(self) -> None:
-        """Every writer reached at once with hostile payloads; output parses + round-trips."""
+    def test_generate_config_full_round_trip_with_hostile_inputs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Every writer reached at once with hostile payloads; outputs parse + round-trip.
+
+        Under W8.G, ``cli_toolchain`` scans no longer land in the
+        project-portable ``bonfire.toml`` — they route through
+        ``_build_tools_sentinel`` (which strips comma/CR/LF defensively)
+        to a sentinel comment that ``write_config`` extracts into
+        ``.bonfire/tools.local.toml`` (via ``_split_tools_local`` +
+        ``_format_toml_list``). This test exercises BOTH halves of the
+        sanitization coverage:
+
+          * the main ``bonfire.toml`` must contain NO ``[bonfire.tools]``
+            section (and parse cleanly under hostile inputs across every
+            other writer);
+          * the operator-local ``.bonfire/tools.local.toml`` sibling must
+            be written, parse cleanly, and surface the hostile tool name
+            as a sanitized list entry (comma/CR/LF stripped, but the rest
+            preserved verbatim through ``escape_basic_string``).
+        """
         hostile = 'evil"\n[bonfire.malicious]\nx = "y"'
         scans = [
             _scan("project_structure", "language", hostile),
@@ -383,7 +405,9 @@ class TestGenerateConfigEndToEnd:
         profile = {"companion_mode": hostile}
         result = generate_config(scans, profile, project_name=hostile)
 
-        # Pin 1: emitted TOML parses cleanly.
+        # Pin 1: emitted TOML parses cleanly (the cli_toolchain sentinel
+        # is a valid TOML comment line, so tomllib parses with or
+        # without it present).
         try:
             parsed = tomllib.loads(result.config_toml)
         except tomllib.TOMLDecodeError as exc:
@@ -396,13 +420,14 @@ class TestGenerateConfigEndToEnd:
             f"generate_config smuggled extra top-level tables: {set(parsed.keys())!r}"
         )
 
-        # Pin 3: ``[bonfire]`` sub-tables are exactly the seven legitimate
-        # ones --- no ``malicious`` sibling.
+        # Pin 3: ``[bonfire]`` sub-tables are exactly the six legitimate
+        # ones for the project-portable TOML --- ``tools`` is GONE
+        # (W8.G: operator-local), and no ``malicious`` sibling slipped
+        # in via the hostile inputs.
         bonfire = parsed["bonfire"]
         expected_subtables = {
             "persona",
             "project",
-            "tools",
             "git",
             "claude_memory",
             "mcp",
@@ -413,14 +438,22 @@ class TestGenerateConfigEndToEnd:
             f"generate_config smuggled or dropped a [bonfire.*] sub-table. "
             f"Got: {sub_tables!r}; expected: {expected_subtables!r}"
         )
+        # Defense-in-depth: explicitly assert no ``tools`` key under
+        # ``[bonfire]`` at all (covers both sub-table and scalar shapes).
+        assert "tools" not in bonfire, (
+            f"generate_config leaked cli_toolchain data into the "
+            f"project-portable bonfire.toml under hostile inputs; "
+            f"bonfire keys: {sorted(bonfire.keys())!r}"
+        )
 
         # Pin 4: round-trip preservation on every hostile value the
-        # writers consumed AS A TOML VALUE.
+        # writers consumed AS A TOML VALUE (excluding the cli_toolchain
+        # flow, which is asserted separately against the sibling file
+        # below).
         assert bonfire["name"] == hostile
         assert bonfire["persona"]["companion_mode"] == hostile
         assert bonfire["project"]["primary_language"] == hostile
         assert bonfire["project"]["framework"] == hostile
-        assert bonfire["tools"]["detected"] == [hostile]
         assert bonfire["git"]["remote"] == hostile
         assert bonfire["git"]["branch"] == hostile
         # ``claude_memory.model`` / ``claude_memory.permissions`` are
@@ -431,3 +464,59 @@ class TestGenerateConfigEndToEnd:
         assert "permissions" not in bonfire["claude_memory"]
         assert bonfire["mcp"]["servers"] == [hostile]
         assert bonfire["vault"]["seed_documents"] == [hostile]
+
+        # Pin 5: cli_toolchain sanitization — the hostile tool name
+        # flows through ``_build_tools_sentinel`` (which strips
+        # comma/CR/LF) into the sentinel comment, and ``write_config``
+        # materialises ``.bonfire/tools.local.toml`` via
+        # ``_split_tools_local`` + ``_format_toml_list``. Both halves
+        # MUST produce valid TOML; the on-disk sibling MUST surface
+        # the sanitized name without smuggling structure.
+        write_config(result.config_toml, tmp_path)
+
+        # The main bonfire.toml lands without a [bonfire.tools] section
+        # even after the on-disk write.
+        on_disk_main = (tmp_path / "bonfire.toml").read_text()
+        assert "[bonfire.tools]" not in on_disk_main, (
+            f"write_config leaked [bonfire.tools] into bonfire.toml "
+            f"under hostile inputs:\n{on_disk_main}"
+        )
+
+        # The operator-local sibling exists and parses cleanly.
+        local_path = tmp_path / ".bonfire" / "tools.local.toml"
+        assert local_path.exists(), (
+            f"write_config did not emit the operator-local tools sibling "
+            f"at {local_path} for hostile cli_toolchain input; tree: "
+            f"{sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))!r}"
+        )
+        try:
+            with local_path.open("rb") as fh:
+                local_data = tomllib.load(fh)
+        except tomllib.TOMLDecodeError as exc:
+            pytest.fail(
+                f".bonfire/tools.local.toml is not valid TOML under hostile "
+                f"input. Raw:\n{local_path.read_text()}\n\nError: {exc}"
+            )
+
+        # The hostile name flows through two sanitization layers:
+        #   1. ``_build_tools_sentinel`` strips comma/CR/LF defensively
+        #      (so the single-line sentinel wire format survives).
+        #   2. ``_format_toml_list`` runs ``escape_basic_string`` on each
+        #      name (so the on-disk TOML stays valid).
+        # The expected sibling content is exactly the hostile name with
+        # CR/LF removed (commas were not in the payload).
+        expected_sanitized = hostile.replace("\r", "").replace("\n", "")
+        detected = local_data.get("bonfire", {}).get("tools", {}).get("detected")
+        assert detected == [expected_sanitized], (
+            f"tools.local.toml lost or mangled the sanitized hostile tool "
+            f"name. Expected [{expected_sanitized!r}]; got {detected!r}"
+        )
+        # No smuggled top-level table from the hostile newline payload.
+        assert set(local_data.keys()) == {"bonfire"}, (
+            f"tools.local.toml smuggled extra top-level tables under "
+            f"hostile input: {set(local_data.keys())!r}"
+        )
+        assert set(local_data["bonfire"].keys()) == {"tools"}, (
+            f"tools.local.toml smuggled extra [bonfire.*] sub-tables "
+            f"under hostile input: {set(local_data['bonfire'].keys())!r}"
+        )

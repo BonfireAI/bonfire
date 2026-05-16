@@ -353,7 +353,28 @@ _WRITE_EDIT_SENSITIVE_PATH_REASON = (
 # backslash separators are normalized to forward slashes BEFORE this regex
 # is applied (see ``_canonicalize_write_edit_path``) so the alternation only
 # needs the forward-slash form.
-_HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+|/Users/[^/]+|[A-Za-z]:/Users/[^/]+)(/|$)")
+#
+# Defense — Probe N+7 C1: the negative lookaheads ``(?!\.\.?/)`` and
+# ``(?!\.\.?$)`` refuse the literal ``.`` and ``..`` segments as the
+# ``[^/]+`` username slot. Without them, an input like
+# ``/home/../etc/sudoers`` had its ``..`` greedily consumed as a valid
+# username, the substitution collapsed to ``~/etc/sudoers``, no
+# underflow signal fired, and the canonical form matched no deny
+# prefix — voiding the ENTIRE WRITE/EDIT deny floor via any
+# ``/home/../``, ``/Users/../``, or ``[A-Za-z]:/Users/../`` shape. The
+# lookaheads refuse to match on those shapes; dot-segment resolution
+# then collapses ``../`` correctly and the matcher's second
+# home-prefix pass (see ``_canonicalize_write_edit_path_with_underflow``)
+# re-collapses any newly-revealed ``/home/<realuser>/...`` form so the
+# credential deny scan still fires.
+_HOME_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"\$HOME"
+    r"|/home/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r"|/Users/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r"|[A-Za-z]:/Users/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r")(/|$)"
+)
 
 
 _MULTI_SLASH_RE = re.compile(r"/{2,}")
@@ -485,6 +506,21 @@ def _canonicalize_write_edit_path_with_underflow(file_path: str) -> tuple[str, b
     s = _MULTI_SLASH_RE.sub("/", s)
     s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
     s, underflowed = _resolve_dot_segments(s)
+    # Second home-prefix pass (Probe N+7 C1): when the first pass refused
+    # to collapse a dot-segment username (``/home/../``,
+    # ``C:/Users/../Users/<u>/...``, etc.), dot-segment resolution then
+    # cleans the ``../`` and may reveal a legitimate
+    # ``/home/<realuser>/...`` or ``[A-Za-z]:/Users/<realuser>/...`` form
+    # that still belongs under the ``~/`` home anchor. Re-running the
+    # collapse here ensures those cleaned-up paths reach the credential
+    # deny scan in canonical ``~/...`` form. The pass is a no-op for
+    # inputs the first pass already collapsed (``$HOME/`` →  ``~/``,
+    # ``/home/alice/`` → ``~/``) because the substituted ``~/`` no
+    # longer matches ``_HOME_PREFIX_RE``'s alternation. Underflow state
+    # from the first dot-segment walk is preserved — a cross-user
+    # ``..`` escape stays flagged regardless of whether the second pass
+    # re-anchors the result.
+    s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
     return s, underflowed
 
 

@@ -154,6 +154,12 @@ class CostAnalyzer:
 
         raw_dispatches: list[dict[str, Any]] = []
         raw_pipelines: list[dict[str, Any]] = []
+        # Aggregate ``Unknown record type`` warnings into one
+        # summary line per load. A legacy ledger with N rows missing the
+        # ``type`` field previously produced N WARNING lines on every
+        # ``_load_if_needed`` call, drowning real signal in noise. Track
+        # counts per observed type and emit a single summary at the end.
+        unknown_counts: dict[str | None, int] = {}
         with self._ledger_path.open("r", encoding="utf-8") as fh:
             for line_num, line in enumerate(fh, 1):
                 line = line.strip()
@@ -170,7 +176,28 @@ class CostAnalyzer:
                 elif record_type == "pipeline":
                     raw_pipelines.append(data)
                 else:
-                    logger.warning("Unknown record type %r on line %d", record_type, line_num)
+                    # Aggregate; emit one summary below.
+                    if isinstance(record_type, str) or record_type is None:
+                        key = record_type
+                    else:
+                        key = repr(record_type)
+                    unknown_counts[key] = unknown_counts.get(key, 0) + 1
+
+        if unknown_counts:
+            total = sum(unknown_counts.values())
+            # One summary line, regardless of how many distinct unknown
+            # types or how many rows. Format the distinct types compactly
+            # so an operator can still grep for a specific shape.
+            type_counts = ", ".join(
+                f"{t!r}: {c}" for t, c in sorted(unknown_counts.items(), key=lambda kv: -kv[1])
+            )
+            logger.warning(
+                "Skipped %d ledger row(s) with unknown record type in %s (%s). "
+                "Legacy ledger rows lacking a 'type' field are ignored.",
+                total,
+                self._ledger_path,
+                type_counts,
+            )
 
         self._raw_dispatches = raw_dispatches
         self._raw_pipelines = raw_pipelines

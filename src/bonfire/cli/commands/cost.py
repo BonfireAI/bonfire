@@ -12,6 +12,7 @@ from pathlib import Path
 import typer
 
 from bonfire.cost.analyzer import CostAnalyzer
+from bonfire.models.events import _validate_session_id
 
 cost_app = typer.Typer(name="cost", help="View build cost analytics.")
 
@@ -55,6 +56,24 @@ def cost_session(
     session_id: str = typer.Argument(..., help="Session ID to inspect"),
 ) -> None:
     """Show per-agent cost breakdown for a session."""
+    # Fire the session_id format validator at the CLI boundary,
+    # BEFORE building the analyzer / opening the ledger file. The
+    # validator is the same one that pins ``BonfireEvent.session_id`` so
+    # the accept/reject set stays consistent across the codebase
+    # (alphanumerics + ``_`` + ``-``, 1-64 chars). Path-traversal /
+    # newline-injection shapes never reach the analyzer or touch disk.
+    # The empty string is rejected explicitly here because (unlike the
+    # ``BonfireEvent`` model where empty is the outside-session
+    # sentinel) ``cost session`` has no use for the empty form.
+    if not session_id:
+        typer.echo("Error: session_id must be non-empty.", err=True)
+        raise typer.Exit(2)
+    try:
+        _validate_session_id(session_id)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
     analyzer = _get_analyzer()
     session = analyzer.session_cost(session_id)
 

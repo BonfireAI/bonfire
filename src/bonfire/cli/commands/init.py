@@ -94,6 +94,35 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
     safe_append_text(gitignore_path, suffix + f"{line}\n")
 
 
+def _has_legacy_tools_section(toml_path: Path) -> bool:
+    """Return True iff ``toml_path`` contains a top-level ``[bonfire.tools]`` section.
+
+    Best-effort, non-strict: a substring scan on the file body. The W8.G
+    migration demoted the tools table to ``.bonfire/tools.local.toml``;
+    a pre-migration ``bonfire.toml`` that still carries the section is
+    silently orphaned by :func:`bonfire.onboard.config_generator.load_tools_config`
+    (no warning, no mutation — pinned by ``test_tools_section_is_local.py``).
+    ``bonfire init`` surfaces a one-line nudge so the operator knows to
+    move it; the file itself is NEVER modified by this detection.
+    Symlinks are NOT followed (parallel to the symlink-rejection branch
+    below) so a planted symlink can't side-channel the check.
+    """
+    if not toml_path.is_file() or toml_path.is_symlink():
+        return False
+    try:
+        body = toml_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    # Match the section header at line start (TOML section syntax). Plain
+    # substring is enough — a sub-table like ``[bonfire.tools.subkey]``
+    # also signals the legacy shape and merits the same nudge.
+    for raw_line in body.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("[bonfire.tools]") or stripped.startswith("[bonfire.tools."):
+            return True
+    return False
+
+
 def init(
     project_dir: str = typer.Argument(".", help="Directory to initialize."),
 ) -> None:
@@ -130,7 +159,48 @@ def init(
         )
         raise typer.Exit(code=1) from exc
 
+    # Per-artefact existence detection for idempotent stdout.
+    # Capture each artefact's pre-existence state BEFORE any creation so
+    # the success block can report ``Created:`` vs ``Already present:``
+    # truthfully per artefact, not per directory. The W9 Lane B
+    # reconciliation pin (every artefact name appears in stdout) is
+    # preserved — only the verb prefix changes.
     toml_path = target / "bonfire.toml"
+    bonfire_dir = target / ".bonfire"
+    agents_dir = target / "agents"
+    gitignore_path = target / ".gitignore"
+
+    toml_pre_existed = toml_path.exists() or toml_path.is_symlink()
+    bonfire_dir_pre_existed = bonfire_dir.exists()
+    agents_dir_pre_existed = agents_dir.exists()
+    gitignore_pre_existed = gitignore_path.exists() or gitignore_path.is_symlink()
+    # Pre-existing .gitignore may or may not already carry our line; the
+    # ``_ensure_gitignore_entry`` helper is idempotent. Detect the line's
+    # pre-existence so the success message reports the truthful state of
+    # the entry, not just the file.
+    gitignore_line_pre_existed = False
+    if gitignore_path.is_file() and not gitignore_path.is_symlink():
+        try:
+            existing_lines = [ln.strip() for ln in gitignore_path.read_text().splitlines()]
+            gitignore_line_pre_existed = _GITIGNORE_LINE in existing_lines
+        except OSError:
+            gitignore_line_pre_existed = False
+
+    # Legacy ``[bonfire.tools]`` migration nudge. Emit BEFORE
+    # the artefact-creation block so the operator sees the warning even
+    # when the rest of init is a no-op (re-run case). The file itself is
+    # NEVER modified by this detection — ``load_tools_config``'s "silent
+    # orphan" reader contract stays intact.
+    if toml_pre_existed and _has_legacy_tools_section(toml_path):
+        typer.echo(
+            f"Warning: {toml_path} contains a legacy [bonfire.tools] section. "
+            "Move it to .bonfire/tools.local.toml — the operator-local file "
+            "the W8.G migration introduced. The main bonfire.toml stays "
+            "project-portable; the local file holds per-machine state. "
+            "(bonfire init does not auto-move; edit by hand.)",
+            err=True,
+        )
+
     # ``Path.exists()`` follows symlinks, so a dangling symlink at
     # ``bonfire.toml -> ~/.ssh/authorized_keys`` returns False and the
     # write_text below would open the attacker-controlled symlink target
@@ -151,8 +221,8 @@ def init(
     if not toml_path.exists():
         safe_write_text(toml_path, "[bonfire]\n")
 
-    (target / ".bonfire").mkdir(exist_ok=True)
-    (target / "agents").mkdir(exist_ok=True)
+    bonfire_dir.mkdir(exist_ok=True)
+    agents_dir.mkdir(exist_ok=True)
 
     # W8.G — seed .gitignore so ``.bonfire/tools.local.toml`` (and any
     # future operator-local file under ``.bonfire/``) is never staged
@@ -168,10 +238,27 @@ def init(
     # operator-local-state line appended to ``.gitignore``. A README
     # reconciliation test now pins this list against the README so the
     # two cannot drift.
+    #
+    # Per-artefact verb prefix. ``Created:`` when the artefact
+    # was created this run; ``Already present:`` when it pre-existed.
+    # The artefact-name part of each line is preserved verbatim so the
+    # W9 Lane B reconciliation pin (substring search for artefact names
+    # in stdout) keeps passing.
     typer.echo(f"Initialized Bonfire project in {target}")
-    typer.echo("Created:")
-    typer.echo("  - bonfire.toml (project config)")
-    typer.echo("  - .bonfire/ (per-project state directory)")
-    typer.echo("  - agents/ (role-local prompt + identity-block overrides)")
-    typer.echo(f"  - .gitignore entry: {_GITIGNORE_LINE}")
+
+    def _verb(pre_existed: bool) -> str:
+        return "Already present" if pre_existed else "Created"
+
+    typer.echo(f"  - {_verb(toml_pre_existed)}: bonfire.toml (project config)")
+    typer.echo(f"  - {_verb(bonfire_dir_pre_existed)}: .bonfire/ (per-project state directory)")
+    typer.echo(
+        f"  - {_verb(agents_dir_pre_existed)}: agents/ "
+        "(role-local prompt + identity-block overrides)"
+    )
+    # The .gitignore entry is reported per-entry, not per-file, because
+    # the file may pre-exist with unrelated user content while the entry
+    # is freshly appended. Reporting "Already present" only when BOTH the
+    # file and the line existed before this run keeps the truth honest.
+    gitignore_entry_pre_existed = gitignore_pre_existed and gitignore_line_pre_existed
+    typer.echo(f"  - {_verb(gitignore_entry_pre_existed)}: .gitignore entry: {_GITIGNORE_LINE}")
     raise typer.Exit(0)

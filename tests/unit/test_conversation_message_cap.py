@@ -18,8 +18,9 @@ The contract this file pins:
 
 1. ``UserMessage(text=…)`` rejects strings longer than the cap at
    construction time, raising ``pydantic.ValidationError``.
-2. The cap is exactly 4096 characters (Sage default; bikeshed-locked here
-   so a future widener has to defend the change).
+2. The cap is exactly 8192 characters (BON-1074 unification with the
+   ``_WS_MAX_FRAME_BYTES`` websockets floor; bikeshed-locked here so a
+   future widener has to defend the change).
 3. ``parse_client_message`` on overlong wire JSON also raises (defense in
    depth — the parser, not just the model).
 4. ``flow.dispatch_user_message`` (or whatever surface the Warrior extracts
@@ -29,8 +30,9 @@ The contract this file pins:
 5. Off-by-one tightness: 4096 bytes exactly = OK; 4097 = rejected.
 
 Knight scope: write the RED tests. Warrior scope: add the
-``max_length=4096`` Field on ``UserMessage.text``, extract / harden
-``flow``'s dispatch path, and add the ``server_error`` frame type.
+``max_length=MAX_USER_MESSAGE_LEN`` Field on ``UserMessage.text``,
+extract / harden ``flow``'s dispatch path, and add the ``server_error``
+frame type.
 
 Open design questions (FYI for Warrior + Sage):
 
@@ -39,9 +41,10 @@ Open design questions (FYI for Warrior + Sage):
   but accept ``server_error`` as the typed name; if Sage prefers a
   different name (``ServerError`` / ``error_message`` / ``front_door_error``)
   the test asserts via substring match so the cosmetic name is bikeshed-free.
-- Cap configurability — 4096 hardcoded here. If Sage rules in favor of a
-  ``SecurityHooksConfig``-style knob, the off-by-one tests will need a
-  fixture override. Defer to Sage on first review.
+- Cap configurability — 8192 hardcoded here (BON-1074 unification). If
+  Sage rules in favor of a ``SecurityHooksConfig``-style knob, the
+  off-by-one tests will need a fixture override. Defer to Sage on first
+  review.
 """
 
 from __future__ import annotations
@@ -54,7 +57,15 @@ from pydantic import ValidationError
 
 # Exact-cap constant. If Sage moves the cap, this constant is the single
 # source of truth for the test suite.
-MAX_USER_MESSAGE_LEN = 4096
+#
+# BON-1074 — bumped from 4096 to 8192 (the W9 Lane B ``_WS_MAX_FRAME_BYTES``
+# websockets ``max_size`` floor). The two caps were previously two-tier
+# (4 KiB Pydantic / 8 KiB WS); BON-1074 unifies on the larger value so
+# the Pydantic ``server_error`` frame and the WS hard-close (1009) trip
+# on exactly the same byte boundary. The bikeshed-lock note above still
+# applies: a future widener must defend the change against a fresh DoS
+# bracket AND keep ``_WS_MAX_FRAME_BYTES`` in sync.
+MAX_USER_MESSAGE_LEN = 8192
 
 
 # ---------------------------------------------------------------------------

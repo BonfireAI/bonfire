@@ -124,7 +124,7 @@ async def dispatch_user_message(
         await broadcast(
             ServerError(
                 code="message_too_long",
-                message="Message too long; please keep under 4 KiB.",
+                message="Message too long; please keep under 8 KiB.",
             )
         )
         return

@@ -162,22 +162,22 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # not active references.
         (
             "CHANGELOG.md",
-            338,
+            335,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            340,
+            337,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            341,
+            338,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            358,
+            355,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

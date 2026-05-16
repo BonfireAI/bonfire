@@ -4,20 +4,17 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] — UNRELEASED
+## [0.1.0a3] — 2026-05-16
 
-The first stable release of `bonfire-ai`. Bonfire is a pipeline runtime
+The third alpha release of `bonfire-ai`. Bonfire is a pipeline runtime
 for AI agents — it wires role-bound stages over a typed event bus, enforces
 TDD at the role boundary, and ships the four extension Protocols
 (`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`) that
 together form the trust triangle a production deployment composes against.
-This section is staged ahead of the v0.1.0 tag-cut PR; when that PR lands
-it will (a) bump `pyproject.toml` from `0.1.0a2` to `0.1.0`, (b) advance
-the PyPI `Development Status` classifier from `3 - Alpha` to `4 - Beta`,
-and (c) date this entry to its tag-cut day. The release-gate-ladder items
-are closed in code or accepted-with-documentation per the policy in
-[`docs/release-policy.md`](docs/release-policy.md); some still surface
-follow-ups that ship in subsequent v0.1.x patches.
+The stable `0.1.0` tag remains held until the full release-gate ladder
+(per [`docs/release-policy.md`](docs/release-policy.md)) clears in code,
+in CI, and in a fresh release-gate Box. Follow-ups surfaced in this alpha
+are tracked under BON-610 and ship in subsequent v0.1.0aN or v0.1.x patches.
 
 Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
 hardening pass across the dispatch, scanner, persona, git, and Front Door
@@ -401,3 +398,4 @@ end-to-end CLI verb are still in progress and ship in subsequent
 
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1
 [0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2
+[0.1.0a3]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a3

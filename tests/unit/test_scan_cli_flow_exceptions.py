@@ -186,6 +186,39 @@ class TestConversationTimeoutOption:
             f"`bonfire scan --help` must list --conversation-timeout; got: {plain!r}"
         )
 
+    def test_help_reconciles_default_to_300_and_hides_sentinel(self) -> None:
+        """The help output names the real default (300) exactly once and
+        never advertises the ``-1.0`` sentinel as a default value.
+
+        Typer's auto-generated ``[default: ...]`` line is suppressed via
+        ``show_default=False`` on the ``--conversation-timeout`` option;
+        the help-string parenthetical ``(default: 300)`` is the single
+        source of truth for the user-visible default. ``-1.0`` may still
+        appear inside the ``FLOAT RANGE [x>=-1.0]`` constraint metavar
+        because it is the legitimate input-range floor — that is not a
+        default-value advertisement and is allowed.
+        """
+        result = runner.invoke(app, ["scan", "--help"])
+        assert result.exit_code == 0
+        plain = _ANSI_RE.sub("", result.output)
+
+        # "300" appears exactly once — in the help-text parenthetical.
+        assert plain.count("300") == 1, (
+            f"`bonfire scan --help` must name the 300s default exactly "
+            f"once; got count={plain.count('300')}, output={plain!r}"
+        )
+
+        # No "[default: ...]" line for --conversation-timeout. Typer's
+        # auto-default-display must be suppressed so the help text is the
+        # single source of truth.
+        collapsed = re.sub(r"\s+", " ", plain)
+        assert "[default: -1.0]" not in collapsed, (
+            f"`bonfire scan --help` must not advertise -1.0 as a default; got: {collapsed!r}"
+        )
+        assert "[default: -1]" not in collapsed, (
+            f"`bonfire scan --help` must not advertise -1 as a default; got: {collapsed!r}"
+        )
+
     def test_explicit_timeout_threads_to_run_front_door(
         self,
         tmp_path: Path,

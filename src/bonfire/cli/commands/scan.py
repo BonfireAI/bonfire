@@ -103,6 +103,21 @@ def scan(
     # ``FileExistsError`` as a defense-in-depth check; this early exit
     # spares the user the conversation flow when the outcome is doomed.
     toml_path = Path.cwd() / "bonfire.toml"
+    # is_symlink() MUST be checked before exists(). Path.exists() follows
+    # symlinks, so a dangling symlink to an attacker-controlled target
+    # (e.g. ``bonfire.toml -> ~/.ssh/authorized_keys``) would satisfy
+    # ``exists() == False`` and let the write path open the symlink target
+    # in write+truncate mode — an arbitrary-write primitive. Refuse any
+    # symlink (dangling, live, or looping) with a message that names the
+    # symlink case explicitly so the user can distinguish it from a normal
+    # collision in logs.
+    if toml_path.is_symlink():
+        typer.echo(
+            f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+            "or overwrite a symlinked config. Remove the symlink and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     if toml_path.exists():
         typer.echo(
             f"bonfire.toml already exists at {toml_path}. Refusing to "

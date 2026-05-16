@@ -12,11 +12,53 @@ Depends only on pydantic. Python 3.12+.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
+
+# ---------------------------------------------------------------------------
+# session_id validation
+# ---------------------------------------------------------------------------
+# ``session_id`` is interpolated into filesystem paths at multiple sites
+# (``session/persistence.py`` writes ``{session_id}.jsonl``; ``engine/
+# checkpoint.py`` writes ``{session_id}.json``). Without validation, an
+# attacker-controlled session_id of ``../../etc/passwd`` or
+# ``..\\..\\Windows`` would yield arbitrary-path interpolation —
+# path-traversal smuggling into operator-controlled write sites.
+#
+# Pattern: alphanumerics + ``_`` + ``-``, 1-64 chars. Permissive enough for
+# uuid4-hex (default, 12 chars), human-readable slugs, and existing test
+# fixtures (``sess-1``, ``ses_001``, ``session_under_attack``). Strict
+# enough to reject ``..``, ``/``, ``\\``, null bytes, control chars, and
+# any other path-traversal smuggling shape.
+#
+# The empty-string sentinel is preserved separately for ``BonfireEvent``
+# subclasses (``AxiomLoaded``) that legitimately emit outside session
+# context — see ``_validate_session_id`` below.
+_SESSION_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def _validate_session_id(value: str) -> str:
+    """Reject path-traversal and other dangerous shapes in session_id.
+
+    Empty string is allowed for ``AxiomLoaded`` and other events that
+    legitimately emit outside session context (default-state sentinel).
+    Non-empty strings must match ``_SESSION_ID_RE``.
+    """
+    if value == "":
+        return value
+    if not _SESSION_ID_RE.match(value):
+        msg = (
+            f"invalid session_id {value!r}: must match {_SESSION_ID_RE.pattern} "
+            f"(alphanumerics, '_', '-'; 1-64 chars). Rejected to prevent "
+            "path-traversal smuggling into session/checkpoint file paths."
+        )
+        raise ValueError(msg)
+    return value
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,6 +94,16 @@ class BonfireEvent(BaseModel):
     session_id: str
     sequence: int
     # event_type is defined per-subclass as a Literal field
+
+    # session_id is interpolated into filesystem paths downstream
+    # (session/persistence.py, engine/checkpoint.py). Reject path-traversal
+    # shapes (``..``, ``/``, ``\\``, null) at the model boundary so the
+    # write sites cannot be smuggled past their parent directory. Empty
+    # string is allowed for AxiomLoaded and similar outside-session events.
+    @field_validator("session_id")
+    @classmethod
+    def _session_id_must_be_path_safe(cls, v: str) -> str:
+        return _validate_session_id(v)
 
     @property
     def category(self) -> str:

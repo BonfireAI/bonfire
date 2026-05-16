@@ -10,12 +10,25 @@ via ``model_copy(update=...)``.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from pathlib import Path  # noqa: TC003 — Pydantic needs Path at runtime
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# ``envelope_id`` is interpolated into filesystem paths at multiple sites
+# (engine pipeline + executor pass it as ``session_id`` to checkpoint and
+# session persistence). Without validation, an attacker-controlled
+# envelope_id like ``../../etc/passwd`` would yield arbitrary-path
+# interpolation — path-traversal smuggling into operator-controlled write
+# sites. Pattern: alphanumerics + ``_`` + ``-``, 1-64 chars. Permissive
+# enough for uuid4-hex (default), human-readable slugs, and existing test
+# fixtures (``abc123456789``, ``aaaaaaaaaaaa``). Strict enough to reject
+# ``..``, ``/``, ``\\``, null bytes, control chars, and other traversal
+# shapes.
+_ENVELOPE_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -93,6 +106,25 @@ class Envelope(BaseModel):
     def _cost_must_be_non_negative(cls, v: float) -> float:
         if v < 0:
             msg = "cost_usd must be >= 0"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("envelope_id")
+    @classmethod
+    def _envelope_id_must_be_path_safe(cls, v: str) -> str:
+        """Reject path-traversal shapes (``..``, ``/``, ``\\``, null).
+
+        envelope_id flows into checkpoint and session-persistence write
+        paths via the pipeline/executor. A traversal-bearing value would
+        let a caller smuggle writes outside the operator-controlled
+        directory.
+        """
+        if not _ENVELOPE_ID_RE.match(v):
+            msg = (
+                f"invalid envelope_id {v!r}: must match {_ENVELOPE_ID_RE.pattern} "
+                f"(alphanumerics, '_', '-'; 1-64 chars). Rejected to prevent "
+                "path-traversal smuggling into checkpoint/session file paths."
+            )
             raise ValueError(msg)
         return v
 

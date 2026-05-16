@@ -56,7 +56,7 @@ import errno
 import os
 from pathlib import Path
 
-__all__ = ["safe_write_text"]
+__all__ = ["safe_append_text", "safe_write_text"]
 
 
 # ``os.O_NOFOLLOW`` is POSIX-only. On Windows the flag is not defined;
@@ -214,3 +214,100 @@ def safe_write_text(
         except OSError:
             pass
         raise
+
+
+def safe_append_text(
+    path: Path,
+    content: str,
+    *,
+    encoding: str = "utf-8",
+    mode: int = 0o644,
+) -> None:
+    """Append *content* to *path*, refusing to follow symlinks.
+
+    Append-mode companion to :func:`safe_write_text`. The W7.M rollout
+    closed truncate-mode write sites (``write_text`` / ``open("w")``)
+    but missed append-mode sites (``open("a")``) such as
+    ``session/persistence.py`` JSONL append and ``xp/tracker.py`` JSONL
+    append. Both are operator-controlled paths where a planted symlink
+    redirects the appended payload to an attacker-controlled target.
+
+    Parameters
+    ----------
+    path
+        The append target. MUST NOT be a symlink. Symlinks (dangling,
+        live, or looping) are refused before any write. The file may or
+        may not pre-exist; if it does not, it is created with *mode*.
+    content
+        Text to append. Encoded with *encoding* (default ``"utf-8"``).
+    encoding
+        Text encoding for *content*. Default ``"utf-8"``.
+    mode
+        Filesystem mode bits applied if the file is newly created
+        (default ``0o644``). Ignored when the file pre-exists.
+
+    Raises
+    ------
+    FileExistsError
+        If *path* is a symlink (message contains the literal substring
+        ``"symlink"``). Defense-in-depth via ``O_NOFOLLOW`` also turns
+        a race-planted symlink into the same shape.
+    OSError
+        Other open(2)/write(2) failures (disk full, permissions, etc.)
+        propagate untranslated.
+
+    Notes
+    -----
+    Unlike :func:`safe_write_text`, the append helper does NOT unlink
+    on write-failure. The file may legitimately pre-exist with prior
+    content from earlier appends; deleting it on a partial-write would
+    discard caller state. The kernel guarantees ``O_APPEND`` writes
+    are atomic with respect to other appenders, but a partial write
+    inside our own append (e.g. disk-full mid-write) may leave a
+    partial line — callers parsing line-by-line MUST tolerate the
+    trailing-junk case (both ``SessionPersistence.read_events`` and
+    ``XPTracker.events`` already do, by ``str.strip()`` + JSON-decode
+    only non-empty lines).
+    """
+    # Pre-check: is_symlink() does NOT follow the link, so a dangling
+    # symlink is correctly identified here even though Path.exists()
+    # would return False.
+    if path.is_symlink():
+        msg = (
+            f"refusing to append to {path}: target is a symlink. "
+            "Refusing to follow or overwrite a symlinked path. "
+            "Remove the symlink and re-run."
+        )
+        raise FileExistsError(msg)
+
+    # O_APPEND: kernel-guaranteed atomic append at end-of-file.
+    # O_NOFOLLOW: refuse symlinks at open(2) time even if one was
+    # planted between the is_symlink() pre-check and open(2).
+    # O_CREAT: create the file on first append; existing file is opened
+    # as-is (no O_EXCL — append legitimately re-opens existing files).
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | _O_NOFOLLOW
+
+    try:
+        fd = os.open(path, flags, mode)
+    except OSError as exc:
+        # Only the O_NOFOLLOW symlink-detection errnos get translated
+        # to the W7.M "symlink"-mentioning FileExistsError; other
+        # OSErrors (ENOSPC, EPERM, EISDIR, ...) propagate untranslated
+        # so operators don't chase a non-existent attack vector while
+        # their disk is full.
+        if exc.errno in _SYMLINK_ERRNOS:
+            msg = (
+                f"refusing to append to {path}: detected symlink at open via "
+                f"O_NOFOLLOW ({exc.strerror or exc}). "
+                "Refusing to follow or overwrite a symlinked path. "
+                "Remove the symlink and re-run."
+            )
+            raise FileExistsError(msg) from exc
+        raise
+
+    # O_APPEND guarantees writes land at EOF atomically — no seek
+    # required. We do NOT unlink on write-failure: existing prior
+    # content (from earlier appends) is caller state and must not
+    # be discarded by a partial-write cleanup.
+    with os.fdopen(fd, "a", encoding=encoding) as f:
+        f.write(content)

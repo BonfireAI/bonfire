@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
 from bonfire._safe_write import safe_write_text
 from bonfire.models.envelope import Envelope  # noqa: TC001 -- Pydantic needs runtime access
 
@@ -153,13 +154,20 @@ class CheckpointManager:
         """Load a checkpoint by session ID.
 
         Raises FileNotFoundError if the checkpoint file does not exist.
+
+        Uses ``safe_read_capped_text`` to refuse symlinks at the
+        checkpoint path (defends against a symlink planted at
+        ``{session_id}.json`` redirecting the read to (e.g.)
+        ``/etc/passwd``) and to cap the read at
+        ``MAX_CHECKPOINT_BYTES`` (defends against a planted oversized
+        file that would otherwise exhaust memory during ``json.loads``).
         """
         path = self._dir / f"{session_id}.json"
         if not path.exists():
             msg = f"No checkpoint found for session '{session_id}' at {path}"
             raise FileNotFoundError(msg)
 
-        raw = json.loads(path.read_text())
+        raw = json.loads(safe_read_capped_text(path, max_bytes=MAX_CHECKPOINT_BYTES))
         return CheckpointData.model_validate(raw)
 
     def latest(self) -> CheckpointData | None:
@@ -189,20 +197,28 @@ class CheckpointManager:
     def _load_all(self) -> list[CheckpointData]:
         """Load all checkpoint files from the directory.
 
-        Corrupt files (malformed JSON, schema violations, read errors) are
-        skipped with a ``logger.warning`` rather than poisoning the entire
-        scan. This ensures that one bad checkpoint file does not break
-        ``latest()`` or ``list_checkpoints()`` when valid checkpoints exist
-        alongside.
+        Corrupt files (malformed JSON, schema violations, read errors,
+        symlink-refusals, oversized files) are skipped with a
+        ``logger.warning`` rather than poisoning the entire scan. This
+        ensures that one bad checkpoint file does not break ``latest()``
+        or ``list_checkpoints()`` when valid checkpoints exist alongside.
+
+        Uses ``safe_read_capped_text`` so symlinks at any glob match are
+        refused (``FileExistsError`` — same as ``load``) and files
+        exceeding ``MAX_CHECKPOINT_BYTES`` raise ``ValueError`` (skipped
+        with the same WARN, so a planted oversized file does not exhaust
+        memory). ``FileExistsError`` is also a subclass of ``OSError`` so
+        the existing handler catches it; ``ValueError`` is added
+        explicitly for the cap-exceeded path.
         """
         if not self._dir.exists():
             return []
         results: list[CheckpointData] = []
         for path in self._dir.glob("*.json"):
             try:
-                raw = json.loads(path.read_text())
+                raw = json.loads(safe_read_capped_text(path, max_bytes=MAX_CHECKPOINT_BYTES))
                 results.append(CheckpointData.model_validate(raw))
-            except (json.JSONDecodeError, ValidationError, OSError) as exc:
+            except (json.JSONDecodeError, ValidationError, OSError, ValueError) as exc:
                 logger.warning(
                     "Skipping corrupt checkpoint file %s: %s",
                     path,

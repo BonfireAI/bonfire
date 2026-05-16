@@ -136,6 +136,12 @@ passes" mean what it should on the integration branch.
 - **User-supplied security-hook regexes compile once.** Patterns are
   hoisted to compile time in the hook factory; the broken-pattern
   fail-safe DENY path is preserved.
+- **Bounce-back stages count against `budget_usd`.** After a successful
+  bounce-back, the pipeline previously credited only the retried
+  stage's cost to `total_cost_usd`, silently dropping the bounce-target
+  stage's cost. A run that should have halted at the budget cap could
+  slip past it. `total_cost_usd` now includes both the bounce target
+  and the retry, and the budget watchdog halts correctly.
 
 ### Security
 

@@ -641,12 +641,15 @@ class PipelineEngine:
         session_id: str,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
-    ) -> Envelope | None:
+    ) -> tuple[Envelope, float] | None:
         """Execute bounce-back: run target stage, then re-run original.
 
-        Returns the re-executed envelope if the second gate check passes.
-        Returns None if the bounce fails or second gate check fails (Sage D7
-        -- single bounce, no recursion).
+        Returns ``(retry_envelope, cost_delta)`` if the second gate check
+        passes, where ``cost_delta`` is the FULL cost added by the bounce
+        (bounce-target cost + retry cost). The caller must credit this delta
+        to its running total so budget accounting includes the bounce target.
+        Returns None if the bounce fails or the second gate check fails
+        (bounce is single-shot; no recursion).
         """
         target_name = spec.on_gate_failure
         if not target_name:
@@ -692,7 +695,7 @@ class PipelineEngine:
             # Second gate failure -- halt (no infinite loops).
             return None
 
-        return retry_env
+        return retry_env, bounce_env.cost_usd + retry_env.cost_usd
 
     # -- Gate result handling (shared by parallel + sequential) ---------------
 
@@ -738,8 +741,9 @@ class PipelineEngine:
                 initial_envelope,
             )
             if bounced is not None:
-                stages_done[spec.name] = bounced
-                return None, bounced.cost_usd
+                retry_env, cost_delta = bounced
+                stages_done[spec.name] = retry_env
+                return None, cost_delta
 
         # Gate failure -- halt pipeline.
         duration = time.monotonic() - start

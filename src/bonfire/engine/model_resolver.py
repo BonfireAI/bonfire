@@ -4,9 +4,10 @@
 """Dispatch-site model resolver helper.
 
 Pure synchronous primitive that collapses the three-tier ``or`` chain used
-at every dispatch call site (``StageExecutor``, ``PipelineEngine``,
-``WizardHandler``) into a single source-of-truth helper. Replaces the inline
-precedence chain at the three call sites without altering its behavior.
+at every dispatch call site (``PipelineEngine``, ``WizardHandler``) into
+a single source-of-truth helper. Replaces the inline precedence chain at
+those call sites without altering its behavior. (Historically also wired
+into ``StageExecutor``; that class was deleted in Wave 11 Lane E.)
 
 The inner role-based primitive ``resolve_model_for_role`` continues to
 live at ``bonfire.agent.tiers`` (per the cluster-350 D-CL.1 lock); this

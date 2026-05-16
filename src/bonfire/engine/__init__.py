@@ -11,9 +11,13 @@ checkpoint persistence surface.
 Public surface:
 
 - :class:`PipelineEngine` / :class:`PipelineResult` — top-level
-  orchestrator and its terminal result type.
-- :class:`StageExecutor` — runs a single stage: build input, dispatch
-  via handler or backend, emit events.
+  orchestrator and its terminal result type. ``PipelineEngine`` owns
+  per-stage execution inline (``_execute_stage``); the historical
+  standalone ``StageExecutor`` class was deleted after an audit
+  surfaced divergence between the dead path and the live engine
+  path (unreachable code, missing initial-envelope metadata merge,
+  vault-advisor wired only through the dead path, and a
+  model-override semantic gap).
 - :class:`ContextBuilder` — assembles per-stage prompt context from
   prior stage results and project state.
 - The six shipped quality gates (:class:`CompletionGate`,
@@ -33,7 +37,6 @@ Public surface:
 
 from bonfire.engine.checkpoint import CheckpointData, CheckpointManager, CheckpointSummary
 from bonfire.engine.context import ContextBuilder
-from bonfire.engine.executor import StageExecutor
 from bonfire.engine.gates import (
     CompletionGate,
     CostLimitGate,
@@ -47,7 +50,7 @@ from bonfire.engine.gates import (
 from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 
 # ``MergePreflightGate`` is intentionally NOT in ``__all__`` here; the
-# canonical 15-symbol surface is locked by ``tests/unit/test_engine_init.py``.
+# canonical 14-symbol surface is locked by ``tests/unit/test_engine_init.py``.
 # It IS importable both from the package and from the submodule
 # (``from bonfire.engine.gates import MergePreflightGate``). Promoting it
 # to ``__all__`` is a follow-up decision.
@@ -65,7 +68,6 @@ __all__ = [
     "RedPhaseGate",
     "ReviewApprovalGate",
     "SageCorrectionResolvedGate",
-    "StageExecutor",
     "TestPassGate",
     "VerificationGate",
 ]

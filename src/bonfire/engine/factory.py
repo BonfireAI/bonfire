@@ -4,9 +4,11 @@
 """Settings factory for engine + handler composition.
 
 Thin factory that builds a ``BonfireSettings`` instance for a pipeline
-run. Replaces the silent ``BonfireSettings()`` fallback at the three
-constructor sites (``StageExecutor``, ``PipelineEngine``,
-``WizardHandler``) with a warn-on-failure path.
+run. Replaces the silent ``BonfireSettings()`` fallback at the engine
+constructor sites (``PipelineEngine``, ``WizardHandler``) with a
+warn-on-failure path. (Historically also wired into ``StageExecutor``;
+that class was deleted in Wave 11 Lane E -- see
+``bonfire.engine.__init__`` for context.)
 
 The factory is the single composition root for engine settings: callers
 that already hold a ``BonfireSettings`` should pass it through the
@@ -41,8 +43,8 @@ def load_settings_or_default() -> BonfireSettings:
           ``OSError`` and any other load-time failure; warns via
           ``logger.warning``.
         - Pass the returned instance into ``PipelineEngine``,
-          ``StageExecutor``, ``WizardHandler`` constructors via
-          ``settings=`` to avoid the re-load.
+          ``WizardHandler`` constructors via ``settings=`` to avoid
+          the re-load.
 
     Returns:
         A ``BonfireSettings`` instance -- either the result of a normal

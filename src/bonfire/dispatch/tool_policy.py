@@ -10,9 +10,9 @@ mapped to tool lists lifted from the Bonfire v0.1 axiom tables.
 
 The :class:`ToolPolicy` Protocol IS the W4.1 user-configurable surface. Users
 who wish to override the floor implement :class:`ToolPolicy` and pass their
-implementation into ``StageExecutor`` / ``PipelineEngine`` via the
-``tool_policy=`` constructor kwarg. No TOML loader ships in v0.1; the Protocol
-seam is the public surface.
+implementation into ``PipelineEngine`` via the ``tool_policy=`` constructor
+kwarg. No TOML loader ships in v0.1; the Protocol seam is the public
+surface.
 
 The floor table's gamified role keys (``scout``, ``knight``, ``warrior``, ...)
 are a ratified exception to ADR-001's "all code uses generic names" rule —

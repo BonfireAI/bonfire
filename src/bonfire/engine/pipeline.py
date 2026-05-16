@@ -33,9 +33,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.context import ContextBuilder
-from bonfire.engine.executor import (
-    StageExecutor,  # noqa: F401 -- public re-export for patch/discover
-)
 from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import (
@@ -503,6 +500,20 @@ class PipelineEngine:
 
         Tries up to spec.max_iterations times. On success, returns immediately.
         On failure after all iterations, returns the failed envelope.
+
+        The parallel ``StageExecutor.execute_single`` path was deleted
+        after an audit surfaced divergence between it and this method
+        (unreachable production code path, missing
+        ``initial_envelope.metadata`` merge, model-override semantic
+        gap). One responsibility the dead path carried -- querying
+        ``VaultAdvisor`` for known issues before each dispatch -- is
+        intentionally deferred here: a follow-up will add a
+        ``vault_advisor=`` kwarg to :class:`PipelineEngine` (and the
+        matching ``known_issues=`` thread into ``ContextBuilder.build``)
+        once the lifecycle semantics (per-stage vs per-pipeline caching,
+        opt-in default) are pinned. The advisor itself remains live at
+        :mod:`bonfire.engine.advisor`; only the engine-side wiring is
+        parked.
         """
         await self._emit(
             StageStarted(

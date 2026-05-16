@@ -32,6 +32,14 @@ logger = logging.getLogger(__name__)
 
 MessageCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
+# WS server hard limits (W8.L). Pinning ``max_size`` defends the asyncio loop
+# from large-frame OOM; the ``websockets`` default of 1 MiB is far above
+# anything the onboard chat protocol sends. ``max_queue`` caps per-connection
+# backpressure depth so a slow handler can't accumulate frames unbounded.
+# Named so a future bump is greppable + the values are testable.
+_WS_MAX_FRAME_BYTES = 8192  # 8 KiB per message — onboard JSON is <1 KiB
+_WS_MAX_QUEUE_DEPTH = 8  # per-connection inbound backpressure queue depth
+
 
 def _load_html() -> bytes:
     """Load ui.html from package data."""
@@ -132,6 +140,8 @@ class FrontDoorServer:
             self._host,
             self._port,
             process_request=self._process_request,
+            max_size=_WS_MAX_FRAME_BYTES,
+            max_queue=_WS_MAX_QUEUE_DEPTH,
         )
         sock = next(iter(self._server.sockets))
         self._port = sock.getsockname()[1]

@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import secrets
+import time
 from collections.abc import Callable, Coroutine
 from importlib import resources
 from typing import Any
@@ -78,6 +79,11 @@ class FrontDoorServer:
         # even if a single FrontDoorServer is reused across asyncio.run blocks,
         # a previous-launch URL cannot drive a current-launch session.
         self._token: str | None = None
+        # Out-of-band token handoff state. ``GET /handoff`` is single-use and
+        # has a 30s deadline. Both fields are minted in ``start()`` so each
+        # launch gets a fresh window.
+        self._handoff_consumed: bool = False
+        self._handoff_deadline: float = 0.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -109,6 +115,10 @@ class FrontDoorServer:
         # start() so re-using a server instance does NOT re-open the
         # previous launch's CSWSH window.
         self._token = secrets.token_urlsafe(16)
+        # Reset single-use flag and mint a fresh 30s deadline for the
+        # handoff endpoint. Both are per-launch.
+        self._handoff_consumed = False
+        self._handoff_deadline = time.monotonic() + 30.0
         self._html = _load_html()
         # Origin enforcement happens in ``_process_request`` (rather than via
         # the ``serve(origins=...)`` kwarg) because the allow-list must
@@ -170,17 +180,14 @@ class FrontDoorServer:
 
     @property
     def url(self) -> str:
-        """HTTP URL for the served page, including the gate token.
+        """HTTP URL for the served page — token-FREE.
 
-        Embeds ``?token=<value>`` so the operator can just click the printed
-        link and the gate transparently lets them in. ``self._token`` is
-        ``None`` before ``start()`` — the URL is returned with the literal
-        ``None`` only in that pre-start window; callers should not rely on
-        the value of ``url`` before ``start()``.
+        The URL passed to ``typer.launch`` (and thus into ``xdg-open``'s argv
+        on Linux) MUST NOT carry the token. Same-uid processes can read argv
+        from ``/proc/<pid>/cmdline``; a token in argv defeats the whole gate.
+        The browser fetches the token via ``GET /handoff`` on page load.
         """
-        if self._token is None:
-            return f"http://{self._host}:{self._port}"
-        return f"http://{self._host}:{self._port}/?token={self._token}"
+        return f"http://{self._host}:{self._port}/"
 
     @property
     def ws_url(self) -> str:
@@ -228,9 +235,9 @@ class FrontDoorServer:
         connection: ServerConnection,
         request: Request,
     ) -> Response | None:
-        """Front Door gate + dispatch (W5.A).
+        """Front Door gate + dispatch.
 
-        Order of checks for both ``/`` (HTTP) and ``/ws`` (WS upgrade):
+        Order of checks:
 
         1. ``Origin`` allow-list — same-origin (or no Origin header at all,
            which signals a non-browser local process) is allowed; anything
@@ -239,20 +246,25 @@ class FrontDoorServer:
            cross-origin page during ``bonfire scan`` and the conversation
            engine.
 
-        2. Token gate — ``?token=<value>`` query parameter must match the
-           per-launch token minted in ``start()``. Both ``/`` and ``/ws``
-           require it; missing or wrong → 403. ``hmac.compare_digest`` is
-           used for the compare to avoid leaking timing information on the
-           token value (even though same-host timing leaks are barely
-           exploitable, the defense-in-depth cost is one function call).
+        2. Path routing:
+           - ``/`` (and any ``/?...`` query) — serve ``ui.html`` (no token
+             gate on the HTTP entry; the gate lives at ``/handoff`` + ``/ws``).
+           - ``/handoff`` — single-use token issuance. Origin required;
+             30s deadline; flip to 410 after first success.
+           - ``/ws`` — token-gated WS upgrade.
+           - anything else — 404.
 
-        On success: serve ``ui.html`` for ``/`` and return ``None`` for
-        ``/ws`` so the library completes the WS upgrade.
+        On success: serve ``ui.html`` for ``/``, return JSON for
+        ``/handoff``, and return ``None`` for ``/ws`` so the library
+        completes the WS upgrade.
         """
         # 1. Origin allow-list. ``None`` (no Origin header, e.g. Python
-        # ``websockets`` client) is allowed because it cannot originate
-        # from a CSWSH page — only same-host local processes can send a
-        # no-Origin request. Browser pages always send an Origin.
+        # ``websockets`` client / scripted ``urllib`` driver) is allowed
+        # because it cannot originate from a CSWSH page — only same-host
+        # local processes can send a no-Origin request. Browser pages
+        # always send an Origin. The same rule applies to ``/handoff`` — a
+        # same-uid Python attacker can spoof the header trivially, so this
+        # is bar-raising, not a strong defense.
         origin_header = request.headers.get("Origin")
         if origin_header is not None and origin_header != self.origin:
             logger.warning(
@@ -267,12 +279,16 @@ class FrontDoorServer:
                 b"403 Forbidden: origin not allowed",
             )
 
-        # 2. Path routing + token gate. Token check runs for both ``/``
-        # and ``/ws``; any other path is a flat 404.
-        if request.path.startswith("/ws") or request.path == "/" or request.path.startswith("/?"):
+        # 2. Path routing.
+        # 2a. /handoff — single-use, deadline-bounded token issuance.
+        if request.path == "/handoff" or request.path.startswith("/handoff?"):
+            return self._handle_handoff()
+
+        # 2b. /ws — token-gated WS upgrade.
+        if request.path.startswith("/ws"):
             if not self._token_matches(request.path):
                 logger.warning(
-                    "Front Door rejected request without matching token (path=%r)",
+                    "Front Door rejected WS request without matching token (path=%r)",
                     request.path,
                 )
                 return Response(
@@ -281,16 +297,84 @@ class FrontDoorServer:
                     Headers({"Content-Type": "text/plain; charset=utf-8"}),
                     b"403 Forbidden: missing or invalid token",
                 )
-            # Gate passed. Serve HTML for / or hand off to the WS handler.
-            if request.path.startswith("/ws"):
-                return None
+            return None
+
+        # 2c. / and /?... — serve ui.html (token-free).
+        if request.path == "/" or request.path.startswith("/?"):
+            # Defense-in-depth headers so the served page can't leak the
+            # WS token via referrer or be cached by any intermediary.
             return Response(
                 200,
                 "OK",
-                Headers({"Content-Type": "text/html; charset=utf-8"}),
+                Headers(
+                    {
+                        "Content-Type": "text/html; charset=utf-8",
+                        "Referrer-Policy": "no-referrer",
+                        "Cache-Control": "no-store, no-cache",
+                    }
+                ),
                 self._html,
             )
+
         return Response(404, "Not Found", Headers({}), b"Not Found")
+
+    def _handle_handoff(self) -> Response:
+        """``GET /handoff`` — issue the WS token exactly once.
+
+        Guards:
+
+        - **Deadline** — ``time.monotonic() > _handoff_deadline`` → 410 Gone
+          even on the first call. Closes long-running-race windows.
+        - **Single-use** — after one success, subsequent calls return 410 Gone
+          and log a WARNING containing ``"handoff"`` so a race-loss is
+          auditable.
+        - **Origin** — checked in the caller (``_process_request``) before
+          dispatch; mirrors the ``/ws`` rule.
+
+        Success response: 200 + JSON ``{"token": "<value>"}`` with
+        ``Referrer-Policy: no-referrer`` and ``Cache-Control: no-store, no-cache``
+        so the token can't leak via referrer header or browser/proxy cache.
+        """
+        # Deadline first — even an unconsumed endpoint past the window is 410.
+        if time.monotonic() > self._handoff_deadline:
+            logger.warning("Front Door /handoff request after deadline — returning 410 Gone")
+            return Response(
+                410,
+                "Gone",
+                Headers({"Content-Type": "text/plain; charset=utf-8"}),
+                b"410 Gone: handoff window closed",
+            )
+
+        # Single-use atomicity: flip-then-respond. _process_request runs on
+        # the asyncio loop thread; the flip is single-threaded.
+        if self._handoff_consumed:
+            logger.warning(
+                "Front Door /handoff already consumed — returning 410 Gone "
+                "(possible race; legit browser will fail open)"
+            )
+            return Response(
+                410,
+                "Gone",
+                Headers({"Content-Type": "text/plain; charset=utf-8"}),
+                b"410 Gone: handoff already consumed",
+            )
+
+        self._handoff_consumed = True
+        # ``self._token`` is guaranteed non-None here because start() mints
+        # it before serve() begins accepting requests.
+        body = json.dumps({"token": self._token}).encode("utf-8")
+        return Response(
+            200,
+            "OK",
+            Headers(
+                {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Referrer-Policy": "no-referrer",
+                    "Cache-Control": "no-store, no-cache",
+                }
+            ),
+            body,
+        )
 
     def _token_matches(self, raw_path: str) -> bool:
         """Constant-time check that ``?token=`` in ``raw_path`` matches ``self._token``.

@@ -1,4 +1,4 @@
-"""Integration tests — BON-339 mechanical budget enforcement verification (W4.3).
+"""Integration tests — mechanical budget enforcement verification.
 
 Verifies that ``max_budget_usd`` and ``max_turns`` enforcement lives at the
 hook/gate layer (not in prompts), end-to-end through the public pipeline.

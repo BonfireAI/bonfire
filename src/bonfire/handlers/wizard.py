@@ -310,8 +310,9 @@ class WizardHandler:
             # Wizard call site preserves the canonical ``ROLE.value``
             # ("reviewer") -- gamified passthrough at executor + pipeline
             # uses ``stage.role``, but the reviewer handler is locked to
-            # the canonical string per Sage memo §K and the existing
-            # ``tests/unit/test_wizard_handler.py:586`` assertion contract.
+            # the canonical string by the
+            # ``tests/unit/test_wizard_handler.py`` assertion contract
+            # (reviewer-role wire-format pin).
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",

@@ -18,7 +18,7 @@ The classifier is pure: no I/O, no clock, no randomness. Every set-shape
 field on :class:`BounceClassification` is a ``frozenset[str]`` so callers
 cannot accidentally mutate a result.
 
-Decision-log schema (Sage memo §D5, hybrid per-prompt Q2c):
+Decision-log schema (hybrid front-matter + canonical-heading prose):
 
 1. HTML-comment YAML front-matter::
 
@@ -112,8 +112,8 @@ class ParsedDecisionLog:
     entries -- one record per parsed dep, tagged with the
     ``parse_source`` it came from. Additive: production callers today
     consume ``deps`` only; the records carry forward provenance so future
-    error messages can cite the source of each defer ("Sage memo: dep
-    BON-X parsed from prose section but not in failing-test xfail
+    error messages can cite the source of each defer ("decision log: dep
+    ID parsed from prose section but not in failing-test xfail
     reasons").
     """
 
@@ -178,10 +178,10 @@ _XFAIL_REASON_DEP_RE = re.compile(r"deferred to\s+(?P<dep>BON-[\w.-]+)")
 
 
 def parse_sage_decision_log(text: str) -> ParsedDecisionLog:
-    """Parse a Sage memo text into a :class:`ParsedDecisionLog`.
+    """Parse a Sage decision-log text into a :class:`ParsedDecisionLog`.
 
-    Pure function. No I/O. Hybrid front-matter + prose parsing per Sage
-    §D5 + per-prompt Q2c -- front-matter wins when both are present.
+    Pure function. No I/O. Hybrid front-matter + prose parsing --
+    front-matter wins when both are present.
 
     Edge cases:
         - Empty input -> ``deps=frozenset(), parse_source="absent"``.

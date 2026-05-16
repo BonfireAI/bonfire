@@ -16,13 +16,14 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BaseModel, Field
 
-# Max byte/char length of a single ``user_message.text`` frame. Closes the
-# Mirror Probe finding S1.8 CPU-DOS: ``websockets`` defaults to 1 MiB per
-# frame, and ``ConversationEngine`` analyzers iterate ``text.lower().split()``
-# on the single event loop. 4 KiB is the Sage default — long enough for the
-# real Q1/Q2/Q3 free-text answers, short enough to bound per-frame analyzer
-# cost. Tightening this constant is fine; widening requires a fresh DoS
-# bracket.
+# Max byte/char length of a single ``user_message.text`` frame. Bounds a
+# CPU-DoS shape against the WebSocket front-door: ``websockets`` defaults
+# to 1 MiB per frame, and ``ConversationEngine`` analyzers iterate
+# ``text.lower().split()`` on the single event loop, so an attacker-sized
+# frame would stall the loop. 4 KiB is long enough for the real
+# Q1/Q2/Q3 free-text answers and short enough to bound per-frame
+# analyzer cost. Tightening this constant is fine; widening requires a
+# fresh DoS bracket.
 MAX_USER_MESSAGE_LEN: Final = 4096
 
 __all__ = [

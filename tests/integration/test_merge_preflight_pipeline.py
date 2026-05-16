@@ -1,27 +1,25 @@
-"""Integration tests for the MergePreflight pipeline stage — BON-519 Knight B.
+"""Integration tests for the MergePreflight pipeline stage.
 
-Per Sage memo bon-519-sage-20260428T033101Z.md:
-- §D-CL.2 (lines 911-916) — Knight B integration contract.
-- §D6 (lines 526-565) — composition-root integration (standard_build()
-  inserts merge_preflight stage; steward.depends_on rewired).
-- §A Q6 line 156 — pre_existing_debt ALLOW-WITH-ANNOTATION (ratified).
-- §D8 lines 660-669 — integration test classes + counts.
+Contract coverage:
+    - Integration boundary between MergePreflight and the surrounding
+      pipeline (Wizard → MergePreflight → Steward).
+    - Composition-root integration: ``standard_build()`` inserts the
+      ``merge_preflight`` stage; ``steward.depends_on`` is rewired
+      accordingly.
+    - The ALLOW-WITH-ANNOTATION path for pre-existing debt.
 
 Scenarios locked:
 1. TestSinglePRHappyPath — preflight green -> pipeline reaches Steward.
 2. TestSinglePRBlocksOnFailure — preflight returns FAILED with
    error_type='pure_warrior_bug' -> pipeline halts at merge_preflight.
-3. TestSiblingBatchEnumWidening — THE S007 reproduction. Two synthetic
-   PRs configured via mock; classifier returns CROSS_WAVE_INTERACTION;
-   pipeline halts.
-4. TestPreExistingDebtAllowed — Q6 ALLOW-WITH-ANNOTATION; preflight
+3. TestSiblingBatchEnumWidening — the cross-PR enum-widening
+   reproduction. Two synthetic PRs configured via mock; classifier
+   returns CROSS_WAVE_INTERACTION; pipeline halts.
+4. TestPreExistingDebtAllowed — ALLOW-WITH-ANNOTATION; preflight
    returns COMPLETED with META_PREFLIGHT_TEST_DEBT_NOTED=True; pipeline
    reaches Steward (does NOT halt).
-5. TestStandardWorkflowRegistersPreflight — standard_build() plan
-   contains the new stage; steward.depends_on == ['merge_preflight'].
-
-All tests MUST FAIL on first run: MergePreflightHandler does not yet
-exist on disk; standard_build() does not yet register the stage.
+5. TestStandardWorkflowRegistersPreflight — ``standard_build()`` plan
+   contains the new stage; ``steward.depends_on == ['merge_preflight']``.
 """
 
 from __future__ import annotations
@@ -170,8 +168,9 @@ def _build_plan_with_preflight() -> WorkflowPlan:
     """Mini plan: bard -> wizard -> merge_preflight -> steward.
 
     Drops scout/knight/warrior/prover (pure backend stages) for test
-    speed; the contract is preserved at the wizard->merge_preflight->
-    steward slice which is what BON-519 introduces.
+    speed; the contract is preserved at the
+    wizard -> merge_preflight -> steward slice that the merge-
+    preflight stage introduces.
     """
     return WorkflowPlan(
         name="preflight_integration",
@@ -278,8 +277,8 @@ class TestSinglePRBlocksOnFailure:
 class TestSiblingBatchEnumWidening:
     """Two synthetic in-temp-repo PRs configured via mock; preflight applies
     both diffs, pytest fails, classifier returns CROSS_WAVE_INTERACTION;
-    pipeline halts. This is the BON-342 + BON-345 incident captured as a
-    regression test."""
+    pipeline halts. This is a regression test for the historical
+    cross-PR enum-widening incident."""
 
     async def test_cross_wave_interaction_blocked(self) -> None:
         """Sage §D-CL.2 line 913: pipeline halts; result.failed_stage ==

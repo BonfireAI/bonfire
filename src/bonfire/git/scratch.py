@@ -8,11 +8,11 @@ worktrees live under ``.bonfire-worktrees/preflight/``, are created on
 ephemeral branches with an 8-hex random suffix (race-safety), and ALWAYS
 get torn down on context exit (try/finally guarantee).
 
-Per Sage memo bon-519-sage-20260428T033101Z.md §D3 (lines 298-350):
+Contract:
     - Path format:   ``<repo>/.bonfire-worktrees/preflight/pr-<N>-<8-hex>/``
     - Branch format: ``bonfire/preflight-pr-<N>-<8-hex>``
     - Reuses ``_run_git`` from ``bonfire.git.workflow`` (no new subprocess).
-    - Reuses ``WORKTREE_DIR`` from ``bonfire.git.worktree`` (line 21).
+    - Reuses ``WORKTREE_DIR`` from ``bonfire.git.worktree``.
     - ``__aexit__`` MUST swallow exceptions during cleanup (logs only).
       Otherwise a cleanup failure masks the original handler error.
 

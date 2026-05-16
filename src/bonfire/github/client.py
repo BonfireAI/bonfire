@@ -37,9 +37,9 @@ class PRInfo(BaseModel, frozen=True, extra="forbid"):
 class PRSummary(BaseModel, frozen=True, extra="forbid"):
     """Lightweight open-PR summary used by the merge-preflight stage.
 
-    Sage memo bon-519-sage-20260428T033101Z.md §D5 lines 498-504. Returned
-    by :py:meth:`GitHubClient.list_open_prs`. Frozen so the sibling-batch
-    detector can store instances inside ``frozenset`` keys without worry.
+    Returned by :py:meth:`GitHubClient.list_open_prs`. Frozen so the
+    sibling-batch detector can store instances inside ``frozenset``
+    keys without worry.
 
     Fields map to ``gh pr list --json number,headRefName,title,files``:
         ``headRefName -> head_branch`` and ``files[].path -> file_paths``.
@@ -247,7 +247,6 @@ class GitHubClient:
     ) -> list[PRSummary]:
         """List open PRs targeting *base*. Optionally exclude a PR number.
 
-        Sage memo bon-519-sage-20260428T033101Z.md §D5 lines 478-491.
         Invokes ``gh pr list -R <repo> --base <base> --state open --json
         number,headRefName,title,files``. Returns parsed
         :class:`PRSummary` instances.

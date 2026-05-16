@@ -62,9 +62,11 @@ The PyPI package is `bonfire-ai`; the installed console script is
 #     idempotent — re-running `bonfire init` does not duplicate the line)
 bonfire init .
 
-# Launch the browser-based onboarding scan
-# (pass `--conversation-timeout SECONDS` to extend the default 5-minute cap,
-# or `--conversation-timeout 0` to wait indefinitely)
+# Launch The Front Door — WS-driven onboarding scan
+# (a local browser tab auto-opens by default; pass `--no-browser` to run
+# headless and drive the WebSocket yourself, e.g. with a websocat client.
+# Pass `--conversation-timeout SECONDS` to extend the default 5-minute cap,
+# or `--conversation-timeout 0` to wait indefinitely.)
 bonfire scan
 
 # Inspect cumulative cost and recent sessions

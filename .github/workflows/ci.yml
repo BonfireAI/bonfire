@@ -31,5 +31,8 @@ jobs:
           ruff check src/ tests/
           ruff format --check src/ tests/
 
+      - name: Protocol-doc citation drift check
+        run: python scripts/check_protocol_doc_citations.py
+
       - name: Test
         run: pytest tests/ -x --tb=short

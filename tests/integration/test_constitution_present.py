@@ -61,9 +61,7 @@ def test_constitution_file_exists() -> None:
     IS present — but the explicit assertion documents the contract for
     a reader.
     """
-    assert CLAUDE_MD.is_file(), (
-        f"Expected bonfire-public/CLAUDE.md at {CLAUDE_MD}, file not found."
-    )
+    assert CLAUDE_MD.is_file(), f"Expected bonfire-public/CLAUDE.md at {CLAUDE_MD}, file not found."
 
 
 @pytest.mark.parametrize("heading", REQUIRED_HEADINGS)

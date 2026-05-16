@@ -140,18 +140,21 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # --- README.md — predecessor-persona breadcrumb -----------------
         # Two-line breadcrumb pointing readers at docs/_lore/passelewe.md
         # per history-is-sacred. Names the retired persona explicitly
-        # (line 278) and the lore-page path (line 279) so the lineage
+        # (line 280) and the lore-page path (line 281) so the lineage
         # is discoverable. W9 Lane B (H2): line numbers shifted from
         # 271/272 → 278/279 when the dead ``--persona`` example was
         # removed and replaced by a multi-line explanatory note.
+        # W11 Lane C: shifted 278/279 → 280/281 when the quickstart
+        # inline comment grew from "browser-based" to the longer
+        # Front Door / WS-driven framing.
         (
             "README.md",
-            278,
+            280,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            279,
+            281,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----

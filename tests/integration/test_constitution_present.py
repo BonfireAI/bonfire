@@ -44,7 +44,6 @@ REQUIRED_HEADINGS: tuple[str, ...] = (
     "## Release Policy and Gates",
     "## v0.1 Branch Protection",
     "## For External Contributors",
-    "## Links Upward",
 )
 
 # Ratified target band: 350–450 lines. Allow ±50 line slack (300–500)

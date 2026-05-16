@@ -140,16 +140,16 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # --- README.md — predecessor-persona breadcrumb -----------------
         # Two-line breadcrumb pointing readers at docs/_lore/passelewe.md
         # per history-is-sacred. Names the retired persona explicitly
-        # (line 252) and the lore-page path (line 253) so the lineage
+        # (line 271) and the lore-page path (line 272) so the lineage
         # is discoverable.
         (
             "README.md",
-            252,
+            271,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            253,
+            272,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -182,16 +182,6 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Operator-local paths in the "Links Upward" section. They tell
         # readers where the workspace coordinator and forge constitution
         # live in the operator's checkout. Path refs, not person refs.
-        (
-            "CLAUDE.md",
-            379,
-            "- **Workspace coordinator:** `/home/ishtar/Projects/CLAUDE.md` (operator-local;",
-        ),
-        (
-            "CLAUDE.md",
-            382,
-            "- **Forge constitution:** `ishtar/CLAUDE.md` (operator-local; in the `ishtar/`",
-        ),
         # --- docs/release-gates.md — release-train lifecycle diagram ----
         # Sample feature-branch path in the release-train lifecycle
         # diagram. Defensive entry: the regex's word boundaries do not

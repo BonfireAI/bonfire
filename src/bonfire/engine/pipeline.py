@@ -132,17 +132,62 @@ class PipelineEngine:
         completed: dict[str, Envelope] | None = None,
         initial_envelope: Envelope | None = None,
     ) -> PipelineResult:
-        """Execute a workflow plan. NEVER raises -- returns PipelineResult."""
+        """Execute a workflow plan. NEVER raises -- returns PipelineResult.
+
+        Outer-exception branch (everything not caught by an inner per-stage
+        try/except) emits :class:`PipelineFailed` BEFORE returning the
+        failed result. Wave 11 Lane D closes the bus-vs-``PipelineResult``
+        parity gap on this halt branch: without the emit, every observer
+        subscribed to ``PipelineFailed`` (``CostLedgerConsumer``,
+        ``DisplayConsumer``, ``XPConsumer``) silently missed the halt;
+        the persisted ledger had no row, the CLI showed nothing, and the
+        XP calculator never penalized the run.
+        """
         sid = session_id or uuid4().hex[:12]
         start = time.monotonic()
+        # Pre-seed the completed dict so the outer-exception branch can
+        # report ``stages_completed = len(seen_so_far)``. The dict is
+        # passed by reference into ``_run_inner`` which mutates it as
+        # stages finish, so by the time the outer ``except`` catches an
+        # exception the count reflects every stage that completed before
+        # the halt fired.
+        stages_seen: dict[str, Envelope] = dict(completed or {})
         try:
-            return await self._run_inner(plan, sid, completed or {}, start, initial_envelope)
+            return await self._run_inner(plan, sid, stages_seen, start, initial_envelope)
         except Exception as exc:  # noqa: BLE001
             duration = time.monotonic() - start
+            error_msg = str(exc)
+            # Best-effort total_cost reconstruction from whatever stages
+            # the inner loop managed to populate before the exception
+            # fired. ``sum(env.cost_usd for env in stages_seen.values())``
+            # matches the engine accumulator on the success path.
+            total_cost = sum(env.cost_usd for env in stages_seen.values())
+            await self._emit(
+                PipelineFailed(
+                    session_id=sid,
+                    sequence=0,
+                    failed_stage="",
+                    error_message=error_msg,
+                    total_cost_usd=total_cost,
+                    # Sentinel: outer-exception halts cannot name a
+                    # specific bounce-target handler. ``__outer__`` is
+                    # distinct from ``None`` (which the schema uses for
+                    # non-bounce halt branches) and from a real handler
+                    # name (which the bounce-target branch sets).
+                    # Operators reading the bus can grep for ``__outer__``
+                    # to distinguish outer-exception halts from every
+                    # other halt shape.
+                    failed_handler="__outer__",
+                    duration_seconds=duration,
+                    stages_completed=len(stages_seen),
+                )
+            )
             return PipelineResult(
                 success=False,
                 session_id=sid,
-                error=str(exc),
+                stages=stages_seen,
+                total_cost_usd=total_cost,
+                error=error_msg,
                 duration_seconds=duration,
             )
 
@@ -156,8 +201,17 @@ class PipelineEngine:
         start: float,
         initial_envelope: Envelope | None = None,
     ) -> PipelineResult:
-        """The real pipeline execution logic."""
-        stages_done: dict[str, Envelope] = dict(completed)
+        """The real pipeline execution logic.
+
+        The caller (``run``) passes a mutable ``completed`` dict that
+        this method MUTATES in place as stages finish. On the
+        outer-exception path (an unexpected raise here), ``run``'s
+        ``except`` branch reads the same dict to populate
+        ``PipelineFailed.stages_completed`` and reconstruct
+        ``total_cost_usd``. Re-binding to a fresh ``dict(completed)``
+        would orphan the outer's view; mutate-in-place is load-bearing.
+        """
+        stages_done: dict[str, Envelope] = completed
         # Resume path: pre-completed stages already incurred cost in their
         # original run. Seed total_cost from them so budget accounting and
         # result.total_cost_usd reflect the full pipeline spend, not just the

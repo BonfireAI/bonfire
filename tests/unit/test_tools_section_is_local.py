@@ -667,3 +667,227 @@ class TestNoLeakInvariant:
         assert "tools" not in parsed.get("bonfire", {}), (
             f"Parsed bonfire.toml carries a tools sub-table: {parsed['bonfire']!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Pin #7 — Defense-in-depth: reader refuses symlinks at the local file path.
+# ---------------------------------------------------------------------------
+
+
+class TestLoadToolsConfigRefusesSymlinks:
+    """The reader MUST NOT follow a symlink at
+    ``.bonfire/tools.local.toml``. Same defect class as the W7.M
+    write-side guards — a planted symlink would otherwise let an
+    attacker exfiltrate an operator-readable file's bytes through the
+    reader's return value or any downstream consumer.
+
+    The reader short-circuits to ``{}`` so the caller can't even
+    distinguish "symlink present" from "file absent" — closing the
+    metadata side-channel too.
+    """
+
+    def test_load_tools_config_refuses_symlink_at_local_path(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A symlink at ``.bonfire/tools.local.toml`` MUST be refused
+        (return ``{}``) without opening or parsing the target.
+        """
+        load_tools_config = _load_tools_reader()
+
+        # Plant a real TOML file with sensitive-looking content as the
+        # symlink target. If the reader follows the symlink it will
+        # parse this file and surface its content under ``detected``.
+        decoy = tmp_path / "decoy.toml"
+        decoy.write_text('[bonfire.tools]\ndetected = ["SENSITIVE-MUST-NOT-LEAK"]\n')
+
+        local_dir = tmp_path / ".bonfire"
+        local_dir.mkdir()
+        local_path = local_dir / "tools.local.toml"
+        local_path.symlink_to(decoy)
+
+        result = load_tools_config(tmp_path)
+
+        # The defense surface: reader returns the empty mapping, NEVER
+        # the symlink target's content.
+        detected = result.get("detected") if hasattr(result, "get") else None
+        assert detected in (None, []), (
+            f"load_tools_config followed a symlink at .bonfire/tools.local.toml "
+            f"and surfaced the target's content. Got detected={detected!r}; "
+            f"expected None/[] (symlink-refusal returns empty mapping)."
+        )
+
+    def test_load_tools_config_refuses_dangling_symlink(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A dangling symlink at the local path MUST also be refused —
+        the ``is_symlink`` check is metadata-only and must catch the
+        dangling case before any open(2) attempt that would raise
+        FileNotFoundError and confuse the caller.
+        """
+        load_tools_config = _load_tools_reader()
+
+        local_dir = tmp_path / ".bonfire"
+        local_dir.mkdir()
+        local_path = local_dir / "tools.local.toml"
+        local_path.symlink_to(tmp_path / "does-not-exist.toml")
+
+        # No exception, returns empty mapping.
+        result = load_tools_config(tmp_path)
+        detected = result.get("detected") if hasattr(result, "get") else None
+        assert detected in (None, []), (
+            f"dangling-symlink case returned non-empty detected={detected!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Pin #8 — Defense-in-depth: sentinel-line label whitelist.
+# ---------------------------------------------------------------------------
+
+
+class TestToolsSentinelLabelWhitelist:
+    """``_build_tools_sentinel`` MUST drop hostile or malformed labels
+    rather than smuggle them through the single-line wire format. The
+    current ``cli_toolchain`` source emits a hard-coded shape, but the
+    defense is cheap and closes the wire-format injection surface.
+    """
+
+    def test_sentinel_drops_label_with_embedded_newline(self) -> None:
+        """A label containing a newline must NOT make it into the
+        sentinel — otherwise the comma-separated line collapses across
+        what was meant to be a single line, smuggling extra entries.
+        """
+        from bonfire.onboard.config_generator import _build_tools_sentinel
+
+        scans = [
+            _scan("cli_toolchain", "git", "x"),
+            _scan("cli_toolchain", "evil\nname", "x"),
+            _scan("cli_toolchain", "python3", "x"),
+        ]
+        sentinel = _build_tools_sentinel(scans)
+
+        assert sentinel is not None, "expected non-None sentinel"
+        assert "evil" not in sentinel, (
+            f"sentinel carried the hostile newline-bearing label: {sentinel!r}"
+        )
+        assert "\n" not in sentinel, (
+            f"sentinel contains a literal newline; wire format must be single-line: {sentinel!r}"
+        )
+        # The well-formed labels still made it through.
+        assert "git" in sentinel
+        assert "python3" in sentinel
+
+    def test_sentinel_drops_label_with_embedded_comma(self) -> None:
+        """An embedded comma must be dropped — otherwise the CSV
+        decoder on the read side splits one tool name into two synthetic
+        entries.
+        """
+        from bonfire.onboard.config_generator import _build_tools_sentinel
+
+        scans = [
+            _scan("cli_toolchain", "git", "x"),
+            _scan("cli_toolchain", "fake,smuggled", "x"),
+        ]
+        sentinel = _build_tools_sentinel(scans)
+
+        assert sentinel is not None
+        assert "smuggled" not in sentinel
+        assert "fake" not in sentinel, f"sentinel admitted a comma-bearing label; got {sentinel!r}"
+
+    def test_sentinel_drops_uppercase_and_oversize_labels(self) -> None:
+        """Labels outside the lowercase-identifier shape are dropped —
+        the whitelist is ``^[a-z][a-z0-9_-]{0,32}$``.
+        """
+        from bonfire.onboard.config_generator import _build_tools_sentinel
+
+        scans = [
+            _scan("cli_toolchain", "Git", "x"),  # capital letter
+            _scan("cli_toolchain", "x" * 50, "x"),  # too long
+            _scan("cli_toolchain", "0bad", "x"),  # leading digit
+            _scan("cli_toolchain", "python3", "x"),  # well-formed
+        ]
+        sentinel = _build_tools_sentinel(scans)
+
+        assert sentinel is not None
+        assert "Git" not in sentinel
+        assert ("x" * 50) not in sentinel
+        assert "0bad" not in sentinel
+        assert "python3" in sentinel
+
+
+# ---------------------------------------------------------------------------
+# Pin #9 — Gitignore narrowness: committable sub-paths under .bonfire/
+#          must remain stageable by default.
+# ---------------------------------------------------------------------------
+
+
+class TestInitGitignoreDoesNotOverCover:
+    """``bonfire init`` must NOT seed a gitignore entry that excludes
+    committable sub-paths under ``.bonfire/`` (sessions, context.json,
+    vault seed, opt-in cost ledger). Over-broad coverage silently
+    breaks workflows that depend on those paths landing in git.
+    """
+
+    def test_gitignore_entry_does_not_cover_bonfire_sessions(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """After init, the gitignore must NOT match
+        ``.bonfire/sessions/2026-05-15-handoff.md`` — operators commit
+        session handoffs.
+        """
+        import subprocess
+
+        from typer.testing import CliRunner
+
+        from bonfire.cli.app import app
+
+        runner = CliRunner()
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["init", "."])
+        assert result.exit_code == 0
+
+        # Use git itself to evaluate the gitignore (most authoritative).
+        # ``git check-ignore`` returns 0 when path IS ignored, 1 when
+        # NOT ignored. We want NOT ignored for these committable paths.
+        try:
+            subprocess.run(
+                ["git", "init", "-q"],
+                cwd=tmp_path,
+                check=True,
+                capture_output=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            pytest.skip("git not available")
+
+        committable_paths = [
+            ".bonfire/sessions/handoff.md",
+            ".bonfire/context.json",
+            ".bonfire/vault/seed.md",
+            ".bonfire/costs.jsonl",
+        ]
+        for rel_path in committable_paths:
+            check = subprocess.run(
+                ["git", "check-ignore", "-q", rel_path],
+                cwd=tmp_path,
+                capture_output=True,
+            )
+            # Exit code 1 = NOT ignored (good).
+            assert check.returncode == 1, (
+                f"bonfire init's .gitignore over-covers: {rel_path!r} is "
+                f"matched by the seeded entry but should remain stageable. "
+                f"Gitignore body:\n{(tmp_path / '.gitignore').read_text()}"
+            )
+
+        # Sanity: the operator-local file IS ignored.
+        check = subprocess.run(
+            ["git", "check-ignore", "-q", ".bonfire/tools.local.toml"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        assert check.returncode == 0, (
+            f"bonfire init's .gitignore did NOT cover the operator-local "
+            f"tools.local.toml file. Body:\n{(tmp_path / '.gitignore').read_text()}"
+        )

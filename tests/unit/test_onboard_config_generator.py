@@ -465,13 +465,13 @@ class TestGenerateConfigEndToEnd:
         assert bonfire["mcp"]["servers"] == [hostile]
         assert bonfire["vault"]["seed_documents"] == [hostile]
 
-        # Pin 5: cli_toolchain sanitization — the hostile tool name
-        # flows through ``_build_tools_sentinel`` (which strips
-        # comma/CR/LF) into the sentinel comment, and ``write_config``
-        # materialises ``.bonfire/tools.local.toml`` via
-        # ``_split_tools_local`` + ``_format_toml_list``. Both halves
-        # MUST produce valid TOML; the on-disk sibling MUST surface
-        # the sanitized name without smuggling structure.
+        # Pin 5: cli_toolchain whitelist — the hostile tool name fails
+        # the ``_TOOLS_LABEL_WHITELIST`` regex (lowercase identifier
+        # shape only). Under the hardened policy the label is dropped
+        # entirely rather than smuggled through with sanitised chars.
+        # With only one (rejected) cli_toolchain entry the sentinel is
+        # not emitted at all and no operator-local sibling file is
+        # written — keeping the user's tree free of empty noise.
         write_config(result.config_toml, tmp_path)
 
         # The main bonfire.toml lands without a [bonfire.tools] section
@@ -482,41 +482,14 @@ class TestGenerateConfigEndToEnd:
             f"under hostile inputs:\n{on_disk_main}"
         )
 
-        # The operator-local sibling exists and parses cleanly.
+        # The hostile label was dropped by the whitelist; no sibling
+        # file is created. The previous behaviour (strip-and-pass) would
+        # have surfaced a sanitised hostile name as a TOML value — the
+        # whitelist closes that surface entirely.
         local_path = tmp_path / ".bonfire" / "tools.local.toml"
-        assert local_path.exists(), (
-            f"write_config did not emit the operator-local tools sibling "
-            f"at {local_path} for hostile cli_toolchain input; tree: "
-            f"{sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))!r}"
-        )
-        try:
-            with local_path.open("rb") as fh:
-                local_data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
-            pytest.fail(
-                f".bonfire/tools.local.toml is not valid TOML under hostile "
-                f"input. Raw:\n{local_path.read_text()}\n\nError: {exc}"
-            )
-
-        # The hostile name flows through two sanitization layers:
-        #   1. ``_build_tools_sentinel`` strips comma/CR/LF defensively
-        #      (so the single-line sentinel wire format survives).
-        #   2. ``_format_toml_list`` runs ``escape_basic_string`` on each
-        #      name (so the on-disk TOML stays valid).
-        # The expected sibling content is exactly the hostile name with
-        # CR/LF removed (commas were not in the payload).
-        expected_sanitized = hostile.replace("\r", "").replace("\n", "")
-        detected = local_data.get("bonfire", {}).get("tools", {}).get("detected")
-        assert detected == [expected_sanitized], (
-            f"tools.local.toml lost or mangled the sanitized hostile tool "
-            f"name. Expected [{expected_sanitized!r}]; got {detected!r}"
-        )
-        # No smuggled top-level table from the hostile newline payload.
-        assert set(local_data.keys()) == {"bonfire"}, (
-            f"tools.local.toml smuggled extra top-level tables under "
-            f"hostile input: {set(local_data.keys())!r}"
-        )
-        assert set(local_data["bonfire"].keys()) == {"tools"}, (
-            f"tools.local.toml smuggled extra [bonfire.*] sub-tables "
-            f"under hostile input: {set(local_data['bonfire'].keys())!r}"
+        assert not local_path.exists(), (
+            f"write_config emitted .bonfire/tools.local.toml for a "
+            f"cli_toolchain panel whose only entry was a hostile label "
+            f"rejected by the whitelist; expected no sibling file. "
+            f"Body:\n{local_path.read_text() if local_path.exists() else '<missing>'}"
         )

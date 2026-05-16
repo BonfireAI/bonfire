@@ -32,6 +32,7 @@ silently orphaned (no warning, no mutation, no surprise reads).
 
 from __future__ import annotations
 
+import logging
 import re
 import stat
 import tomllib
@@ -46,6 +47,17 @@ if TYPE_CHECKING:
     pass
 
 __all__ = ["generate_config", "load_tools_config", "write_config"]
+
+logger = logging.getLogger(__name__)
+
+# Whitelist regex for tool labels permitted into the operator-local
+# sentinel line. ``cli_toolchain.scan`` emits identifier-shaped lowercase
+# names (``git``, ``python3``, ``node``). Anything outside the shape is
+# dropped at the sentinel-build site so a hostile or malformed label
+# cannot smuggle data through the comma-separated single-line wire
+# format — defense-in-depth even though the current emission source is
+# hard-coded.
+_TOOLS_LABEL_WHITELIST = re.compile(r"^[a-z][a-z0-9_-]{0,32}$")
 
 
 # ---------------------------------------------------------------------------
@@ -299,17 +311,27 @@ def _build_tools_sentinel(scans: list[ScanUpdate]) -> str | None:
 
     Tool names are restricted to the labels emitted by
     ``cli_toolchain.scan`` (lowercase identifier-shaped names like
-    ``git``, ``python3``). Any names containing comma/CR/LF would
-    break the single-line wire format; those characters are stripped
-    defensively.
+    ``git``, ``python3``). Defense-in-depth: each label is matched
+    against :data:`_TOOLS_LABEL_WHITELIST` before joining. Labels that
+    fail the whitelist (embedded comma/CR/LF, leading punctuation,
+    upper-case sneak-ins, anything past 33 chars) are dropped with a
+    log warning so a hostile or malformed scan event cannot smuggle
+    extra lines through the single-line wire format.
     """
     if not scans:
         return None
     cleaned: list[str] = []
     for s in scans:
-        name = s.label.replace(",", "").replace("\r", "").replace("\n", "").strip()
-        if name:
-            cleaned.append(name)
+        # ``strip`` first so trailing whitespace doesn't break the
+        # whitelist match. The whitelist itself enforces no embedded
+        # commas / control chars; we don't pre-clean those because a
+        # label that contains them is malformed and should be dropped,
+        # not silently sanitised into something the wire format accepts.
+        name = s.label.strip()
+        if not _TOOLS_LABEL_WHITELIST.match(name):
+            logger.warning("skipping malformed tool label: %r", s.label)
+            continue
+        cleaned.append(name)
     if not cleaned:
         return None
     return _TOOLS_SENTINEL_PREFIX + ",".join(cleaned)
@@ -697,13 +719,19 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     # the symlink-race branch.
     safe_write_text(target, main_toml)
 
-    # W8.G — write the operator-local tools sibling AFTER the main TOML
+    # Write the operator-local tools sibling AFTER the main TOML
     # lands. Failure here must not orphan a half-written bonfire.toml,
     # so we sequence sibling-after-main. The sibling write uses
     # ``allow_existing=True`` because re-running ``bonfire scan`` on
     # the same project (post init-stub overwrite carve-out) must
     # cleanly refresh the local tool inventory without surfacing a
     # stale-file collision.
+    #
+    # Deferred (v0.1.1): the unlink + safe_write_text pair is NOT
+    # atomic — a crash between the unlink and the create leaves the
+    # tools file absent until the next scan. Tracked separately;
+    # rollback semantics need design thought before swapping to an
+    # ``os.replace``-style sibling-write primitive.
     if tools_local_body is not None:
         local_dir = project_path / ".bonfire"
         local_dir.mkdir(exist_ok=True)
@@ -713,7 +741,11 @@ def write_config(config_toml: str, project_path: Path) -> Path:
         # ``safe_write_text`` still apply.
         if not local_target.is_symlink() and local_target.exists():
             local_target.unlink()
-        safe_write_text(local_target, tools_local_body)
+        # mode=0o600: operator-local file carries per-machine state
+        # (tool inventory + version fingerprint). Restricting to the
+        # owner reduces leakage on multi-user hosts without affecting
+        # single-user workflows.
+        safe_write_text(local_target, tools_local_body, mode=0o600)
 
     return target
 
@@ -786,19 +818,34 @@ def load_tools_config(project_path: Path) -> dict:
         operator-local file is present.
     """
     local_path = project_path / _TOOLS_LOCAL_RELPATH
-    # ``is_file`` follows symlinks; that's the correct semantic here —
-    # the reader is read-only and a symlinked tools file is the
-    # operator's choice. The write-side guards (W7.M) prevent Bonfire
-    # itself from following symlinks when WRITING, not READING.
+    # Refuse to follow symlinks on READ too — same defect class as the
+    # W7.M write-side guards. ``Path.is_file`` and ``Path.open`` both
+    # follow symlinks, which means a planted symlink at
+    # ``.bonfire/tools.local.toml -> /etc/passwd`` (or any
+    # operator-readable file the attacker wants Bonfire to slurp) would
+    # leak the target's contents into the reader's return value /
+    # downstream consumers. ``is_symlink`` does NOT follow the link, so
+    # the check is correct even against dangling targets. The reader
+    # short-circuits to ``{}`` so the caller cannot distinguish "symlink
+    # planted" from "file absent" — closing the metadata side-channel.
+    if local_path.is_symlink():
+        logger.warning("tools.local.toml at %s is a symlink; refusing to follow", local_path)
+        return {}
     if not local_path.is_file():
         return {}
     try:
         with local_path.open("rb") as fh:
             data = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError):
+    except OSError:
+        # A read failure (permission, transient I/O) should not crash
+        # the caller; treat it as absent. The operator can inspect the
+        # file directly to diagnose.
+        return {}
+    except tomllib.TOMLDecodeError as exc:
         # A malformed operator-local file should not crash the caller;
-        # treat it as absent. The operator can fix it by deleting the
-        # file and re-running ``bonfire scan``.
+        # surface a warning so the operator can find and fix it, then
+        # treat it as absent.
+        logger.warning("tools.local.toml at %s is malformed; ignoring: %s", local_path, exc)
         return {}
     bonfire = data.get("bonfire", {})
     if not isinstance(bonfire, dict):

@@ -11,22 +11,26 @@ import typer
 
 from bonfire._safe_write import safe_write_text
 
-# ``.bonfire/`` carries operator-local state (e.g. the per-machine
-# ``tools.local.toml`` written by ``bonfire scan``). The directory
-# pattern ``/.bonfire/`` covers every current and future operator-local
-# artefact under that directory in one entry, which is the simplest
-# sufficient cover per W8.G and matches the Knight contract's accepted
-# pattern set. Anchoring with a leading slash is intentional: it pins
-# the pattern to the project root so a deeply-nested directory named
-# ``.bonfire`` elsewhere in the tree is not accidentally excluded.
-_GITIGNORE_LINE = ".bonfire/"
+# ``.bonfire/`` carries a MIX of operator-local state (the per-machine
+# ``tools.local.toml`` written by ``bonfire scan``) AND artefacts that
+# ARE committable: ``.bonfire/sessions`` (handoff history),
+# ``.bonfire/context.json`` (project config), ``.bonfire/vault``
+# (knowledge backend seed), ``.bonfire/costs.jsonl`` (cost ledger, when
+# operator opts in to commit). A broad ``.bonfire/`` ignore would
+# silently exclude those committable sub-paths and break workflows that
+# depend on them landing in git. The narrower entry names the single
+# operator-local file the W8.G work introduced so other sub-paths under
+# ``.bonfire/`` remain stageable by default. The operator can still add
+# broader patterns to ``.gitignore`` by hand if they want; ``bonfire
+# init`` does not assume that policy.
+_GITIGNORE_LINE = ".bonfire/tools.local.toml"
 
 
 def _ensure_gitignore_entry(target: Path, line: str) -> None:
     """Append ``line`` to ``target/.gitignore`` iff not already present.
 
     Idempotent: re-running ``bonfire init`` MUST NOT duplicate the
-    ``.bonfire/`` entry (the no-duplicate canary pins this). The
+    operator-local entry (the no-duplicate canary pins this). The
     presence check matches a stripped/non-comment line against the
     requested entry; existing comments and blank lines are preserved.
     Creates ``.gitignore`` if absent.
@@ -55,8 +59,8 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
 
     if not gitignore_path.exists():
         # Fresh file — create with the entry and a brief header so a
-        # future contributor reading ``.gitignore`` understands why
-        # ``.bonfire/`` is excluded.
+        # future contributor reading ``.gitignore`` understands why the
+        # operator-local file is excluded.
         body = f"# Bonfire — operator-local state (do not commit).\n{line}\n"
         safe_write_text(gitignore_path, body)
         return
@@ -69,6 +73,13 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
 
     # Append on a fresh line. Ensure exactly one trailing newline before
     # the new line so we don't accumulate blank lines on repeat runs.
+    # Doc-acceptance: this read-modify-write is not protected against a
+    # concurrent ``bonfire init`` racing in the same project root. Two
+    # processes interleaving here could each see the same pre-image and
+    # both append, producing a duplicate entry. ``bonfire init`` is a
+    # one-shot operator command; the race window is small and the
+    # failure mode is benign (a duplicate line). Not worth ``fcntl.flock``
+    # complexity in v0.1.
     suffix = "" if existing.endswith("\n") else "\n"
     gitignore_path.write_text(existing + suffix + f"{line}\n")
 

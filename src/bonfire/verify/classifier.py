@@ -113,7 +113,7 @@ class ParsedDecisionLog:
     ``parse_source`` it came from. Additive: production callers today
     consume ``deps`` only; the records carry forward provenance so future
     error messages can cite the source of each defer ("decision log: dep
-    dep-X parsed from prose section but not in failing-test xfail
+    ID parsed from prose section but not in failing-test xfail
     reasons").
     """
 

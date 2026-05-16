@@ -185,8 +185,7 @@ class MergePreflightGate:
                     passed=True,
                     severity="warning",
                     message=(
-                        "Preflight passed with pre-existing test debt "
-                        "(allow-with-annotation per Q6)."
+                        "Preflight passed with pre-existing test debt (allow-with-annotation path)."
                     ),
                 )
             return GateResult(

@@ -237,6 +237,7 @@ class PipelineEngine:
                             sequence=0,
                             failed_stage="",
                             error_message=error_msg,
+                            total_cost_usd=total_cost,
                         )
                     )
                     return PipelineResult(
@@ -326,6 +327,7 @@ class PipelineEngine:
                     sequence=0,
                     failed_stage=sname,
                     error_message=error_msg,
+                    total_cost_usd=total_cost,
                 )
             )
             return (
@@ -391,6 +393,7 @@ class PipelineEngine:
                     sequence=0,
                     failed_stage=stage_name,
                     error_message=error_msg,
+                    total_cost_usd=total_cost,
                 )
             )
             return (
@@ -673,23 +676,29 @@ class PipelineEngine:
         session_id: str,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
-    ) -> tuple[Envelope, float] | None:
+    ) -> tuple[Envelope | None, float]:
         """Execute bounce-back: run target stage, then re-run original.
 
-        Returns ``(retry_envelope, cost_delta)`` if the second gate check
-        passes, where ``cost_delta`` is the FULL cost added by the bounce
-        (bounce-target cost + retry cost). The caller must credit this delta
-        to its running total so budget accounting includes the bounce target.
-        Returns None if the bounce fails or the second gate check fails
-        (bounce is single-shot; no recursion).
+        Returns ``(retry_envelope, cost_delta)`` on success, where
+        ``cost_delta`` is the FULL cost added by the bounce (bounce-target
+        cost + retry cost). The caller must credit this delta to its
+        running total so budget accounting includes the bounce target.
+
+        On every failure branch (no target configured, target lookup
+        miss, bounce-target failed, retry failed, second gate failure)
+        returns ``(None, cost_delta)`` where ``cost_delta`` reflects
+        every dollar the bounce path actually burned before halting.
+        Earlier versions returned a bare ``None`` on failure and the
+        bounce-target's cost vanished from ``PipelineResult.total_cost_usd``;
+        symmetric success/failure shape closes that accounting gap.
         """
         target_name = spec.on_gate_failure
         if not target_name:
-            return None
+            return None, 0.0
 
         target_spec = stage_map.get(target_name)
         if not target_spec:
-            return None
+            return None, 0.0
 
         # Execute bounce target.
         bounce_env = await self._execute_stage(
@@ -701,10 +710,14 @@ class PipelineEngine:
             initial_envelope,
         )
         completed[target_name] = bounce_env
-        total_cost += bounce_env.cost_usd
+        bounce_cost = bounce_env.cost_usd
+        total_cost += bounce_cost
 
         if bounce_env.status == TaskStatus.FAILED:
-            return None
+            # Bounce target itself failed -- the dollars it spent still
+            # left the wallet; surface them to the caller so budget
+            # accounting reflects the partial spend.
+            return None, bounce_cost
 
         # Re-execute the original stage.
         retry_env = await self._execute_stage(
@@ -715,19 +728,21 @@ class PipelineEngine:
             session_id,
             initial_envelope,
         )
+        retry_cost = retry_env.cost_usd
 
         if retry_env.status == TaskStatus.FAILED:
-            return None
+            return None, bounce_cost + retry_cost
 
         # Re-evaluate gates on the retried result (ONCE -- Sage D7).
         passed, _second_failure = await self._evaluate_gates(
             spec, retry_env, completed, total_cost, session_id
         )
         if not passed:
-            # Second gate failure -- halt (no infinite loops).
-            return None
+            # Second gate failure -- halt (no infinite loops). Still
+            # credit the bounce-target + retry cost to the caller.
+            return None, bounce_cost + retry_cost
 
-        return retry_env, bounce_env.cost_usd + retry_env.cost_usd
+        return retry_env, bounce_cost + retry_cost
 
     # -- Gate result handling (shared by parallel + sequential) ---------------
 
@@ -760,9 +775,13 @@ class PipelineEngine:
         if passed or gate_failure is None:
             return None, 0.0
 
-        # Try bounce-back if configured.
+        # Try bounce-back if configured. ``_handle_bounce`` now ALWAYS
+        # returns a (retry_envelope_or_none, cost_delta) tuple so the
+        # bounce-target's spend lands in the running total regardless
+        # of whether the bounce succeeded.
+        bounce_cost_delta = 0.0
         if spec.on_gate_failure:
-            bounced = await self._handle_bounce(
+            retry_env, bounce_cost_delta = await self._handle_bounce(
                 plan,
                 spec,
                 gate_failure,
@@ -772,12 +791,15 @@ class PipelineEngine:
                 stage_map,
                 initial_envelope,
             )
-            if bounced is not None:
-                retry_env, cost_delta = bounced
+            if retry_env is not None:
                 stages_done[spec.name] = retry_env
-                return None, cost_delta
+                return None, bounce_cost_delta
 
-        # Gate failure -- halt pipeline.
+        # Gate failure -- halt pipeline. Credit any cost the bounce
+        # path burned before halting so PipelineResult.total_cost_usd
+        # (and the PipelineFailed event's total_cost_usd) reflect every
+        # dollar that left the wallet.
+        total_cost += bounce_cost_delta
         duration = time.monotonic() - start
         await self._emit(
             PipelineFailed(
@@ -785,6 +807,7 @@ class PipelineEngine:
                 sequence=0,
                 failed_stage=stage_name,
                 error_message=gate_failure.message,
+                total_cost_usd=total_cost,
             )
         )
         return (

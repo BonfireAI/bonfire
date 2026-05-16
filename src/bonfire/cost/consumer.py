@@ -9,8 +9,13 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from bonfire._safe_write import safe_append_text
 from bonfire.cost.models import DEFAULT_LEDGER_PATH, DispatchRecord, PipelineRecord
-from bonfire.models.events import DispatchCompleted, PipelineCompleted
+from bonfire.models.events import (
+    DispatchCompleted,
+    PipelineCompleted,
+    PipelineFailed,
+)
 
 if TYPE_CHECKING:
     from bonfire.events.bus import EventBus
@@ -19,7 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 class CostLedgerConsumer:
-    """Subscribes to cost events and appends records to a JSONL ledger."""
+    """Subscribes to cost events and appends records to a JSONL ledger.
+
+    Subscribes to BOTH ``PipelineCompleted`` and ``PipelineFailed`` so
+    the persisted ledger reflects partial-spend on halt paths;
+    success-only persistence drops crash sessions entirely and
+    downstream analyzers overcount session success rate.
+
+    Writes route through ``bonfire._safe_write.safe_append_text`` so a
+    planted symlink at the operator-controlled ledger path is refused
+    at ``open(2)`` time (W7.M defense-in-depth parity).
+    """
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
         self._ledger_path = Path(ledger_path)
@@ -28,6 +43,7 @@ class CostLedgerConsumer:
         """Subscribe to cost-bearing events on the bus."""
         bus.subscribe(DispatchCompleted, self._on_dispatch_completed)
         bus.subscribe(PipelineCompleted, self._on_pipeline_completed)
+        bus.subscribe(PipelineFailed, self._on_pipeline_failed)
 
     async def _on_dispatch_completed(self, event: DispatchCompleted) -> None:
         record = DispatchRecord(
@@ -50,7 +66,24 @@ class CostLedgerConsumer:
         )
         self._append(record)
 
+    async def _on_pipeline_failed(self, event: PipelineFailed) -> None:
+        """Persist a ``PipelineRecord`` for halt-path runs.
+
+        ``stages_completed`` is unknown on the failure path (the event
+        does not carry the count), so the ledger row records ``0`` —
+        downstream analyzers reading the persisted total still see the
+        partial spend the run actually accrued before halting.
+        """
+        record = PipelineRecord(
+            timestamp=event.timestamp,
+            session_id=event.session_id,
+            total_cost_usd=event.total_cost_usd,
+            duration_seconds=0.0,
+            stages_completed=0,
+        )
+        self._append(record)
+
     def _append(self, record: DispatchRecord | PipelineRecord) -> None:
+        """Append *record* as a single JSONL line via the symlink-safe writer."""
         self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._ledger_path.open("a", encoding="utf-8") as fh:
-            fh.write(record.model_dump_json() + "\n")
+        safe_append_text(self._ledger_path, record.model_dump_json() + "\n")

@@ -153,6 +153,10 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
     "~/.ssh/id_",
     "~/.ssh/authorized_keys",
     "~/.ssh/known_hosts",
+    # ``~/.ssh/config`` carries Host aliases and ProxyCommand directives —
+    # a Write here can hijack ``ssh <host>`` to a different endpoint or
+    # inject a command-execution proxy.
+    "~/.ssh/config",
     # AWS
     "~/.aws/credentials",
     # GPG
@@ -185,6 +189,10 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
     # git global config — may contain ``[credential]`` helpers or embed an
     # OAuth token in URL rewrites. Treat as deny.
     "~/.gitconfig",
+    # XDG location for the global git config — modern git installs read
+    # ``~/.config/git/config`` in addition to ``~/.gitconfig`` and the
+    # same credential-helper / URL-rewrite vectors apply.
+    "~/.config/git/config",
     # Shell-rc persistence vectors. A write or append (``>>``) to any of
     # these establishes session-survival code. Match each rc file exactly
     # so neighboring docs / examples are not caught.
@@ -214,6 +222,20 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
     "/etc/passwd",
     "/etc/shadow",
     "/etc/gshadow",
+    # System cron drop-in directory — a Write into ``/etc/cron.d/`` plants
+    # a scheduled command that runs as root.
+    "/etc/cron.d/",
+    # systemd unit drop-in directory — a Write into
+    # ``/etc/systemd/system/`` plants a service the next ``daemon-reload``
+    # picks up; standard persistence vector.
+    "/etc/systemd/system/",
+    # ``/usr/local/bin/`` is the standard local-binary directory on the
+    # default ``$PATH`` — a Write here plants an executable that
+    # subsequent shell sessions invoke.
+    "/usr/local/bin/",
+    # ``/etc/ld.so.preload`` injects a shared object into every dynamically
+    # linked process at startup — classic LD_PRELOAD persistence vector.
+    "/etc/ld.so.preload",
     # /proc/<pid>/cwd and /proc/<pid>/root are kernel symlinks the
     # kernel resolves at ``open()`` time to the target process's cwd
     # / root — Writes through them bypass the home-prefix canonicalizer

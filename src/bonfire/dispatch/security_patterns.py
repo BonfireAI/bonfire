@@ -63,7 +63,11 @@ _C1_RULES: tuple[DenyRule, ...] = (
         # Absolute-path prefixes (``/tmp/``, ``/var/tmp/``, ``$TMPDIR/``, ``./``)
         # remain anchored at the start of the path argument as before.
         pattern=re.compile(
-            r"(?:^|[|;&]\s*)rm\s+(?:-[a-zA-Z]*[rRfF][a-zA-Z]*\s+)+"
+            # ``\b`` aligns C1.1 with C1.2-C1.7 so wrapper / absolute-path
+            # forms (``/bin/rm``, ``exec rm``, ``\rm``, ``time rm``,
+            # ``nice rm``, ``command rm``) cannot bypass the rule via the
+            # narrower ``(?:^|[|;&])`` anchor that earlier shipped.
+            r"\brm\s+(?:-[a-zA-Z]*[rRfF][a-zA-Z]*\s+)+"
             r"(?!"
             r"(?:/tmp/|/var/tmp/|\$TMPDIR/|\./)"
             r"|"

@@ -39,6 +39,20 @@ import time
 from bonfire.knowledge.memory import InMemoryVaultBackend
 from bonfire.protocols import VaultEntry
 
+# Scaling-benchmark sizes for ``test_ingest_does_not_scale_quadratically``.
+# Sized to make the small-n timing noise wash out: at n=10k the ratio's noise
+# tail on shared GitHub runners spiked into the 3.4-3.5x band even for a
+# correct linear-time impl, failing the gate on BOTH buggy and fixed code.
+# At n=50k the first-run still pushed 2.7x on a developer machine — too close
+# to the 3.0 cap for shared-runner comfort. At n=100k/200k the asymptotic
+# O(n²) vs O(n) separation dominates the noise — a correct impl settles
+# tightly into the ~1.9-2.3x band over 5 runs and a regression to O(n²)
+# still clears the ~4x bar by a wide margin. Bumping n (not the cap) is the
+# right knob; the < 3.0 cap stays. Total wall-clock ~3s per run on a
+# developer machine, well under the 30s test-budget ceiling.
+_INGEST_N_SMALL = 100_000
+_INGEST_N_LARGE = 200_000
+
 
 class _CountingStr(str):
     """A ``str`` that counts how many times it is compared with ``==``.
@@ -215,38 +229,54 @@ class TestIngestScalesLinearly:
         loaded machine does not flake a correct linear implementation, but a
         genuine quadratic regression (4x+) is caught.
 
-        Scale: n = 10_000. At smaller n (e.g. 4_000) the O(n²) signal does
-        not yet rise out of timing noise — both buggy and fixed
-        implementations produced a flat ~2.2x median with the same outlier
-        tail, so the cap caught flakes from BOTH equally and discriminated
-        nothing. At n=10_000 the asymptotic separation is clean:
-        characterized GREEN (set-indexed exists) shows median ~2.05x,
-        max ~2.48x over 10 runs; characterized PRE-FIX (linear-scan exists)
-        shows median ~4.09x, min ~3.57x over 5 runs. The 3.0x cap now sits
-        between two well-separated distributions instead of in their
-        overlapping noise floor. GREEN ingest of 30k entries (n + 2n)
-        completes in ~0.25s on a developer machine, so test budget is
-        preserved.
+        Scale history. n=10_000 was the original sizing: characterized GREEN
+        (set-indexed exists) showed median ~2.05x, max ~2.48x over 10 runs
+        on a developer machine; characterized PRE-FIX (linear-scan exists)
+        showed median ~4.09x, min ~3.57x over 5 runs. (Smaller n e.g. 4_000
+        produced a flat ~2.2x median for BOTH buggy and fixed — the signal
+        had not yet risen out of timing noise.)
+
+        Scale today: n = 100_000 / 2n = 200_000. On shared GitHub runners the
+        n=10_000 ratio's noise tail spiked into the 3.4-3.5x band even with
+        the linear-time fix in place, failing the gate on both buggy and
+        fixed code — i.e. the cap discriminated nothing. The right knob is
+        larger n, NOT raising the cap: asymptotic O(n) vs O(n²) behavior
+        dominates at higher n while wall-clock noise stays bounded. At
+        100k/200k the ratio sits tightly in the ~1.9-2.3x band on a
+        developer machine over 5 runs (max ratio 2.27, well below the cap)
+        and a true quadratic still clears 4x by a wide margin. The < 3.0
+        cap stays. Test wall-clock ~3s per run on a developer machine.
+
+        If CI runners ever can't budget the wall-clock cost, mark this
+        with ``@pytest.mark.slow`` rather than weakening the cap or
+        lowering n. The cap is the load-bearing invariant; n is the knob
+        that makes the cap meaningful.
         """
-        n = 10_000
+        n_small = _INGEST_N_SMALL
+        n_large = _INGEST_N_LARGE
 
         backend_n = InMemoryVaultBackend()
         start = time.perf_counter()
-        await _ingest(backend_n, n, prefix="a")
+        await _ingest(backend_n, n_small, prefix="a")
         elapsed_n = time.perf_counter() - start
 
         backend_2n = InMemoryVaultBackend()
         start = time.perf_counter()
-        await _ingest(backend_2n, 2 * n, prefix="b")
+        await _ingest(backend_2n, n_large, prefix="b")
         elapsed_2n = time.perf_counter() - start
 
         # Guard against a near-zero denominator on a very fast machine.
         floor = 1e-4
         ratio = elapsed_2n / max(elapsed_n, floor)
+        # performance: linear-time invariant. Ratio of wall-clock for 2n vs n
+        # ingest must stay sub-quadratic. ~2.0 = O(n), ~4.0 = O(n²); the 3.0
+        # cap is load-bearing — see this method's docstring for the
+        # characterization data behind the choice of cap and n.
         assert ratio < 3.0, (
-            f"Doubling ingest from {n} to {2 * n} entries took {ratio:.2f}x "
-            f"longer ({elapsed_n:.4f}s -> {elapsed_2n:.4f}s) — expected ~2x for "
-            "linear ingest; ~4x indicates the O(n²) exists()-per-entry defect"
+            f"Doubling ingest from {n_small} to {n_large} entries took "
+            f"{ratio:.2f}x longer ({elapsed_n:.4f}s -> {elapsed_2n:.4f}s) — "
+            "expected ~2x for linear ingest; ~4x indicates the O(n²) "
+            "exists()-per-entry defect"
         )
 
     async def test_ten_thousand_entry_ingest_completes_under_cap(self) -> None:

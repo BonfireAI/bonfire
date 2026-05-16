@@ -126,9 +126,7 @@ class TestIsInitStubPredicate:
             "predicate must recognize init's exact byte-for-byte output as a stub"
         )
 
-    def test_is_init_stub_tolerates_trailing_newline(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_tolerates_trailing_newline(self, tmp_path: Path, _is_init_stub) -> None:
         """#2 — Predicate tolerates an editor adding a trailing newline / CRLF.
 
         Two benign normalizations: a Windows checkout adding ``\\r\\n``
@@ -148,13 +146,9 @@ class TestIsInitStubPredicate:
         )
 
         toml_path.write_bytes(b"[bonfire]\n   \t  \n")
-        assert _is_init_stub(toml_path) is True, (
-            "predicate must tolerate trailing ASCII whitespace"
-        )
+        assert _is_init_stub(toml_path) is True, "predicate must tolerate trailing ASCII whitespace"
 
-    def test_is_init_stub_rejects_one_added_key(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_rejects_one_added_key(self, tmp_path: Path, _is_init_stub) -> None:
         """#3 — A single added key means the user has customized; NOT a stub.
 
         Headline test: one ``name = "demo"`` line is enough to fall out
@@ -167,9 +161,7 @@ class TestIsInitStubPredicate:
             "predicate must refuse a stub-plus-one-key file as user-customized"
         )
 
-    def test_is_init_stub_rejects_added_comment(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_rejects_added_comment(self, tmp_path: Path, _is_init_stub) -> None:
         """#4 — A leading comment is a user customization; NOT a stub.
 
         Same intent as #3, but the customization is a comment line the
@@ -182,9 +174,7 @@ class TestIsInitStubPredicate:
             "predicate must refuse a leading-comment file as user-customized"
         )
 
-    def test_is_init_stub_rejects_added_section(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_rejects_added_section(self, tmp_path: Path, _is_init_stub) -> None:
         """#5 — A second section means past the stub stage; NOT a stub."""
         toml_path = tmp_path / "bonfire.toml"
         toml_path.write_bytes(b'[bonfire]\n[bonfire.git]\nremote = "origin"\n')
@@ -229,17 +219,13 @@ class TestIsInitStubPredicate:
 
         result = _is_init_stub(toml_path)
 
-        assert result is False, (
-            "predicate must refuse a > 64-byte file regardless of leading bytes"
-        )
+        assert result is False, "predicate must refuse a > 64-byte file regardless of leading bytes"
         assert called["count"] == 0, (
             f"size gate must short-circuit BEFORE read_bytes; "
             f"got read_bytes call count = {called['count']}"
         )
 
-    def test_is_init_stub_refuses_to_follow_symlinks(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_refuses_to_follow_symlinks(self, tmp_path: Path, _is_init_stub) -> None:
         """#7 — Symlinks return False even when the target is byte-perfect.
 
         The broader O_NOFOLLOW write-defense story is owned by the
@@ -264,9 +250,7 @@ class TestIsInitStubPredicate:
             "predicate must refuse symlinks even when the target is the exact stub"
         )
 
-    def test_is_init_stub_refuses_dangling_symlink(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_refuses_dangling_symlink(self, tmp_path: Path, _is_init_stub) -> None:
         """#8 — A dangling symlink returns False without raising.
 
         Pairs with the O_NOFOLLOW work in the adjacent symlink-reject
@@ -286,9 +270,7 @@ class TestIsInitStubPredicate:
             "predicate must refuse a dangling symlink without raising"
         )
 
-    def test_is_init_stub_refuses_non_regular_file(
-        self, tmp_path: Path, _is_init_stub
-    ) -> None:
+    def test_is_init_stub_refuses_non_regular_file(self, tmp_path: Path, _is_init_stub) -> None:
         """#9 — Directory at the bonfire.toml path returns False, no raise.
 
         A directory entry where a regular file is expected must be
@@ -335,9 +317,7 @@ class TestWriteConfigOverwriteStub:
             "write_config must overwrite the init stub with the new content"
         )
 
-    def test_write_config_refuses_overwrite_when_user_customized(
-        self, tmp_path: Path
-    ) -> None:
+    def test_write_config_refuses_overwrite_when_user_customized(self, tmp_path: Path) -> None:
         """#11 — Prior overwrite guard preserved for user-customized content.
 
         This pin mirrors ``test_write_config_existing_bonfire_toml_raises``
@@ -378,9 +358,7 @@ class TestWriteConfigOverwriteStub:
         existing.write_bytes(EXPECTED_INIT_BYTES)
         monkeypatch.chdir(tmp_path)
 
-        with patch(
-            "bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock
-        ) as mock_run:
+        with patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = None
             result = runner.invoke(app, ["scan", "--no-browser"])
 
@@ -411,9 +389,7 @@ class TestWriteConfigOverwriteStub:
         existing.write_text(original)
         monkeypatch.chdir(tmp_path)
 
-        with patch(
-            "bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock
-        ) as mock_run:
+        with patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = None
             result = runner.invoke(app, ["scan", "--no-browser"])
 
@@ -468,9 +444,7 @@ class TestQuickstartIntegration:
         # Step 2: scan. chdir so scan's cwd-based bonfire.toml lookup
         # finds the stub. Mock _run_scan so we don't bind a real socket.
         monkeypatch.chdir(tmp_path)
-        with patch(
-            "bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock
-        ) as mock_run:
+        with patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = None
             result_scan = runner.invoke(app, ["scan", "--no-browser"])
 
@@ -508,9 +482,7 @@ class TestQuickstartIntegration:
 
         # Step 3: scan must refuse — file is no longer a stub.
         monkeypatch.chdir(tmp_path)
-        with patch(
-            "bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock
-        ) as mock_run:
+        with patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = None
             result_scan = runner.invoke(app, ["scan", "--no-browser"])
 

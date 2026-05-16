@@ -89,7 +89,36 @@ def init(
 ) -> None:
     """Initialize a new Bonfire project."""
     target = Path(project_dir).resolve()
-    target.mkdir(parents=True, exist_ok=True)
+
+    # ``target.mkdir(parents=True, exist_ok=True)`` raises a raw
+    # ``FileExistsError`` when ``target`` already exists as a non-directory
+    # (regular file, symlink to a file, FIFO, etc.). Every other
+    # operator-controlled write path in this command emits a tailored
+    # ``typer.echo(..., err=True)`` + ``raise typer.Exit(code=1)`` (see the
+    # symlink branches at ``bonfire.toml`` and ``.gitignore`` below).
+    # Mirror that pattern here so the operator gets an actionable message
+    # instead of a Python traceback. ``Path.exists`` follows symlinks, so
+    # a symlink-to-regular-file is also caught.
+    if target.exists() and not target.is_dir():
+        typer.echo(
+            f"Error: target path {target} exists and is not a directory. "
+            "Remove it or choose a different path and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        # Defense-in-depth for permission errors and exotic FS conditions
+        # (read-only mount, ENOSPC, ELOOP from a symlink cycle in a parent,
+        # etc.). The exact OSError subclass varies by platform; the
+        # operator-facing message stays uniform.
+        typer.echo(
+            f"Error: could not create directory {target}: {exc}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
 
     toml_path = target / "bonfire.toml"
     # ``Path.exists()`` follows symlinks, so a dangling symlink at

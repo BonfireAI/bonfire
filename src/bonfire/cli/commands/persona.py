@@ -12,6 +12,7 @@ from pathlib import Path
 
 import typer
 
+from bonfire._safe_write import safe_write_text
 from bonfire.persona._toml_writer import emit_persona_assignment
 from bonfire.persona.loader import PersonaLoader
 
@@ -87,6 +88,20 @@ def persona_set(
 
     persona_line = emit_persona_assignment(name)
 
+    # Refuse symlinks at bonfire.toml — both branches below (read+mutate
+    # OR fresh-stub) end with a write_text that would follow a symlink
+    # and open the attacker-controlled target in write mode. We refuse
+    # at the top so neither branch can leak. ``Path.is_symlink()`` does
+    # NOT follow the link (unlike ``exists()``), so a dangling symlink
+    # planted to redirect the write is correctly identified here.
+    if toml_path.is_symlink():
+        typer.echo(
+            f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+            "or overwrite a symlinked config. Remove the symlink and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     if toml_path.exists():
         content = toml_path.read_text()
         # Replace persona key ONLY in the [bonfire] section
@@ -114,8 +129,14 @@ def persona_set(
         else:
             # No [bonfire] section — append it
             content += f"\n[bonfire]\n{persona_line}\n"
+        # ``allow_existing=True`` — we read this file's content one
+        # line above and are deliberately rewriting it. The symlink
+        # refusal is unconditional inside ``safe_write_text``; only
+        # the existing-file refusal is gated by this flag.
+        safe_write_text(toml_path, content, allow_existing=True)
     else:
         content = f"[bonfire]\n{persona_line}\n"
-
-    toml_path.write_text(content)
+        # Fresh write — keep O_EXCL semantics so a regular file racing
+        # in between is_symlink() and the open is still refused.
+        safe_write_text(toml_path, content)
     typer.echo(f"Persona set to: {name}")

@@ -10,11 +10,11 @@ conversation profile dict. Each config value is annotated with its source
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from bonfire._safe_write import safe_write_text
 from bonfire.onboard.protocol import ConfigGenerated, ScanUpdate
 from bonfire.persona._toml_writer import escape_basic_string
 
@@ -514,11 +514,25 @@ def write_config(config_toml: str, project_path: Path) -> Path:
         collision. No ``--force`` flag in v0.1.
     """
     target = project_path / "bonfire.toml"
-    # is_symlink() MUST be checked before exists(). Path.exists() follows
-    # symlinks, so a dangling symlink would satisfy ``exists() == False``
-    # and slip through to the writer — which would then open the symlink
-    # TARGET in write mode. Refuse any symlink (dangling, live, or loop).
+    # The symlink + overwrite refusal is delegated to ``safe_write_text``,
+    # which centralises the W7.M two-layer defense (is_symlink() pre-check
+    # + O_NOFOLLOW + O_EXCL) across all of v0.1's operator-controlled
+    # write sites. See :mod:`bonfire._safe_write` for the full contract.
+    #
+    # The only piece kept here is the init-stub overwrite carve-out
+    # (so the README quickstart ``init && scan`` composes): when the
+    # existing file is the byte-for-byte init stub we unlink it before
+    # invoking ``safe_write_text``, which then takes the fresh-create
+    # path (``allow_existing=False`` / O_EXCL). The collision-message
+    # contract — ``FileExistsError`` mentioning the path ``bonfire.toml``
+    # for regular-file collisions, and the literal substring ``symlink``
+    # for symlinked collisions — is preserved by the helper because the
+    # path passed in always contains the ``bonfire.toml`` segment.
     if target.is_symlink():
+        # Stay on the dedicated symlink branch so the message text and
+        # log-grep contract from W7.M (``bonfire.toml at {target} is a
+        # symlink. Refusing to follow or overwrite...``) is preserved
+        # verbatim — downstream operators may grep on this exact prefix.
         msg = (
             f"bonfire.toml at {target} is a symlink. Refusing to follow or "
             "overwrite a symlinked config. Remove the symlink and re-run."
@@ -527,8 +541,8 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     if target.exists():
         if _is_init_stub(target):
             # The byte-for-byte stub from ``bonfire init`` is overwritable.
-            # ``O_EXCL`` below refuses any existing file, so the stub must
-            # be unlinked here before the create-exclusive open.
+            # ``O_EXCL`` inside ``safe_write_text`` refuses any existing
+            # file, so the stub must be unlinked here first.
             target.unlink()
         else:
             msg = (
@@ -536,48 +550,11 @@ def write_config(config_toml: str, project_path: Path) -> Path:
                 "overwrite. Remove or move the existing file and re-run."
             )
             raise FileExistsError(msg)
-    # Defense-in-depth: O_CREAT | O_EXCL refuses an existing file
-    # atomically (closing the TOCTOU window against the exists() check
-    # above); O_NOFOLLOW refuses a symlink at open(2) time (closing the
-    # TOCTOU window against the is_symlink() check). If a concurrent
-    # process plants either between the checks and this open, the kernel
-    # rejects with EEXIST (regular file race) or ELOOP / ENOTDIR-class
-    # error (symlink race) — translated below to ``FileExistsError`` with
-    # a "symlink" message so callers get a uniform contract.
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-    try:
-        fd = os.open(target, flags, 0o644)
-    except FileExistsError:
-        # Race: a regular file appeared between the exists() check and
-        # this open. Re-raise with the same message contract.
-        msg = (
-            f"bonfire.toml already exists at {target}. Refusing to "
-            "overwrite. Remove or move the existing file and re-run."
-        )
-        raise FileExistsError(msg) from None
-    except OSError as exc:
-        # Race: a symlink appeared between the is_symlink() check and
-        # this open — O_NOFOLLOW makes open(2) fail with ELOOP on Linux
-        # / EMLINK on some BSDs. Re-raise as FileExistsError with a
-        # "symlink" message so the caller contract is uniform.
-        msg = (
-            f"bonfire.toml at {target} is a symlink (detected at open via "
-            f"O_NOFOLLOW: {exc.strerror or exc}). Refusing to follow or "
-            "overwrite a symlinked config. Remove the symlink and re-run."
-        )
-        raise FileExistsError(msg) from exc
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(config_toml)
-    except Exception:
-        # Regular write failures clean up so we leave no half-written file.
-        # Interpreter-shutdown signals (KeyboardInterrupt, SystemExit) are
-        # intentionally NOT caught here: the kernel will close the file
-        # descriptor on process exit, and a partial bonfire.toml is a
-        # recoverable situation the user can inspect and remove themselves.
-        try:
-            target.unlink()
-        except OSError:
-            pass
-        raise
+    # ``safe_write_text`` defaults to ``allow_existing=False`` (O_EXCL)
+    # + always-O_NOFOLLOW + half-written-file cleanup, matching the
+    # W7.M inline implementation. The helper raises FileExistsError on
+    # TOCTOU symlink/regular-file races between the pre-checks above
+    # and the open(2); its message includes the literal "symlink" for
+    # the symlink-race branch.
+    safe_write_text(target, config_toml)
     return target

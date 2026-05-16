@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from bonfire._safe_write import safe_write_text
 from bonfire.models.envelope import Envelope  # noqa: TC001 -- Pydantic needs runtime access
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,15 @@ class CheckpointManager:
         tmp_path = self._dir / f"{session_id}.json.tmp"
 
         payload = json.dumps(data.model_dump(mode="json"), indent=2)
-        tmp_path.write_text(payload)
+        # ``Path.write_text`` follows symlinks: a malicious symlink at
+        # ``{session_id}.json.tmp`` (operator-controlled name via
+        # ``session_id``) would redirect the JSON payload to the
+        # symlink target — arbitrary-write primitive. Route through
+        # ``safe_write_text`` which refuses any symlink at the path
+        # and uses O_NOFOLLOW defense-in-depth. The tmp path may
+        # legitimately exist from a previous failed run; the original
+        # contract was to overwrite, so ``allow_existing=True``.
+        safe_write_text(tmp_path, payload, allow_existing=True)
         os.replace(str(tmp_path), str(final_path))
 
         return final_path

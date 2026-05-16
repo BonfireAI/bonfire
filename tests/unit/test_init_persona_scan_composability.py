@@ -138,24 +138,24 @@ class TestIsInitStubWideningStaysNarrow:
         # build the fixture as a real config so the test pins semantic
         # refusal even if a future implementation widens the size cap.
         configured = (
-            "[bonfire]\n"
-            "# Project identity\n"
-            'name = "demo-project"\n'
-            "\n"
-            "[bonfire.persona]\n"
-            "# Derived from conversation\n"
-            'companion_mode = "falcor"\n'
-            "\n"
-            "[bonfire.project]\n"
-            "# Derived from scan: project_structure panel\n"
-            'primary_language = "python"\n'
-            'framework = "fastapi"\n'
-            "\n"
-            "[bonfire.git]\n"
-            "# Derived from scan: git_state panel\n"
-            'remote = "https://github.com/example/demo"\n'
-            'branch = "main"\n'
-        ).encode()
+            b"[bonfire]\n"
+            b"# Project identity\n"
+            b'name = "demo-project"\n'
+            b"\n"
+            b"[bonfire.persona]\n"
+            b"# Derived from conversation\n"
+            b'companion_mode = "falcor"\n'
+            b"\n"
+            b"[bonfire.project]\n"
+            b"# Derived from scan: project_structure panel\n"
+            b'primary_language = "python"\n'
+            b'framework = "fastapi"\n'
+            b"\n"
+            b"[bonfire.git]\n"
+            b"# Derived from scan: git_state panel\n"
+            b'remote = "https://github.com/example/demo"\n'
+            b'branch = "main"\n'
+        )
         toml_path.write_bytes(configured)
 
         assert _is_init_stub(toml_path) is False, (

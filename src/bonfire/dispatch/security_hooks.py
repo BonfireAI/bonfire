@@ -170,7 +170,23 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
     "/etc/passwd",
     "/etc/shadow",
     "/etc/gshadow",
+    # /proc/<pid>/cwd and /proc/<pid>/root are kernel symlinks the
+    # kernel resolves at ``open()`` time to the target process's cwd
+    # / root — Writes through them bypass the home-prefix canonicalizer
+    # entirely. The matcher cannot see through the symlink, so any
+    # Write/Edit into /proc/<pid>/{cwd,root}/ is refused regardless of
+    # the suffix. ``self`` is the alias for the calling process.
+    # Matching is done via a literal prefix for the ``self`` form plus
+    # a regex for the numeric-pid form — see _match_write_edit_proc_bypass.
+    "/proc/self/cwd/",
+    "/proc/self/root/",
 )
+
+
+# /proc/<pid>/cwd/ and /proc/<pid>/root/ — numeric-pid variants of the
+# symlink-bypass family. The literal ``self`` aliases are handled via the
+# prefix list above; the numeric-pid forms need a regex match.
+_PROC_NUMERIC_BYPASS_RE = re.compile(r"^/proc/[0-9]+/(?:cwd|root)/")
 
 
 # Public exported reasons keep the SecurityDenied pattern_id slug stable
@@ -202,17 +218,26 @@ _HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+|/Users/[^/]+|[A-Za-z]:/Use
 _MULTI_SLASH_RE = re.compile(r"/{2,}")
 
 
-def _resolve_dot_segments(path: str) -> str:
+def _resolve_dot_segments(path: str) -> tuple[str, bool]:
     """Resolve ``.`` and ``..`` segments in ``path``.
 
     Walks ``path`` segment-wise, dropping ``.`` and popping the predecessor
     on ``..``. The anchor (``~/``, ``/``, or none for relative paths) is
     preserved and acts as a floor — a ``..`` that would pop past the anchor
-    is dropped (clamped), so adversarial inputs like
+    is dropped (clamped) and the underflow is reported via the second
+    return value. Adversarial inputs like
     ``/home/alice/Documents/../.ssh/id_rsa`` collapse to ``~/.ssh/id_rsa``
-    after the home substitution, while ``/etc/sudoers/../passwd`` collapses
-    to ``/etc/passwd`` — both reaching the deny-prefix scan in their
-    canonical form.
+    after the home substitution (no underflow), while
+    ``/etc/sudoers/../passwd`` collapses to ``/etc/passwd`` (no
+    underflow) — both reach the deny-prefix scan in their canonical form.
+
+    Returns ``(canonical_path, underflowed)`` where ``underflowed`` is
+    True if any ``..`` segment would have popped past the anchor floor.
+    Cross-user escapes like ``/home/alice/../bob/.ssh/id_rsa`` substitute
+    to ``~/../bob/.ssh/id_rsa`` and trip the underflow flag — the caller
+    must treat underflow as deny because the kernel resolves the original
+    path to a different user's home, defeating the alice-anchored deny
+    scan.
 
     Empty segments (from accidental trailing slashes) are also dropped.
     """
@@ -220,7 +245,7 @@ def _resolve_dot_segments(path: str) -> str:
         anchor = "~/"
         tail = path[2:]
     elif path == "~":
-        return "~"
+        return "~", False
     elif path.startswith("/"):
         anchor = "/"
         tail = path[1:]
@@ -229,18 +254,22 @@ def _resolve_dot_segments(path: str) -> str:
         tail = path
     if "/" not in tail and tail not in (".", ".."):
         # Fast path: a single segment that is not itself a dot-segment.
-        return anchor + tail
+        return anchor + tail, False
     resolved: list[str] = []
+    underflowed = False
     for seg in tail.split("/"):
         if seg == "" or seg == ".":
             continue
         if seg == "..":
             if resolved:
                 resolved.pop()
-            # Else: ``..`` underflows past the anchor — clamp by dropping.
+            else:
+                # ``..`` underflows past the anchor — clamp by dropping
+                # but flag the escape so the caller can refuse.
+                underflowed = True
             continue
         resolved.append(seg)
-    return anchor + "/".join(resolved)
+    return anchor + "/".join(resolved), underflowed
 
 
 def _canonicalize_write_edit_path(file_path: str) -> str:
@@ -274,9 +303,31 @@ def _canonicalize_write_edit_path(file_path: str) -> str:
     Dot-segment resolution MUST run AFTER the home substitution so the
     ``~/`` anchor (rather than the literal ``/home/<user>/``) is the
     clamp boundary — this keeps adversarial ``../`` traversal inside the
-    home prefix scope of the deny matcher.
+    home prefix scope of the deny matcher. ``..`` segments that would
+    escape past the anchor are flagged as underflow; the matcher
+    (``_match_write_edit_sensitive_path``) treats underflow as a
+    cross-user / cross-root escape attempt and denies. See
+    ``_resolve_dot_segments`` for details.
 
     /root/ is NOT canonicalized — it has its own dedicated deny prefix.
+
+    Returns the canonical path string. Underflow information is lost on
+    this return path; callers that need to refuse on underflow must use
+    ``_canonicalize_write_edit_path_with_underflow`` instead.
+    """
+    canonical, _ = _canonicalize_write_edit_path_with_underflow(file_path)
+    return canonical
+
+
+def _canonicalize_write_edit_path_with_underflow(file_path: str) -> tuple[str, bool]:
+    """Internal variant that also reports anchor underflow.
+
+    Returns ``(canonical, underflowed)``. ``underflowed`` is True when
+    the dot-segment walk would have escaped past the home (or filesystem
+    root) anchor — a cross-user / cross-root traversal attempt. The
+    matcher uses this to refuse adversarial inputs whose kernel resolution
+    would land in a DIFFERENT user's home (e.g.
+    ``/home/alice/../bob/.ssh/id_rsa``).
     """
     s = file_path
     if s.startswith("./"):
@@ -292,22 +343,45 @@ def _canonicalize_write_edit_path(file_path: str) -> str:
     # ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
     s = _MULTI_SLASH_RE.sub("/", s)
     s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
-    s = _resolve_dot_segments(s)
-    return s
+    s, underflowed = _resolve_dot_segments(s)
+    return s, underflowed
 
 
 def _match_write_edit_sensitive_path(file_path: str) -> bool:
     """Return True if ``file_path`` resolves under any deny prefix.
 
-    Also covers the ``.env`` family — the matcher is split into two passes:
-    1. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
-    2. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
+    Also covers the ``.env`` family and the ``..`` cross-user / cross-root
+    escape family. The matcher runs the following passes:
+
+    1. Numeric-pid /proc symlink-bypass match on the post-backslash-normalize
+       form (``/proc/<pid>/cwd/`` or ``/proc/<pid>/root/``). The literal
+       ``/proc/self/...`` aliases are in the prefix list below.
+    2. Canonicalize the path. If dot-segment resolution underflowed past the
+       anchor (cross-user / cross-root traversal attempt), refuse — the
+       kernel resolves the original path to a DIFFERENT user's home or to
+       a path outside any deny prefix entirely.
+    3. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
+    4. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
        segment-anchored — ``/path/to/.env`` matches, ``/path/env.txt``
        does not, ``/path/.env_example.txt`` does not).
     """
     if not file_path:
         return False
-    canonical = _canonicalize_write_edit_path(file_path)
+    # Numeric-pid /proc symlink bypass — the prefix list catches the
+    # literal ``self`` aliases; the numeric forms need a regex. Run on a
+    # backslash-normalized form so a Windows-shape input bearing
+    # ``\\proc\\12345\\cwd\\...`` still matches. Pure-POSIX inputs are
+    # unaffected.
+    proc_probe = file_path.replace("\\", "/") if "\\" in file_path else file_path
+    proc_probe = _MULTI_SLASH_RE.sub("/", proc_probe)
+    if _PROC_NUMERIC_BYPASS_RE.match(proc_probe):
+        return True
+    canonical, underflowed = _canonicalize_write_edit_path_with_underflow(file_path)
+    if underflowed:
+        # Cross-user / cross-root escape attempt — kernel resolves the
+        # original path to a target the alice-anchored deny scan can't see.
+        # Refuse outright. Fail-CLOSED is the v0.1 contract.
+        return True
     for prefix in WRITE_EDIT_SENSITIVE_PATH_DENY:
         if canonical.startswith(prefix):
             return True

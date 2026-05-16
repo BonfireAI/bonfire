@@ -1,34 +1,21 @@
-"""RED sweep test — no stale ``BON-NNN`` refs in ``src/bonfire/`` (BON-353).
-
-Locks in audit items **B1, B2, B3** from the BON-353 doc-polish audit
-(``docs/audit/scout-reports/bon-353-audit-20260427T164458Z.md``).
+"""Sweep test — no internal-tracker refs in ``src/bonfire/``.
 
 Walks every ``.py`` file under ``src/bonfire/`` and scans for the regex
-``BON-\\d+``. Any hit that is NOT in the explicit allowlist below is an
-offender — the Warrior must scrub it (or, if it's a legitimate citation
-of canonical decision authority, extend the allowlist with rationale).
+``<TKT>-\\d+`` (with ``<TKT>`` matching the internal-tracker prefix).
+Any hit that is NOT in the explicit allowlist below is an offender —
+the comment must be scrubbed or rewritten as plain English.
 
 The allowlist is keyed by ``(relative_path, line_number,
 expected_substring_prefix)``. The substring prefix is matched against
 the START of the offending line (after stripping). Mismatch on any
 field causes the test to fail — i.e. if a code edit shifts a citation
 to a new line number, the allowlist must be re-confirmed too. That's
-the durability we want: every BON-NNN ref in source costs an explicit
-allowlist entry.
+the durability we want: every internal-tracker ref in source costs an
+explicit allowlist entry.
 
-Expected RED-state failures at HEAD (Warrior must scrub these):
-
-  * ``src/bonfire/protocols.py:74``                — ``BON-338`` (audit B1)
-  * ``src/bonfire/dispatch/security_hooks.py:1``    — ``BON-338`` (audit B2)
-  * ``src/bonfire/dispatch/security_patterns.py:1`` — ``BON-338`` (audit B3)
-
-Allowlisted (legitimate sweep-guard / decision-authority citations):
-
-  * ``src/bonfire/cli/app.py:16``                  — ``BON-345`` sweep-guard
-  * ``src/bonfire/cli/commands/persona.py:14``     — ``BON-345`` sweep-guard
-  * ``src/bonfire/analysis/models.py`` (BON-347)   — Sage decision/Wave
-    citations carried over from the BON-347 port; canonical authority
-    pointers, not task-pointer rot.
+Currently empty: the source tree is clean. The allowlist machinery is
+preserved so a future legitimate citation (e.g. an external-tracker
+shape we DO want to encode) can land with an explicit rationale.
 
 Reads files on disk only — no subprocess.
 """
@@ -55,50 +42,7 @@ _BON_REF = re.compile(r"BON-\d+")
 # whitespace at line start is normalised. This couples the allowlist tightly
 # to the actual source — a legitimate edit elsewhere in the file is fine, but
 # a change to the ref-bearing line itself forces a fresh review.
-_ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
-    {
-        # --- BON-345 sweep-guards retired in v0.1.0a1 ----------------
-        # Falcor became the shipped default persona; the literal was no
-        # longer banned, so the obfuscation hack was removed and these
-        # allowlist entries with it.
-        # --- BON-347 analysis port (canonical Sage / Wave citations) --
-        (
-            "analysis/models.py",
-            47,
-            '"""Frozen budget of Cartographer tunables (BON-226 §5)."""',
-        ),
-        (
-            "analysis/models.py",
-            67,
-            "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
-        ),
-        (
-            "analysis/models.py",
-            97,
-            '"``min_length=1`` so an external caller (BON-231 composition root, "',
-        ),
-        (
-            "analysis/models.py",
-            109,
-            "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
-        ),
-        (
-            "analysis/models.py",
-            209,
-            "# BON-303 Wave 3a.4 — discovered gaps for DiscoveredIntentSource.",
-        ),
-        (
-            "analysis/models.py",
-            217,
-            "# BON-294 Wave 2c.1 A10 — reject v1 cache blobs so Wave 2b cache",
-        ),
-        (
-            "analysis/models.py",
-            225,
-            '"""Gzip-compressed JSON — BON-231 Wave 2b cache seam.',
-        ),
-    }
-)
+_ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset()
 
 
 def _iter_python_files(root: Path) -> list[Path]:

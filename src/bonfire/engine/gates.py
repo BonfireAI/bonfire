@@ -157,14 +157,15 @@ class CostLimitGate:
 class MergePreflightGate:
     """Gate adapter for :class:`MergePreflightHandler` envelopes.
 
-    Per Sage memo bon-519-sage-20260428T033101Z.md §D-CL.1 lines 845-848,
-    §D-CL.6 #5 (line 1071), and §A Q6 (ALLOW-WITH-ANNOTATION ratified).
+    Maps the four ``MergePreflightHandler`` envelope shapes onto the
+    standard ``passed`` / ``severity`` gate vocabulary.
 
     Severity table:
         - COMPLETED + clean metadata
               -> ``passed=True, severity="info"``
         - COMPLETED + ``META_PREFLIGHT_TEST_DEBT_NOTED is True``
-              -> ``passed=True, severity="warning"`` (Q6)
+              -> ``passed=True, severity="warning"`` (allow-with-annotation
+              path for pre-existing test debt)
         - FAILED with ``error_type`` ∈ {cross_wave_interaction,
           pure_warrior_bug, pytest_collection_error, merge_conflict}
               -> ``passed=False, severity="error"``

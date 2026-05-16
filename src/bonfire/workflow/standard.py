@@ -45,8 +45,8 @@ def standard_build() -> WorkflowPlan:
 
     Three on_gate_failure bounces target the warrior (from prover,
     sage_correction_bounce, and wizard). MergePreflight runs full-suite
-    pytest against the simulated merged tip before the merge button
-    (Sage memo ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
+    pytest against the simulated merged tip before the merge button so
+    cross-PR interaction defects are caught before merge, not after.
     """
     return WorkflowPlan(
         name="standard_build",

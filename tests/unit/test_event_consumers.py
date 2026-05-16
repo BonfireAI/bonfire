@@ -372,13 +372,32 @@ class TestDisplayConsumerContract:
         consumer = DisplayConsumer(callback=sync_cb)
         assert consumer is not None
 
-    def test_register_subscribes_to_exactly_four_event_types(self, mock_callback, bus):
-        """Exactly four event types receive a display handler."""
+    def test_register_subscribes_to_expected_event_types(self, mock_callback, bus):
+        """The display consumer subscribes to exactly the operator-facing
+        state-transition event types.
+
+        Originally four (``StageCompleted``, ``StageFailed``,
+        ``QualityFailed``, ``CostBudgetWarning``); Wave 11 Lane A added
+        the three halt-branch / budget-broken signals so operators
+        driving the CLI see a visible message on the most important
+        transitions: pipeline completion, pipeline halt, and budget
+        exceeded.
+        """
+        from bonfire.models.events import PipelineCompleted, PipelineFailed
+
         consumer = DisplayConsumer(callback=mock_callback)
         consumer.register(bus)
 
         subscribed_types = {k for k, v in bus._typed.items() if len(v) > 0}
-        expected = {StageCompleted, StageFailed, QualityFailed, CostBudgetWarning}
+        expected = {
+            StageCompleted,
+            StageFailed,
+            QualityFailed,
+            CostBudgetWarning,
+            PipelineCompleted,
+            PipelineFailed,
+            CostBudgetExceeded,
+        }
         assert subscribed_types == expected
 
 

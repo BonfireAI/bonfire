@@ -55,17 +55,22 @@ class XPConsumer:
     async def _handle_pipeline_failed(self, event: PipelineFailed) -> None:
         """Bus handler for pipeline failures — applies XP penalty or respawn.
 
-        PipelineFailed carries failed_stage and error_message but no
-        stages_completed count. We synthesize a minimal PipelineCompleted
-        to reuse the existing on_pipeline_completed logic with success=False.
+        Wave 11 Lane A grew ``PipelineFailed`` to carry
+        ``stages_completed`` (M7) and ``duration_seconds`` (M3),
+        symmetric with ``PipelineCompleted``. Forwarding both lets the
+        XP calculator distinguish a stage-1 failure (no progress) from
+        a stage-19 failure (nearly complete) — the penalty / respawn
+        logic is sensitive to progress made before the halt.
+
+        We still build a ``PipelineCompleted``-shaped wrapper so the
+        existing ``on_pipeline_completed`` logic stays the single path.
         """
-        # Synthesize a PipelineCompleted-compatible event for the XP path
         compat = PipelineCompleted(
             session_id=event.session_id,
             sequence=event.sequence,
-            total_cost_usd=0.0,
-            duration_seconds=0.0,
-            stages_completed=0,
+            total_cost_usd=event.total_cost_usd,
+            duration_seconds=event.duration_seconds,
+            stages_completed=event.stages_completed,
         )
         await self.on_pipeline_completed(compat, success=False, stages_failed=1)
 

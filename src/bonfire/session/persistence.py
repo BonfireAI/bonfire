@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
 from bonfire._safe_write import safe_append_text
 from bonfire.models.events import BonfireEvent  # noqa: TC001 — runtime use for model_dump()
 
@@ -37,12 +38,32 @@ class SessionPersistence:
         safe_append_text(path, line + "\n")
 
     def read_events(self, session_id: str) -> list[dict]:
-        """Read all events for a session. Raises FileNotFoundError if missing."""
+        """Read all events for a session. Raises FileNotFoundError if missing.
+
+        Uses ``safe_read_capped_text`` (W7.M read-side helper) to refuse
+        symlinks at the JSONL path via ``is_symlink()`` pre-check +
+        ``O_NOFOLLOW`` defense-in-depth, and to cap reads at
+        ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
+        ``safe_append_text`` write-side hardening on ``append_event``:
+        Wave 9 closed the write half of the operator-controlled JSONL
+        attack surface; this closes the read half.
+
+        Distinguish missing-file (legitimate "session never ran") from
+        symlink/oversize refusal (security signal) by ``Path.exists()``
+        BEFORE the safe-read call. ``Path.exists()`` follows symlinks,
+        so a dangling symlink at the JSONL path returns ``False`` and
+        would otherwise be reported as "no session file" — masking the
+        attack. Use ``Path.is_symlink()`` first to route any symlink
+        (live, dangling, looping) into the safe-read helper, which
+        raises ``FileExistsError`` with the W7.M ``"symlink"`` log-grep
+        substring.
+        """
         path = self._session_path(session_id)
-        if not path.exists():
+        if not path.is_symlink() and not path.exists():
             msg = f"No session file: {path}"
             raise FileNotFoundError(msg)
-        lines = path.read_text().strip().splitlines()
+        text = safe_read_capped_text(path, max_bytes=MAX_CHECKPOINT_BYTES)
+        lines = text.strip().splitlines()
         return [json.loads(line) for line in lines]
 
     def list_sessions(self) -> list[str]:

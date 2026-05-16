@@ -12,9 +12,16 @@ from pathlib import Path
 
 import typer
 
+from bonfire._safe_read import safe_read_capped_text
 from bonfire._safe_write import safe_write_text
 from bonfire.persona._toml_writer import emit_persona_assignment
 from bonfire.persona.loader import PersonaLoader
+
+# Hard byte cap on the bonfire.toml read in ``persona set``. The file
+# carries a small TOML config; 1 MiB is comfortably beyond any honest
+# payload while bounding the damage from a planted oversized file. The
+# symmetric cap appears in ``cli/commands/init.py``.
+_PERSONA_READ_MAX_BYTES: int = 1 * 1024 * 1024
 
 # Bonfire ships with Falcor as the companion persona; users can swap
 # via `bonfire persona set <name>`.
@@ -103,7 +110,34 @@ def persona_set(
         raise typer.Exit(code=1)
 
     if toml_path.exists():
-        content = toml_path.read_text()
+        # W11 M3: route through ``safe_read_capped_text`` so the read uses
+        # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
+        # between the ``is_symlink`` pre-check above and this read. The
+        # content is partially echoed back through ``re.sub`` into the
+        # subsequent ``safe_write_text(..., allow_existing=True)`` — a
+        # symlink-followed read here would mix attacker-controlled bytes
+        # into the rewritten bonfire.toml.
+        try:
+            content = safe_read_capped_text(toml_path, max_bytes=_PERSONA_READ_MAX_BYTES)
+        except FileExistsError:
+            # Race-planted symlink defeated the pre-check. Surface the
+            # operator-facing message that matches the pre-check branch.
+            typer.echo(
+                f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+                "or overwrite a symlinked config. Remove the symlink and re-run.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from None
+        except ValueError as exc:
+            # Cap-exceeded. A multi-MiB bonfire.toml is not a legitimate
+            # operator shape; refuse to mutate it rather than partial-
+            # rewriting a giant file.
+            typer.echo(
+                f"bonfire.toml at {toml_path} exceeds size cap: {exc}. "
+                "Refusing to rewrite; inspect the file and trim it.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
         # Replace persona key ONLY in the [bonfire] section
         bonfire_section = re.search(r"(\[bonfire\][^\[]*)", content, re.DOTALL)
         if bonfire_section and re.search(r"^persona\s*=", bonfire_section.group(), re.MULTILINE):

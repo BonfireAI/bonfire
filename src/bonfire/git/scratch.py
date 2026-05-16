@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import secrets
 import shutil
 from dataclasses import dataclass, field
@@ -52,6 +53,61 @@ PREFLIGHT_DIR_NAME: str = "preflight"
 
 _RANDOM_SUFFIX_BYTES: int = 4  # 4 bytes -> 8 hex chars
 _NO_PR_NUMBER_TOKEN: str = "0"
+
+# Allow-list regex for ``acquire(prefix=...)``. Hyphen + underscore +
+# alphanumerics, 1-32 chars. Same allow-list shape used elsewhere for
+# user-controlled identifiers that interpolate into file paths and git
+# refs (see ``bonfire.models.events._validate_session_id``). Refuses
+# every adversarial shape covered by the W11 M4 audit:
+#   ``..`` / ``../foo`` / ``foo/../bar`` — parent-traversal
+#   ``foo/bar`` / ``\\``                  — separators
+#   ``-leading-dash``                     — git-flag injection
+#   ``""``                                — empty
+#   ``foo\x00bar`` / ``foo\nbar``         — null + control chars
+#   ``foo bar``                           — space (shell-meaningful)
+#   ``/abs``                              — leading separator
+#   ``.`` / ``..foo``                     — dot segments / leading dot
+_PREFIX_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+
+
+def _validate_prefix(prefix: str) -> None:
+    """Reject hostile ``ScratchWorktreeFactory.acquire(prefix=...)`` kwargs.
+
+    The prefix is interpolated into two surfaces:
+
+      * Branch name: ``bonfire/{prefix}-pr-<N>-<8hex>``
+      * Filesystem path: ``<repo>/.bonfire-worktrees/{prefix}/pr-<N>-<8hex>/``
+
+    Without validation, a hostile prefix lands the worktree (and its
+    ephemeral branch) outside the ``.bonfire-worktrees/`` jail and
+    smuggles git-flag-shaped tokens into later ``git`` calls. This
+    validator enforces the allow-list shape ``^[a-zA-Z0-9_-]{1,32}$``
+    which refuses every adversarial shape covered in the W11 M4
+    contract: ``..``, ``/``, ``\\``, leading ``-``, leading ``.``,
+    empty, null bytes, control chars, spaces, dots, and length
+    overflow.
+
+    Additionally rejects ``-leading-dash`` shapes that the regex above
+    already catches but are called out explicitly here so the error
+    message names the git-flag-injection concern (parallel to
+    :func:`bonfire.git.workflow._validate_ref_name`).
+    """
+    if not _PREFIX_RE.match(prefix) or prefix.startswith("-"):
+        # The leading-``-`` check is layered on top of the regex because
+        # the allow-list permits ``-`` mid-token (``valid-prefix``) but
+        # MUST refuse it at position 0 — a leading dash on the branch
+        # name produces ``bonfire/-...`` which downstream ``git branch``
+        # / ``git worktree`` calls interpret as a flag (mirrors the
+        # explicit guard in :func:`bonfire.git.workflow._validate_ref_name`).
+        msg = (
+            f"invalid scratch worktree prefix {prefix!r}: must match "
+            f"{_PREFIX_RE.pattern} AND not start with '-' (alphanumerics, "
+            "'_', '-'; 1-32 chars; no leading dash). Rejected to prevent "
+            "path-traversal escape from .bonfire-worktrees/, git-flag "
+            "injection on branch names, and shell-meaningful smuggling "
+            "into downstream subprocess calls."
+        )
+        raise ValueError(msg)
 
 
 def _new_random_suffix() -> str:
@@ -111,7 +167,14 @@ class ScratchWorktreeFactory:
 
         On ``__aexit__``: removes the worktree and deletes the ephemeral
         branch. NEVER raises.
+
+        W11 M4: ``_validate_prefix`` rejects hostile ``prefix`` kwargs
+        (path-traversal, separators, git-flag-shaped, control chars,
+        empty) BEFORE the context is constructed so a malicious caller
+        cannot land the worktree outside ``.bonfire-worktrees/`` or
+        smuggle git flags into the ephemeral branch name.
         """
+        _validate_prefix(prefix)
         return ScratchWorktreeContext(
             repo_path=self._repo,
             base_ref=base_ref,

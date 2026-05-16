@@ -272,11 +272,22 @@ class TestSessionPersistenceReadEventsAdversarialPaths:
             persistence.read_events("SESS_CASE")
 
     def test_url_encoded_session_id_does_not_evade(self, safe_tmp: Path) -> None:
-        """URL-encoded session id resolving to symlinked file refused.
+        """URL-encoded session id refused at the class boundary.
 
         If a caller percent-encodes the session id and the resolved
         on-disk name still points at the planted symlink, the refusal
         must fire — the encoding shape is not a TOCTOU escape.
+
+        Wave 11 Lane B (H2): ``SessionPersistence`` now validates
+        ``session_id`` at the class boundary via
+        ``_validate_session_id_at_boundary``. The ``%`` character is
+        outside the allow-list (``^[a-zA-Z0-9_-]{1,64}\\Z``) — the
+        URL-encoded shape is rejected with ``ValueError`` BEFORE the
+        symlink defense fires, which is a strictly stronger contract
+        than the prior ``FileExistsError`` at the read site. The
+        intent of this test (the URL-encoded shape MUST NOT reach the
+        symlink target) is preserved; only the exception type shifts
+        from ``FileExistsError`` to ``ValueError``.
         """
         from bonfire.session.persistence import SessionPersistence
 
@@ -291,7 +302,7 @@ class TestSessionPersistenceReadEventsAdversarialPaths:
 
         persistence = SessionPersistence(session_dir)
 
-        with pytest.raises(FileExistsError, match="symlink"):
+        with pytest.raises(ValueError, match="session_id"):
             persistence.read_events("sess%20encoded")
 
 

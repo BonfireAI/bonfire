@@ -30,11 +30,6 @@ from bonfire import __version__
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# Bonfire ships with Falcor as the companion persona; users can swap
-# via `bonfire persona set <name>`. The `default` and `minimal` builtins
-# remain available as user-selectable alternates.
-_DEFAULT_PERSONA = "falcor"
-
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -125,15 +120,18 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
-    persona: str = typer.Option(
-        _DEFAULT_PERSONA,
-        "--persona",
-        help="Persona for CLI output formatting.",
-    ),
 ) -> None:
-    """Bonfire — AI agent orchestration framework."""
+    """Bonfire — AI agent orchestration framework.
+
+    W9 Lane B: the global ``--persona`` override was removed. No subcommand
+    in v0.1.0a2 actually reads it (the value was written to ``ctx.obj`` and
+    never consulted by any command), so its presence implied a per-command
+    override surface that did not exist. The persona is configured per
+    project via ``bonfire persona set <name>`` (writes the value into
+    ``bonfire.toml``). A per-command override flag will land when the
+    narration/output layer grows persona awareness in a later 0.1.x release.
+    """
     ctx.ensure_object(dict)
-    ctx.obj["persona"] = persona
 
 
 # ---------------------------------------------------------------------------

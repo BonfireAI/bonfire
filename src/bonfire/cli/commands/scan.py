@@ -83,6 +83,7 @@ async def _run_scan(
         from bonfire.onboard.flow import (
             BrowserDisconnectedError,
             ConversationTimeoutError,
+            MessageTooLargeError,
             run_front_door,
         )
 
@@ -111,12 +112,26 @@ async def _run_scan(
         # idempotent and runs in the ``finally`` below.
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    except MessageTooLargeError as exc:
+        # W9 Lane B (H3): the client sent a WS frame larger than the
+        # server's 8 KiB cap (just-merged W8.L defense). The server
+        # closes with WS code 1009; without this branch the user saw
+        # the generic "Browser closed" message — a misleading diagnosis
+        # that sent them back through `bonfire scan` only to hit the
+        # same wall on the same too-long answer. Surface the actionable
+        # remediation: shorten the answer. The WS cap stays at 8 KiB on
+        # purpose — it's the W8.L OOM defense, not a budget slot.
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
     except BrowserDisconnectedError as exc:
         # The browser (or scripted WS client) dropped before all three
         # onboarding answers arrived. The flow has already torn down its
         # wait-block tasks; surface a tailored remediation message and
         # exit non-zero so the user (or wrapping shell) sees a clean
         # failure rather than a Python traceback.
+        #
+        # Order matters: ``MessageTooLargeError`` subclasses this exception,
+        # so the oversize branch above MUST come first.
         typer.echo(
             "Browser closed before onboarding completed. Re-run `bonfire scan` to retry.",
             err=True,

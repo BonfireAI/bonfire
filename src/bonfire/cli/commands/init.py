@@ -121,5 +121,18 @@ def init(
     # duplicate the entry.
     _ensure_gitignore_entry(target, _GITIGNORE_LINE)
 
+    # W9 Lane B (release-gate-5: every documented surface accurate) —
+    # enumerate every artefact ``bonfire init`` creates or touches.
+    # README Quick Start enumerated only the subset (``bonfire.toml`` +
+    # ``.bonfire/``) and the prior success message hid the rest: the
+    # ``agents/`` scaffold the prompt compiler reads from, and the
+    # operator-local-state line appended to ``.gitignore``. A README
+    # reconciliation test now pins this list against the README so the
+    # two cannot drift.
     typer.echo(f"Initialized Bonfire project in {target}")
+    typer.echo("Created:")
+    typer.echo("  - bonfire.toml (project config)")
+    typer.echo("  - .bonfire/ (per-project state directory)")
+    typer.echo("  - agents/ (role-local prompt + identity-block overrides)")
+    typer.echo(f"  - .gitignore entry: {_GITIGNORE_LINE}")
     raise typer.Exit(0)

@@ -24,7 +24,15 @@ from urllib.parse import parse_qs, urlsplit
 
 from websockets.asyncio.server import Server, ServerConnection, serve
 from websockets.datastructures import Headers
+from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request, Response
+
+# Close-code 1009 == "message too big". When the ``websockets`` server
+# enforces ``max_size`` it closes the connection with this code; the
+# ``async for`` over ``websocket`` then raises ``ConnectionClosedError``
+# whose ``rcvd`` / ``sent`` carry the code. Named so a future bump of
+# the wire-level cap stays greppable.
+_WS_CLOSE_CODE_MESSAGE_TOO_BIG = 1009
 
 __all__ = ["FrontDoorServer"]
 
@@ -92,6 +100,15 @@ class FrontDoorServer:
         # launch gets a fresh window.
         self._handoff_consumed: bool = False
         self._handoff_deadline: float = 0.0
+        # W9 Lane B (H3): flips True when ``_ws_handler`` observes a
+        # client connection close with code 1009 (message-too-big). The
+        # flow layer reads this when ``shutdown_event`` fires so it can
+        # raise :class:`MessageTooLargeError` with a tailored remediation
+        # message ("max 8 KiB") instead of the generic
+        # :class:`BrowserDisconnectedError`. Stays False on normal closes
+        # (browser tab closed, client.close()), so the existing
+        # browser-disconnect surface is preserved.
+        self._oversize_disconnect: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -111,12 +128,31 @@ class FrontDoorServer:
             raise RuntimeError("client_connected is unavailable before start()")
         return self._client_connected
 
+    @property
+    def oversize_disconnect(self) -> bool:
+        """True iff the last client disconnect was an oversize close (code 1009).
+
+        Set by ``_ws_handler`` when a ``ConnectionClosed`` carrying close-code
+        1009 (message-too-big) is observed; left False on every other close
+        path (graceful disconnect, ``await ws.close()``, network drop, etc.).
+        Read by ``run_front_door`` after ``shutdown_event`` fires so an
+        oversize close is surfaced with a tailored "max 8 KiB" message
+        instead of the generic browser-disconnect message.
+
+        Reset on every ``start()`` so a re-used server instance does not
+        carry the flag across launches.
+        """
+        return self._oversize_disconnect
+
     async def start(self) -> int:
         """Start the server and return the bound port."""
         # Create the events here so they bind to the loop running start() —
         # this also rebinds them when a server instance is reused across loops.
         self._shutdown_event = asyncio.Event()
         self._client_connected = asyncio.Event()
+        # Reset the oversize-disconnect flag for the new launch so a stale
+        # value from a prior start() cannot leak into this session.
+        self._oversize_disconnect = False
         # Mint a fresh per-launch URL-safe gate token. 16 bytes of entropy
         # (~22 chars of urlsafe-base64) defeats brute-force from same-host
         # processes during the short scan lifetime. Regenerated on every
@@ -414,19 +450,44 @@ class FrontDoorServer:
         self._client_connected.set()
         self._shutdown_event.clear()
         try:
-            async for raw in websocket:
-                if not isinstance(raw, str):
-                    continue
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    logger.warning("Non-JSON WebSocket message, ignoring")
-                    continue
-                if self._on_message is not None:
+            try:
+                async for raw in websocket:
+                    if not isinstance(raw, str):
+                        continue
                     try:
-                        await self._on_message(data)
-                    except Exception:
-                        logger.exception("on_message callback failed")
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        logger.warning("Non-JSON WebSocket message, ignoring")
+                        continue
+                    if self._on_message is not None:
+                        try:
+                            await self._on_message(data)
+                        except Exception:
+                            logger.exception("on_message callback failed")
+            except ConnectionClosed as exc:
+                # W9 Lane B (H3): the ``websockets`` library raises
+                # ``ConnectionClosedError`` (a ``ConnectionClosed`` subclass)
+                # when ``max_size`` is exceeded and closes the connection
+                # with code 1009 (message-too-big). Check both ``rcvd`` (the
+                # close frame the peer sent) and ``sent`` (the close frame
+                # WE sent to terminate them) — when the server enforces
+                # ``max_size`` it is the SENT close frame that carries 1009.
+                # ``rcvd``/``sent`` may be ``None`` on truly abrupt drops;
+                # those stay on the generic-disconnect path.
+                received_code = exc.rcvd.code if exc.rcvd is not None else None
+                sent_code = exc.sent.code if exc.sent is not None else None
+                if (
+                    received_code == _WS_CLOSE_CODE_MESSAGE_TOO_BIG
+                    or sent_code == _WS_CLOSE_CODE_MESSAGE_TOO_BIG
+                ):
+                    logger.warning(
+                        "Front Door WS closed: client sent frame larger than "
+                        "%d bytes (close code 1009). Surfacing as oversize-disconnect.",
+                        _WS_MAX_FRAME_BYTES,
+                    )
+                    self._oversize_disconnect = True
+                # Normal disconnect — fall through to the finally; the
+                # generic browser-disconnect surface handles it.
         finally:
             self._clients.discard(websocket)
             if self._had_clients and not self._clients:

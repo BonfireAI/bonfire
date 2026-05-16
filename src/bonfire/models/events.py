@@ -38,7 +38,15 @@ from pydantic import BaseModel, Field, TypeAdapter, field_validator
 # The empty-string sentinel is preserved separately for ``BonfireEvent``
 # subclasses (``AxiomLoaded``) that legitimately emit outside session
 # context — see ``_validate_session_id`` below.
-_SESSION_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+#
+# The anchor MUST be ``\Z`` (true end-of-string), not ``$``.
+# In MULTILINE mode ``$`` matches at any line boundary; in default mode
+# it matches just before a single trailing ``\n``. A session_id of
+# ``abc\n`` would slip through the ``$`` form and be interpolated into
+# filesystem paths with the newline preserved (a log-injection /
+# display-corruption shape). ``\Z`` anchors at the actual end of the
+# string and refuses the trailing-newline shape outright.
+_SESSION_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}\Z")
 
 
 def _validate_session_id(value: str) -> str:

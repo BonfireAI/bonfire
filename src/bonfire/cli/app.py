@@ -180,14 +180,24 @@ def scan(
         # in that case. ``show_default=False`` hides Typer's auto-generated
         # ``[default: -1.0]`` so the help text below stays the single
         # source of truth for the user-visible default.
+        #
+        # ``metavar="SECONDS"`` masks Typer's auto-rendered
+        # ``FLOAT RANGE [x>=-1.0]`` which would otherwise leak the
+        # internal sentinel into ``--help`` output. The previous
+        # ``min=-1.0`` constraint is dropped here because it was the
+        # source of that leak; the same negative-value rejection lives
+        # in the inline ``conversation_timeout >= 0`` gate below so a
+        # ``-2`` input is silently ignored (library default governs)
+        # which is the same effect as the previous Typer range error.
         -1.0,
         "--conversation-timeout",
         help=(
             "Maximum seconds to wait for the onboarding conversation to "
-            "complete before timing out (default: 300). Pass 0 to disable."
+            "complete before timing out. Defaults to 300 seconds when "
+            "the flag is omitted; pass 0 to wait indefinitely."
         ),
-        min=-1.0,
         show_default=False,
+        metavar="SECONDS",
     ),
 ) -> None:
     """Launch The Front Door — WS-driven onboarding scan."""

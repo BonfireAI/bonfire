@@ -28,7 +28,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # fixtures (``abc123456789``, ``aaaaaaaaaaaa``). Strict enough to reject
 # ``..``, ``/``, ``\\``, null bytes, control chars, and other traversal
 # shapes.
-_ENVELOPE_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+#
+# The anchor MUST be ``\Z``. See the parallel rationale at
+# ``bonfire.models.events._SESSION_ID_RE``: ``$`` allows a trailing
+# ``\n`` to slip through, ``\Z`` does not.
+_ENVELOPE_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}\Z")
 
 # ---------------------------------------------------------------------------
 # Enums

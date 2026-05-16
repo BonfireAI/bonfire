@@ -288,8 +288,18 @@ class TestLegacyBonfireToolsMigrationWarning:
         assert result.exit_code == 0
 
         out = _strip_ansi(result.output)
-        assert "tools.local.toml" not in out, (
+        # The migration warning contains the literal phrase "legacy
+        # [bonfire.tools]" — match on that to avoid false positives from
+        # the (legitimate) ``.bonfire/tools.local.toml`` mention in the
+        # .gitignore line of the success block.
+        lowered = out.lower()
+        assert "legacy [bonfire.tools]" not in lowered, (
             f"warning must NOT fire when [bonfire.tools] is absent; got output={out!r}"
+        )
+        # Defense-in-depth: the warning prefix word ``Warning:`` (init's
+        # own warning copy) must not appear either.
+        assert "warning:" not in lowered, (
+            f"no warning line should fire on clean bonfire.toml; got output={out!r}"
         )
 
 

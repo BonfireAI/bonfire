@@ -158,7 +158,11 @@ class PipelineEngine:
     ) -> PipelineResult:
         """The real pipeline execution logic."""
         stages_done: dict[str, Envelope] = dict(completed)
-        total_cost = 0.0
+        # Resume path: pre-completed stages already incurred cost in their
+        # original run. Seed total_cost from them so budget accounting and
+        # result.total_cost_usd reflect the full pipeline spend, not just the
+        # post-resume tail.
+        total_cost = sum(env.cost_usd for env in stages_done.values())
         stage_map = self._build_stage_map(plan)
 
         # Emit PipelineStarted
@@ -298,33 +302,44 @@ class PipelineEngine:
 
                 tg.create_task(_run_one())
 
-        # Check for failures in parallel group
+        # Accumulate ALL sibling costs and record ALL envelopes BEFORE
+        # short-circuiting on any failure. Otherwise, when one parallel
+        # sibling FAILS, later siblings (in dict-iteration order) silently
+        # lose both their envelope (not added to stages_done) AND their
+        # cost (not added to total_cost). The asyncio.TaskGroup above
+        # already awaited every sibling to completion -- there is no work
+        # to cancel here, only accounting to record.
+        first_failed: tuple[str, Envelope] | None = None
         for sname, env in results.items():
             stages_done[sname] = env
             total_cost += env.cost_usd
-            if env.status == TaskStatus.FAILED:
-                duration = time.monotonic() - start
-                error_msg = env.error.message if env.error else "stage failed"
-                await self._emit(
-                    PipelineFailed(
-                        session_id=session_id,
-                        sequence=0,
-                        failed_stage=sname,
-                        error_message=error_msg,
-                    )
+            if first_failed is None and env.status == TaskStatus.FAILED:
+                first_failed = (sname, env)
+
+        if first_failed is not None:
+            sname, env = first_failed
+            duration = time.monotonic() - start
+            error_msg = env.error.message if env.error else "stage failed"
+            await self._emit(
+                PipelineFailed(
+                    session_id=session_id,
+                    sequence=0,
+                    failed_stage=sname,
+                    error_message=error_msg,
                 )
-                return (
-                    PipelineResult(
-                        success=False,
-                        session_id=session_id,
-                        stages=stages_done,
-                        total_cost_usd=total_cost,
-                        duration_seconds=duration,
-                        error=error_msg,
-                        failed_stage=sname,
-                    ),
-                    total_cost,
-                )
+            )
+            return (
+                PipelineResult(
+                    success=False,
+                    session_id=session_id,
+                    stages=stages_done,
+                    total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    error=error_msg,
+                    failed_stage=sname,
+                ),
+                total_cost,
+            )
 
         # Gate evaluation for parallel stages
         for sname, env in results.items():
@@ -436,6 +451,14 @@ class PipelineEngine:
         )
 
         last_envelope: Envelope | None = None
+        # Iterations 0..N-1 of a stage's max_iterations may each fail with
+        # a real cost charged by the backend. Without this accumulator,
+        # only the FINAL envelope's cost_usd survives -- intermediate
+        # failed-iteration spend leaks out of total_cost_usd entirely. We
+        # track the sum here and stamp the cumulative value onto the
+        # returned envelope so the caller's ``total_cost += env.cost_usd``
+        # sees every dollar this stage actually cost.
+        cumulative_iteration_cost: float = 0.0
 
         for _iteration in range(spec.max_iterations):
             # Build context
@@ -530,8 +553,14 @@ class PipelineEngine:
                 result_env = dispatch_result.envelope
 
             last_envelope = result_env
+            cumulative_iteration_cost += result_env.cost_usd
 
             if result_env.status != TaskStatus.FAILED:
+                # Stamp the cumulative cost (sum of every iteration this
+                # stage attempted) onto the returned envelope so the
+                # caller's ``total_cost += env.cost_usd`` captures every
+                # dollar, not just the successful iteration's slice.
+                final_env = result_env.model_copy(update={"cost_usd": cumulative_iteration_cost})
                 await self._emit(
                     StageCompleted(
                         session_id=session_id,
@@ -539,16 +568,19 @@ class PipelineEngine:
                         stage_name=spec.name,
                         agent_name=spec.agent_name,
                         duration_seconds=0.0,
-                        cost_usd=result_env.cost_usd,
+                        cost_usd=final_env.cost_usd,
                     )
                 )
-                return result_env
+                return final_env
 
-        # All iterations exhausted -- return final failed envelope
+        # All iterations exhausted -- return final failed envelope with
+        # the cumulative iteration cost stamped on so the budget watchdog
+        # sees every dollar burned by the exhausted retries.
         if last_envelope is None:
             last_envelope = Envelope(
                 task=spec.name or "<unnamed>", agent_name=spec.agent_name
             ).with_error(ErrorDetail(error_type="executor", message="no iterations executed"))
+        final_failed = last_envelope.model_copy(update={"cost_usd": cumulative_iteration_cost})
         await self._emit(
             StageFailed(
                 session_id=session_id,
@@ -556,11 +588,11 @@ class PipelineEngine:
                 stage_name=spec.name,
                 agent_name=spec.agent_name,
                 error_message=(
-                    last_envelope.error.message if last_envelope.error else "exhausted iterations"
+                    final_failed.error.message if final_failed.error else "exhausted iterations"
                 ),
             )
         )
-        return last_envelope
+        return final_failed
 
     # -- Gate evaluation chain -----------------------------------------------
 

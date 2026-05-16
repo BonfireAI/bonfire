@@ -577,6 +577,68 @@ class TestParallelExecution:
         result = await engine.run(_parallel_plan("g", "p1", "p2"))
         assert result.success is False
 
+    async def test_parallel_group_failure_preserves_sibling_costs(self) -> None:
+        """A FAILED sibling must NOT erase later siblings' cost or envelope.
+
+        Both parallel tasks are awaited by ``asyncio.TaskGroup`` before
+        any short-circuit decision. Previously, the post-await loop
+        short-circuited on the first FAILED result in dict-iteration
+        order; every subsequent sibling lost its envelope (not added
+        to ``stages_done``) AND its cost (not added to ``total_cost``).
+        With three siblings where the FIRST (in iteration order) fails,
+        both the bug AND the fix produce success=False -- the
+        regression-canary signal is ``total_cost_usd`` and the presence
+        of EVERY sibling's envelope in ``result.stages``.
+        """
+
+        class _PerAgentCostBackend:
+            def __init__(self, costs: dict[str, float], fail: set[str]) -> None:
+                self._costs = costs
+                self._fail = fail
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                if envelope.agent_name in self._fail:
+                    return envelope.model_copy(
+                        update={
+                            "status": TaskStatus.FAILED,
+                            "error": ErrorDetail(error_type="agent", message="boom"),
+                            "cost_usd": self._costs[envelope.agent_name],
+                        }
+                    )
+                return envelope.with_result(
+                    f"{envelope.agent_name} done",
+                    cost_usd=self._costs[envelope.agent_name],
+                )
+
+            async def health_check(self) -> bool:
+                return True
+
+        # p1 fails, p2 and p3 succeed -- but the buggy iteration short-
+        # circuits on p1 and drops p2 + p3 from accounting.
+        backend = _PerAgentCostBackend(
+            costs={"p1": 0.10, "p2": 0.20, "p3": 0.30},
+            fail={"p1"},
+        )
+        engine = _make_engine(backend=backend)
+        result = await engine.run(_parallel_plan("g", "p1", "p2", "p3"))
+
+        # All three ran (TaskGroup awaits all before short-circuit).
+        agents_called = {c.agent_name for c in backend.calls}
+        assert agents_called == {"p1", "p2", "p3"}
+
+        # Contract: every sibling's cost MUST be in total_cost_usd.
+        expected_total = 0.10 + 0.20 + 0.30
+        assert result.success is False
+        assert result.total_cost_usd == pytest.approx(expected_total), (
+            f"parallel-group short-circuit dropped sibling costs: "
+            f"expected {expected_total}, got {result.total_cost_usd}"
+        )
+
+        # Contract: every sibling's envelope MUST be in result.stages.
+        assert set(result.stages.keys()) == {"p1", "p2", "p3"}
+
 
 # ===========================================================================
 # 7. DAG — diamond & dependency ordering
@@ -667,6 +729,62 @@ class TestResume:
         )
         result = await engine.run(plan, completed={"s1": pre})
         assert result.stages["s1"].result == "cached"
+
+    async def test_resume_path_sums_completed_stage_costs(self) -> None:
+        """Resume must seed total_cost from pre-completed stages' cost_usd.
+
+        Previously, ``_run_inner`` initialized ``total_cost = 0.0``
+        unconditionally, dropping every dollar already charged by the
+        original run. The downstream budget watchdog then saw an
+        artificially low total -- a resumed run could overspend its
+        configured cap silently.
+        """
+        backend = _MockBackend(cost=0.10)
+        engine = _make_engine(backend=backend)
+        pre_a = Envelope(
+            task="t",
+            agent_name="A",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.50,
+        )
+        pre_b = Envelope(
+            task="t",
+            agent_name="B",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.30,
+        )
+        plan = _linear_plan("A", "B", "C", budget=10.0)
+        result = await engine.run(plan, completed={"A": pre_a, "B": pre_b})
+
+        # A=0.50 + B=0.30 + C=0.10 = 0.90 (was 0.10 under the bug).
+        assert result.success is True
+        assert result.total_cost_usd == pytest.approx(0.90)
+
+    async def test_resume_budget_check_respects_pre_completed_cost(self) -> None:
+        """Pre-completed cost must count toward budget on resume.
+
+        If the prior run already spent $0.80 and the budget is $1.00,
+        a resumed run that costs $0.50 more should HALT (total $1.30 >
+        budget $1.00). The bug let it succeed because total_cost
+        re-started at 0.
+        """
+        backend = _MockBackend(cost=0.50)
+        engine = _make_engine(backend=backend)
+        pre = Envelope(
+            task="t",
+            agent_name="A",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.80,
+        )
+        plan = _linear_plan("A", "B", budget=1.00)
+        result = await engine.run(plan, completed={"A": pre})
+
+        assert result.success is False
+        assert "budget" in result.error.lower()
+        assert result.total_cost_usd == pytest.approx(1.30)
 
 
 # ===========================================================================
@@ -798,7 +916,14 @@ class TestBounceBack:
         assert len(s1_calls) >= 2
 
     async def test_bounce_recovers_when_second_gate_eval_passes(self) -> None:
-        """When the re-evaluated gate passes, the pipeline continues."""
+        """When the re-evaluated gate passes, the pipeline continues.
+
+        ``_MockBackend`` charges ``cost=0.01`` per call. With the bounce,
+        the backend is called four times (fixer initial, s1 initial,
+        fixer bounce-target, s1 retry) so ``total_cost_usd`` must
+        equal ``4 * 0.01 == 0.04`` -- locks the cost-accumulation
+        contract on the bounce path even with the default backend.
+        """
         gate = _EventualPassGate()
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
@@ -818,6 +943,8 @@ class TestBounceBack:
         )
         result = await engine.run(plan)
         assert result.success is True
+        assert len(backend.calls) == 4
+        assert result.total_cost_usd == pytest.approx(0.04)
 
     async def test_bounce_without_target_halts(self) -> None:
         gate = _MockGate(passed=False, severity="error")
@@ -1028,6 +1155,101 @@ class TestIteration:
         )
         result = await engine.run(plan)
         assert result.success is False
+
+    async def test_execute_stage_sums_iteration_costs(self) -> None:
+        """Cost from each iteration must accumulate into total_cost_usd.
+
+        Previously, ``_execute_stage`` returned only the final envelope's
+        ``cost_usd`` -- intermediate failed iterations charged real
+        dollars but their cost vanished. With max_iterations=3 and two
+        failed-then-one-successful iterations, total_cost_usd must
+        equal the sum of all three iteration costs, not just the last.
+        """
+
+        class _FailTwiceThenSucceedBackend:
+            """Charges cost on every call; fails the first 2, succeeds on the 3rd."""
+
+            def __init__(self, cost_per_call: float) -> None:
+                self._cost = cost_per_call
+                self._calls: int = 0
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                self._calls += 1
+                if self._calls < 3:
+                    return envelope.model_copy(
+                        update={
+                            "status": TaskStatus.FAILED,
+                            "error": ErrorDetail(error_type="agent", message="flake"),
+                            "cost_usd": self._cost,
+                        }
+                    )
+                return envelope.with_result("ok", cost_usd=self._cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _FailTwiceThenSucceedBackend(cost_per_call=0.20)
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="i",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
+            budget_usd=10.0,
+        )
+        result = await engine.run(plan)
+
+        # All three iterations ran (fail, fail, succeed).
+        assert len(backend.calls) == 3
+        assert result.success is True
+
+        # Contract: every iteration's cost must show up in total_cost_usd.
+        # Bug: only the last iteration's $0.20 survived. Fix: $0.60 total.
+        assert result.total_cost_usd == pytest.approx(0.60), (
+            f"iteration costs dropped: expected 0.60, got {result.total_cost_usd}"
+        )
+
+    async def test_exhausted_iterations_total_cost_sums_all_iterations(self) -> None:
+        """When all iterations fail, total_cost_usd must STILL sum them.
+
+        The failed-exit branch of ``_execute_stage`` returned ``last_envelope``
+        whose ``cost_usd`` was only the final iteration's slice. Real
+        production cost leaked.
+        """
+
+        class _AlwaysFailWithCostBackend:
+            def __init__(self, cost: float) -> None:
+                self._cost = cost
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                return envelope.model_copy(
+                    update={
+                        "status": TaskStatus.FAILED,
+                        "error": ErrorDetail(error_type="agent", message="always-fail"),
+                        "cost_usd": self._cost,
+                    }
+                )
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _AlwaysFailWithCostBackend(cost=0.15)
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="i",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
+            budget_usd=10.0,
+        )
+        result = await engine.run(plan)
+
+        assert len(backend.calls) == 3
+        assert result.success is False
+        # 3 iterations * $0.15 = $0.45 (was $0.15 under the bug).
+        assert result.total_cost_usd == pytest.approx(0.45)
 
 
 # ===========================================================================

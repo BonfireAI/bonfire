@@ -133,6 +133,12 @@ class PipelineFailed(BonfireEvent):
     event_type: Literal["pipeline.failed"] = "pipeline.failed"
     failed_stage: str
     error_message: str
+    # Cumulative cost the engine accounted for through the halt point.
+    # Symmetric with ``PipelineCompleted.total_cost_usd`` so bus
+    # observers can reconstruct ``PipelineResult.total_cost_usd`` on
+    # either the success OR the failure path. Default ``0.0`` keeps
+    # legacy emitters round-tripping without raising.
+    total_cost_usd: float = 0.0
 
 
 class PipelinePaused(BonfireEvent):
@@ -196,6 +202,13 @@ class DispatchFailed(BonfireEvent):
     event_type: Literal["dispatch.failed"] = "dispatch.failed"
     agent_name: str
     error_message: str
+    # Accumulated cost the runner charged across every attempt that ran
+    # before this failure was emitted. Symmetric with
+    # ``DispatchCompleted.cost_usd`` so a single subscriber that sums
+    # both events reconstructs total dispatch spend even on flaky-but-
+    # eventually-failed paths. Default ``0.0`` keeps legacy emitters
+    # round-tripping without raising.
+    cost_usd: float = 0.0
 
 
 class DispatchRetry(BonfireEvent):

@@ -830,6 +830,61 @@ class TestEventEmission:
         assert len(failed) == 1
         assert "catastrophic" in failed[0].error_message  # type: ignore[attr-defined]
 
+    async def test_failed_event_carries_cumulative_cost_on_terminal_error(self):
+        """Terminal-error emission MUST carry the cumulative cost the
+        runner charged on the failed envelope so a bus-subscribed
+        ``CostTracker`` can reconstruct dispatch spend even on the
+        failure path.
+
+        Without this round-trip, subscribers must guess at failed-path
+        cost (today: assume zero) and the running budget silently
+        undercounts real spend.
+        """
+        bus, capture = _bus_with_capture(DispatchFailed)
+        env = _envelope(agent_name="scout")
+        failed_env = env.model_copy(
+            update={
+                "status": TaskStatus.FAILED,
+                "error": ErrorDetail(error_type="AgentError", message="refused"),
+                "cost_usd": 0.42,
+            }
+        )
+        backend = ScriptedBackend([failed_env])
+        await execute_with_retry(
+            backend, env, _options(), max_retries=3, event_bus=bus, retry_delay=0.0
+        )
+        failed = capture.of_type(DispatchFailed)
+        assert len(failed) == 1
+        assert failed[0].cost_usd == pytest.approx(0.42)  # type: ignore[attr-defined]
+
+    async def test_failed_event_carries_cumulative_cost_across_retries(self):
+        """When the runner retries a flaky FAILED envelope and ultimately
+        gives up, the emitted ``DispatchFailed.cost_usd`` MUST equal the
+        SUM of every attempt's cost, not just the last attempt's slice.
+
+        ProcessError is a retryable error type per ``runner.py``; the
+        runner cycles through ``max_retries + 1`` attempts then gives
+        up. Each attempt charges ``0.10``; the failed event must surface
+        ``0.30`` (3 attempts at $0.10).
+        """
+        bus, capture = _bus_with_capture(DispatchFailed)
+        env = _envelope(agent_name="warrior")
+        # ProcessError is retryable -> exhaust three attempts at 0.10 each.
+        failed_attempt = env.model_copy(
+            update={
+                "status": TaskStatus.FAILED,
+                "error": ErrorDetail(error_type="ProcessError", message="crash"),
+                "cost_usd": 0.10,
+            }
+        )
+        backend = ScriptedBackend([failed_attempt, failed_attempt, failed_attempt])
+        await execute_with_retry(
+            backend, env, _options(), max_retries=2, event_bus=bus, retry_delay=0.0
+        )
+        failed = capture.of_type(DispatchFailed)
+        assert len(failed) == 1
+        assert failed[0].cost_usd == pytest.approx(0.30)  # type: ignore[attr-defined]
+
     async def test_session_id_equals_envelope_id(self):
         """Events must tag themselves with the ENVELOPE id, not a fresh id,
         so external consumers can correlate across the full session."""

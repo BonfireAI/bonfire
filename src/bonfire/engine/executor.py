@@ -172,6 +172,15 @@ class StageExecutor:
         )
 
         last_envelope: Envelope | None = None
+        # Iterations 0..N-1 of a stage's max_iterations may each fail with
+        # a real cost charged by the backend. Without this accumulator,
+        # only the FINAL envelope's cost_usd survives -- intermediate
+        # failed-iteration spend leaks out of the returned envelope and,
+        # transitively, out of any caller's total. Mirror the
+        # ``PipelineEngine._execute_stage`` stamp so both stage-execution
+        # paths return envelopes with identical cumulative-cost
+        # semantics.
+        cumulative_iteration_cost: float = 0.0
 
         # Query vault advisor before dispatch (advisory, never blocking).
         known_issues = ""
@@ -201,8 +210,14 @@ class StageExecutor:
 
             # Dispatch: handler or backend
             last_envelope = await self._dispatch(stage, envelope, prior_results)
+            cumulative_iteration_cost += last_envelope.cost_usd
 
             if last_envelope.status != TaskStatus.FAILED:
+                # Stamp the cumulative cost (sum of every iteration this
+                # stage attempted) onto the returned envelope so the
+                # caller's ``total_cost += env.cost_usd`` captures every
+                # dollar, not just the successful iteration's slice.
+                final_env = last_envelope.model_copy(update={"cost_usd": cumulative_iteration_cost})
                 await self._emit(
                     StageCompleted(
                         session_id=session_id,
@@ -210,15 +225,18 @@ class StageExecutor:
                         stage_name=stage.name,
                         agent_name=stage.agent_name,
                         duration_seconds=0.0,
-                        cost_usd=last_envelope.cost_usd,
+                        cost_usd=final_env.cost_usd,
                     )
                 )
-                return last_envelope
+                return final_env
 
-        # All iterations exhausted
+        # All iterations exhausted -- return final failed envelope with
+        # the cumulative iteration cost stamped on so the budget watchdog
+        # sees every dollar burned by the exhausted retries.
         if last_envelope is None:
             # Defensive: max_iterations == 0 (shouldn't happen, but never raise)
             return self._fail_envelope(stage=stage, message="no iterations executed")
+        final_failed = last_envelope.model_copy(update={"cost_usd": cumulative_iteration_cost})
         await self._emit(
             StageFailed(
                 session_id=session_id,
@@ -226,11 +244,11 @@ class StageExecutor:
                 stage_name=stage.name,
                 agent_name=stage.agent_name,
                 error_message=(
-                    last_envelope.error.message if last_envelope.error else "exhausted iterations"
+                    final_failed.error.message if final_failed.error else "exhausted iterations"
                 ),
             )
         )
-        return last_envelope
+        return final_failed
 
     async def _dispatch(
         self,

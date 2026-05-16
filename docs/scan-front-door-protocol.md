@@ -53,7 +53,7 @@ finally calls `generate_config` and broadcasts a `config_generated` event.
 
 ## 2. Server → Client events
 
-All seven server-emitted message types are registered in the server-type
+All eight server-emitted message types are registered in the server-type
 table at `src/bonfire/onboard/protocol.py:125-133`. Each subsection below
 gives the JSON schema (key, type, required), the trigger, and a citation
 that resolves to the exact emit site.

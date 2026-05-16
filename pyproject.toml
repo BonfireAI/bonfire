@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonfire-ai"
-version = "0.1.0a3"
+version = "0.1.0a4"
 description = "An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary."
 readme = "README.md"
 license = "Apache-2.0"

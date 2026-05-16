@@ -124,7 +124,7 @@ def main(
     """Bonfire — AI agent orchestration framework.
 
     W9 Lane B: the global ``--persona`` override was removed. No subcommand
-    in v0.1.0a2 actually reads it (the value was written to ``ctx.obj`` and
+    actually reads it (the value was written to ``ctx.obj`` and
     never consulted by any command), so its presence implied a per-command
     override surface that did not exist. The persona is configured per
     project via ``bonfire persona set <name>`` (writes the value into

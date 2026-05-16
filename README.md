@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
 
-> ### Alpha — `v0.1.0a2` (install with `pip install --pre bonfire-ai`)
+> ### Alpha — `v0.1.0a4` (install with `pip install --pre bonfire-ai`)
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
 > engine, the role-bound cadre, the quality gates, the persona system,
@@ -74,7 +74,7 @@ bonfire cost
 bonfire persona list
 ```
 
-Available subcommands in `v0.1.0a2`: `init`, `scan`, `status`, `resume`,
+Available subcommands in `v0.1.0a4`: `init`, `scan`, `status`, `resume`,
 `handoff`, `persona`, `cost`. Run `bonfire --help` for the full surface
 or `bonfire <command> --help` for any single command.
 
@@ -249,7 +249,7 @@ Bonfire ships persona-driven CLI output. The persona affects
 quality standards. The cadre is what runs; the persona is what
 speaks.
 
-The default persona for `v0.1.0a2` is **Falcor** — gentle,
+The default persona for `v0.1.0a4` is **Falcor** — gentle,
 encouraging, warm. The friend who tells you not to let it
 end.[^falcor] Falcor narrates pipeline events, greets you on
 `bonfire scan`, and names lifecycle moments of the Vault.
@@ -266,7 +266,7 @@ bonfire persona set default
 ```
 
 The persona is configured per project via `bonfire persona set <name>`;
-there is no per-command override flag in `v0.1.0a2`. A per-command
+there is no per-command override flag in `v0.1.0a4`. A per-command
 override lands when the narration/output layer grows persona awareness in
 a later 0.1.x release.
 

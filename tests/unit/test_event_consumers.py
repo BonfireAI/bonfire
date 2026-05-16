@@ -545,12 +545,20 @@ class TestCostTrackerContract:
         assert tracker.total_cost_usd == 0.0
         assert isinstance(tracker.total_cost_usd, float)
 
-    def test_register_subscribes_only_to_dispatch_completed(self, bus):
+    def test_register_subscribes_to_dispatch_completed_and_failed(self, bus):
+        """``CostTracker`` dual-subscribes to success AND failure dispatch
+        events so per-attempt spend on flaky / failed paths lands in the
+        running total. Success-only accounting silently undercut the
+        budget every time a transient backend failure charged the
+        wallet before the runner gave up.
+        """
+        from bonfire.models.events import DispatchFailed
+
         tracker = CostTracker(budget_usd=10.0, bus=bus)
         tracker.register(bus)
 
         subscribed_types = {k for k, v in bus._typed.items() if len(v) > 0}
-        assert subscribed_types == {DispatchCompleted}
+        assert subscribed_types == {DispatchCompleted, DispatchFailed}
 
 
 class TestCostTrackerAccumulation:

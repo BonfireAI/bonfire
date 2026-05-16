@@ -859,6 +859,150 @@ class TestBounceBack:
         result = await engine.run(plan)
         assert result.success is False
 
+    async def test_bounce_total_cost_includes_bounce_target_cost(self) -> None:
+        """Probe N+4 H-P2 (W8.D) RED — successful bounce must NOT drop the
+        bounce-target's cost from ``result.total_cost_usd``.
+
+        ``_handle_bounce`` runs the bounce target then re-runs the original
+        stage. Today, ``_handle_gate_result`` returns only the re-executed
+        original's cost as ``cost_delta``; the bounce-target's cost is
+        accumulated into a local variable inside ``_handle_bounce`` and
+        silently discarded. ``CostLimitGate`` reads the same float, so a
+        successful bounce can carry the run over the configured budget cap
+        without being detected.
+
+        Pre-bounce cost:        s1 first run  = 0.10  (recorded by
+                                                       _run_single_stage_group)
+        Bounce target cost:     fixer re-run  = 0.50  (DROPPED by current code)
+        Post-bounce cost:       s1 retry      = 0.10  (returned as cost_delta)
+
+        Expected total:         0.70
+        Bug-induced total:      0.20  (0.10 + 0.10 — fixer's 0.50 lost)
+        """
+
+        class _PerAgentCostBackend:
+            """Backend that returns a distinct cost per agent_name."""
+
+            def __init__(self, costs: dict[str, float]) -> None:
+                self._costs = costs
+                self.calls: list[Envelope] = []
+
+            async def execute(
+                self, envelope: Envelope, *, options: DispatchOptions
+            ) -> Envelope:
+                self.calls.append(envelope)
+                cost = self._costs[envelope.agent_name]
+                return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        gate = _EventualPassGate()  # fails first eval, passes on re-eval
+        backend = _PerAgentCostBackend(costs={"fixer": 0.50, "s1": 0.10})
+        engine = _make_engine(backend=backend, gate_registry={"check": gate})
+        plan = WorkflowPlan(
+            name="bounce-cost",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(name="fixer", agent_name="fixer"),
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    gates=["check"],
+                    on_gate_failure="fixer",
+                    depends_on=["fixer"],
+                ),
+            ],
+            budget_usd=10.0,  # well above any real total so budget can't halt
+        )
+
+        result = await engine.run(plan)
+
+        # Sanity: the bounce succeeded -- both stages ran (fixer twice, s1 twice)
+        assert result.success is True
+        fixer_calls = [c for c in backend.calls if c.agent_name == "fixer"]
+        s1_calls = [c for c in backend.calls if c.agent_name == "s1"]
+        assert len(fixer_calls) == 2, f"expected fixer to run twice, got {len(fixer_calls)}"
+        assert len(s1_calls) == 2, f"expected s1 to run twice, got {len(s1_calls)}"
+
+        # Contract: every executed-stage cost must show up in total_cost_usd.
+        # Costs charged across the run:
+        #   fixer initial (DAG):   0.50
+        #   s1 initial (DAG):      0.10
+        #   fixer bounce-target:   0.50  <-- silently dropped today
+        #   s1 retry:              0.10
+        expected_total = 0.50 + 0.10 + 0.50 + 0.10
+        assert result.total_cost_usd == pytest.approx(expected_total), (
+            f"total_cost_usd dropped the bounce-target's cost: "
+            f"expected {expected_total}, got {result.total_cost_usd}"
+        )
+
+    async def test_bounce_target_cost_counted_against_budget(self) -> None:
+        """Probe N+4 H-P2 (W8.D) RED — successful bounce must NOT bypass
+        ``budget_usd`` by dropping the bounce-target's cost from accounting.
+
+        Because ``_handle_bounce`` drops the bounce-target's cost, the
+        post-bounce group-boundary budget check (pipeline.py line 227) sees
+        an undercounted total and incorrectly lets the run succeed when its
+        true cost overruns the cap. This pins the "silent bypass" framing of
+        the bug: the gate-equivalent halt never fires.
+
+        Costs (same backend wiring as the cost-accounting test above):
+            true total     = 0.50 + 0.10 + 0.50 + 0.10 = 1.20
+            buggy total    = 0.50 + 0.10 + 0.10        = 0.70 (fixer drop)
+            budget_usd     = 1.00
+
+        true > budget  -> pipeline MUST halt with success=False, "budget" err.
+        buggy <= budget -> pipeline incorrectly returns success=True (today).
+        """
+
+        class _PerAgentCostBackend:
+            def __init__(self, costs: dict[str, float]) -> None:
+                self._costs = costs
+                self.calls: list[Envelope] = []
+
+            async def execute(
+                self, envelope: Envelope, *, options: DispatchOptions
+            ) -> Envelope:
+                self.calls.append(envelope)
+                cost = self._costs[envelope.agent_name]
+                return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        gate = _EventualPassGate()
+        backend = _PerAgentCostBackend(costs={"fixer": 0.50, "s1": 0.10})
+        engine = _make_engine(backend=backend, gate_registry={"check": gate})
+        plan = WorkflowPlan(
+            name="bounce-budget-bypass",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(name="fixer", agent_name="fixer"),
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    gates=["check"],
+                    on_gate_failure="fixer",
+                    depends_on=["fixer"],
+                ),
+            ],
+            budget_usd=1.00,  # true 1.20 > 1.00 ; buggy 0.70 < 1.00
+        )
+
+        result = await engine.run(plan)
+
+        # With correct accounting, the bounce pushes total above the cap and
+        # the group-boundary budget watchdog must halt the pipeline. The bug
+        # lets it slip through with success=True.
+        assert result.success is False, (
+            "budget bypass: real total (1.20) exceeds budget (1.00) but pipeline "
+            f"reported success=True with total_cost_usd={result.total_cost_usd}"
+        )
+        assert "budget" in result.error.lower(), (
+            f"expected budget halt, got error={result.error!r}"
+        )
+
 
 # ===========================================================================
 # 11. Iteration — retry at pipeline level

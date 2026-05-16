@@ -6,12 +6,36 @@
 Builds a well-formatted TOML string from collected scan events and the
 conversation profile dict. Each config value is annotated with its source
 (scan panel or conversation question).
+
+Operator-local tools split (W8.G)
+---------------------------------
+``cli_toolchain`` scan results carry per-machine state (the operator's
+installed CLI tools + versions) and must NEVER land in the
+project-portable ``bonfire.toml``. Instead the data is persisted to a
+sibling operator-local file ``.bonfire/tools.local.toml`` that
+``bonfire init`` ``.gitignore``'s.
+
+The plumbing between :func:`generate_config` and :func:`write_config` is
+a single-line TOML comment sentinel appended to ``config_toml`` with the
+format ``# bonfire-tools-local-v1 detected=<comma-list>``. The sentinel
+is a valid TOML comment (parses cleanly, surfaces no keys), passes the
+no-``[bonfire.tools]``-header check, and is stripped from the on-disk
+``bonfire.toml`` by :func:`write_config` before the main TOML is written.
+The extracted tool list is materialised to ``.bonfire/tools.local.toml``
+as ``[bonfire.tools]\\ndetected = [...]``.
+
+Readers consult :func:`load_tools_config` which ONLY reads the
+operator-local file — never ``bonfire.toml`` — so a legacy
+``[bonfire.tools]`` section in a pre-migration ``bonfire.toml`` is
+silently orphaned (no warning, no mutation, no surprise reads).
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import stat
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,7 +46,41 @@ from bonfire.persona._toml_writer import escape_basic_string
 if TYPE_CHECKING:
     pass
 
-__all__ = ["generate_config", "write_config"]
+__all__ = ["generate_config", "load_tools_config", "write_config"]
+
+logger = logging.getLogger(__name__)
+
+# Whitelist regex for tool labels permitted into the operator-local
+# sentinel line. ``cli_toolchain.scan`` emits identifier-shaped lowercase
+# names (``git``, ``python3``, ``node``). Anything outside the shape is
+# dropped at the sentinel-build site so a hostile or malformed label
+# cannot smuggle data through the comma-separated single-line wire
+# format — defense-in-depth even though the current emission source is
+# hard-coded.
+_TOOLS_LABEL_WHITELIST = re.compile(r"^[a-z][a-z0-9_-]{0,32}$")
+
+
+# ---------------------------------------------------------------------------
+# Operator-local tools sentinel (W8.G)
+# ---------------------------------------------------------------------------
+#
+# ``generate_config`` does not know the project_path on disk; the only
+# string handed to ``write_config`` is ``config_toml``. To plumb the
+# ``cli_toolchain`` scan data through without leaking it into the
+# project-portable TOML, a single TOML comment line carries the tool
+# names from generator to writer. The format is intentionally narrow
+# (one line, fixed prefix, comma-separated names) so a regex extract
+# is total and unambiguous. The sentinel is stripped from the on-disk
+# bonfire.toml before write.
+
+_TOOLS_SENTINEL_PREFIX = "# bonfire-tools-local-v1 detected="
+_TOOLS_SENTINEL_RE = re.compile(
+    r"^# bonfire-tools-local-v1 detected=(?P<csv>[^\r\n]*)$",
+    re.MULTILINE,
+)
+
+# Path of the operator-local sibling file relative to ``project_path``.
+_TOOLS_LOCAL_RELPATH = Path(".bonfire") / "tools.local.toml"
 
 
 # ---------------------------------------------------------------------------
@@ -216,20 +274,67 @@ def _build_project(
 def _build_tools(
     scans: list[ScanUpdate],
 ) -> tuple[str, dict[str, str]] | None:
-    """Build [bonfire.tools] from cli_toolchain scan events."""
+    """No-op for the project-portable TOML (W8.G).
+
+    The ``cli_toolchain`` panel is per-machine state (operator's installed
+    CLI tools + versions). Stamping it into ``bonfire.toml`` would:
+
+    * leak the operator's tool inventory + version footprint into a
+      git-tracked file, AND
+    * make ``bonfire scan`` non-portable — two machines produce two
+      byte-different ``bonfire.toml`` files.
+
+    The data is plumbed via :func:`_build_tools_sentinel` into a
+    sentinel comment that :func:`write_config` extracts and writes to
+    ``.bonfire/tools.local.toml``. This function returns ``None``
+    unconditionally so ``generate_config`` skips the section entirely
+    for the project-portable TOML. The signature is preserved so the
+    no-leak canary in ``test_tools_section_is_local.py`` can call it
+    directly and confirm no tool data ever surfaces in the main TOML.
+    """
+    return None
+
+
+def _build_tools_sentinel(scans: list[ScanUpdate]) -> str | None:
+    """Build the operator-local tools sentinel comment line.
+
+    Returns ``None`` when ``scans`` is empty (no ``cli_toolchain``
+    events → no sibling file to seed). Otherwise returns a single
+    TOML comment line of the form::
+
+        # bonfire-tools-local-v1 detected=git,python3,node
+
+    The line is appended to ``config_toml`` so :func:`write_config`
+    can extract the tool list and materialise
+    ``.bonfire/tools.local.toml`` without changing the
+    ``write_config`` two-argument signature the Knight contract pins.
+
+    Tool names are restricted to the labels emitted by
+    ``cli_toolchain.scan`` (lowercase identifier-shaped names like
+    ``git``, ``python3``). Defense-in-depth: each label is matched
+    against :data:`_TOOLS_LABEL_WHITELIST` before joining. Labels that
+    fail the whitelist (embedded comma/CR/LF, leading punctuation,
+    upper-case sneak-ins, anything past 33 chars) are dropped with a
+    log warning so a hostile or malformed scan event cannot smuggle
+    extra lines through the single-line wire format.
+    """
     if not scans:
         return None
-
-    tool_names = [s.label for s in scans]
-    annotations: dict[str, str] = {}
-    lines = [
-        "",
-        "[bonfire.tools]",
-        "# Derived from scan: cli_toolchain panel",
-        f"detected = {_format_toml_list(tool_names)}",
-    ]
-    annotations["tools.detected"] = "Scan: cli_toolchain"
-    return "\n".join(lines), annotations
+    cleaned: list[str] = []
+    for s in scans:
+        # ``strip`` first so trailing whitespace doesn't break the
+        # whitelist match. The whitelist itself enforces no embedded
+        # commas / control chars; we don't pre-clean those because a
+        # label that contains them is malformed and should be dropped,
+        # not silently sanitised into something the wire format accepts.
+        name = s.label.strip()
+        if not _TOOLS_LABEL_WHITELIST.match(name):
+            logger.warning("skipping malformed tool label: %r", s.label)
+            continue
+        cleaned.append(name)
+    if not cleaned:
+        return None
+    return _TOOLS_SENTINEL_PREFIX + ",".join(cleaned)
 
 
 # Non-remote labels the git_state scanner emits inside the ``git_state``
@@ -458,6 +563,13 @@ def generate_config(
         all_annotations.update(anns)
 
     # Tools — from cli_toolchain panel
+    #
+    # ``_build_tools`` returns None unconditionally (W8.G); the
+    # operator-local tool inventory is routed via the sentinel comment
+    # appended after all real sections below, NOT into the main TOML.
+    # The annotation key, when present, is intentionally re-keyed to
+    # ``tools_local.detected`` so it never advertises a ``tools.detected``
+    # source that the main TOML cannot satisfy.
     tools_result = _build_tools(panels.get("cli_toolchain", []))
     if tools_result:
         text, anns = tools_result
@@ -493,6 +605,20 @@ def generate_config(
         all_annotations.update(anns)
 
     config_toml = "\n".join(sections) + "\n"
+
+    # Append the operator-local tools sentinel comment, if any
+    # cli_toolchain events were collected. ``write_config`` extracts
+    # this line, materialises ``.bonfire/tools.local.toml`` from it, and
+    # strips it from the on-disk bonfire.toml so the project-portable
+    # file stays portable. The sentinel is a valid TOML comment, so
+    # tomllib parses ``config_toml`` cleanly with or without it.
+    tools_sentinel = _build_tools_sentinel(panels.get("cli_toolchain", []))
+    if tools_sentinel is not None:
+        config_toml = config_toml + tools_sentinel + "\n"
+        # Re-key the source annotation so it advertises the operator-local
+        # file rather than a [bonfire.tools] section the main TOML no
+        # longer carries.
+        all_annotations["tools_local.detected"] = "Scan: cli_toolchain"
 
     return ConfigGenerated(
         config_toml=config_toml,
@@ -538,6 +664,16 @@ def write_config(config_toml: str, project_path: Path) -> Path:
         so log-grep can distinguish symlink refusal from regular
         collision. No ``--force`` flag in v0.1.
     """
+    # W8.G — split the operator-local tools sentinel out of ``config_toml``
+    # BEFORE the main-TOML write. The sentinel (a single comment line)
+    # is materialised to ``.bonfire/tools.local.toml``; the main TOML
+    # is written with the sentinel stripped so the project-portable
+    # file never carries per-machine state. When no sentinel is
+    # present (no cli_toolchain events were collected), the helper is
+    # a no-op and no sibling file is created — we don't pollute the
+    # user's tree with empty noise.
+    main_toml, tools_local_body = _split_tools_local(config_toml)
+
     target = project_path / "bonfire.toml"
     # The symlink + overwrite refusal is delegated to ``safe_write_text``,
     # which centralises the W7.M two-layer defense (is_symlink() pre-check
@@ -581,5 +717,140 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     # TOCTOU symlink/regular-file races between the pre-checks above
     # and the open(2); its message includes the literal "symlink" for
     # the symlink-race branch.
-    safe_write_text(target, config_toml)
+    safe_write_text(target, main_toml)
+
+    # Write the operator-local tools sibling AFTER the main TOML
+    # lands. Failure here must not orphan a half-written bonfire.toml,
+    # so we sequence sibling-after-main. The sibling write uses
+    # ``allow_existing=True`` because re-running ``bonfire scan`` on
+    # the same project (post init-stub overwrite carve-out) must
+    # cleanly refresh the local tool inventory without surfacing a
+    # stale-file collision.
+    #
+    # Deferred (v0.1.1): the unlink + safe_write_text pair is NOT
+    # atomic — a crash between the unlink and the create leaves the
+    # tools file absent until the next scan. Tracked separately;
+    # rollback semantics need design thought before swapping to an
+    # ``os.replace``-style sibling-write primitive.
+    if tools_local_body is not None:
+        local_dir = project_path / ".bonfire"
+        local_dir.mkdir(exist_ok=True)
+        local_target = local_dir / "tools.local.toml"
+        # ``allow_existing=True`` permits in-place refresh on re-scan;
+        # the symlink defense and O_NOFOLLOW guard from
+        # ``safe_write_text`` still apply.
+        if not local_target.is_symlink() and local_target.exists():
+            local_target.unlink()
+        # mode=0o600: operator-local file carries per-machine state
+        # (tool inventory + version fingerprint). Restricting to the
+        # owner reduces leakage on multi-user hosts without affecting
+        # single-user workflows.
+        safe_write_text(local_target, tools_local_body, mode=0o600)
+
     return target
+
+
+def _split_tools_local(config_toml: str) -> tuple[str, str | None]:
+    """Split ``config_toml`` into (main_toml, tools_local_body).
+
+    Extracts the operator-local tools sentinel line (if present),
+    returns the main TOML with the sentinel removed plus the rendered
+    body of ``.bonfire/tools.local.toml`` (or ``None`` when no
+    sentinel was emitted).
+
+    The sentinel format is fixed by :data:`_TOOLS_SENTINEL_PREFIX` and
+    matched by :data:`_TOOLS_SENTINEL_RE` — a single line at the end
+    of ``config_toml`` carrying a comma-separated list of tool names.
+    Empty / whitespace-only csv values yield no sibling file.
+    """
+    match = _TOOLS_SENTINEL_RE.search(config_toml)
+    if match is None:
+        return config_toml, None
+
+    csv_text = match.group("csv").strip()
+    # Strip the sentinel line (and any trailing newline that followed
+    # it) from the main TOML so the on-disk bonfire.toml never carries
+    # a hint of the per-machine data.
+    main_toml = (config_toml[: match.start()] + config_toml[match.end() :]).rstrip("\n") + "\n"
+
+    if not csv_text:
+        return main_toml, None
+
+    names = [n.strip() for n in csv_text.split(",") if n.strip()]
+    if not names:
+        return main_toml, None
+
+    body_lines = [
+        "# Operator-local tool inventory — do NOT commit.",
+        "# Auto-generated by `bonfire scan`; per-machine state.",
+        "",
+        "[bonfire.tools]",
+        f"detected = {_format_toml_list(names)}",
+        "",
+    ]
+    return main_toml, "\n".join(body_lines)
+
+
+def load_tools_config(project_path: Path) -> dict:
+    """Read the operator-local tools table for ``project_path``.
+
+    Returns the parsed ``[bonfire.tools]`` table from
+    ``<project_path>/.bonfire/tools.local.toml`` or an empty ``dict``
+    when the file is absent / unreadable / malformed.
+
+    This reader is the ONLY supported way to consult the tool
+    inventory. It NEVER falls back to ``bonfire.toml`` — a legacy
+    pre-migration ``[bonfire.tools]`` section in the main TOML is
+    silently orphaned (no warning, no migration, no surprise reads,
+    no mutation). See ``test_tools_section_is_local.py`` for the
+    full backward-compat contract.
+
+    Parameters
+    ----------
+    project_path
+        The project root containing (optionally) ``.bonfire/tools.local.toml``.
+
+    Returns
+    -------
+    dict
+        The parsed ``[bonfire.tools]`` mapping (e.g.
+        ``{"detected": ["git", "python3"]}``) or ``{}`` when no
+        operator-local file is present.
+    """
+    local_path = project_path / _TOOLS_LOCAL_RELPATH
+    # Refuse to follow symlinks on READ too — same defect class as the
+    # W7.M write-side guards. ``Path.is_file`` and ``Path.open`` both
+    # follow symlinks, which means a planted symlink at
+    # ``.bonfire/tools.local.toml -> /etc/passwd`` (or any
+    # operator-readable file the attacker wants Bonfire to slurp) would
+    # leak the target's contents into the reader's return value /
+    # downstream consumers. ``is_symlink`` does NOT follow the link, so
+    # the check is correct even against dangling targets. The reader
+    # short-circuits to ``{}`` so the caller cannot distinguish "symlink
+    # planted" from "file absent" — closing the metadata side-channel.
+    if local_path.is_symlink():
+        logger.warning("tools.local.toml at %s is a symlink; refusing to follow", local_path)
+        return {}
+    if not local_path.is_file():
+        return {}
+    try:
+        with local_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except OSError:
+        # A read failure (permission, transient I/O) should not crash
+        # the caller; treat it as absent. The operator can inspect the
+        # file directly to diagnose.
+        return {}
+    except tomllib.TOMLDecodeError as exc:
+        # A malformed operator-local file should not crash the caller;
+        # surface a warning so the operator can find and fix it, then
+        # treat it as absent.
+        logger.warning("tools.local.toml at %s is malformed; ignoring: %s", local_path, exc)
+        return {}
+    bonfire = data.get("bonfire", {})
+    if not isinstance(bonfire, dict):
+        return {}
+    tools = bonfire.get("tools", {})
+    if not isinstance(tools, dict):
+        return {}
+    return tools

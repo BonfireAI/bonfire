@@ -240,8 +240,14 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.1-cat-ssh-private-key",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes, plus the ``head`` /
+        # ``tail`` reading verbs (cat is not the only way to leak a private
+        # key). Linux ``/home/<u>/`` continues to match.
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?\.ssh[\\/]"
             r"(?:id_[a-z0-9]+(?!\.pub)\b|authorized_keys)"
         ),
         message="Reading SSH private key / authorized_keys — denied.",
@@ -249,8 +255,12 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.2-cat-aws-credentials",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/root|/home/[^/\s]+)?/?\.aws/"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?\.aws[\\/]"
             r"(?:credentials|config)\b"
         ),
         message="Reading AWS credentials — denied.",
@@ -258,16 +268,22 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.3-cat-credential-dotfile",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes. Also extended the
+        # suffix alternation to include ``gnupg/<file>`` — the gnupg
+        # credential directory was previously only caught by C4.6 (scp).
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/home/[^/\s]+)?/?"
-            r"\.(?:netrc|pgpass|docker/config\.json|kube/config)\b"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.(?:netrc|pgpass|docker/config\.json|kube/config|gnupg/\S+)"
         ),
         message="Reading a credential dotfile — denied.",
     ),
     DenyRule(
         rule_id="C4.4-cat-env-file",
         category="exfiltration",
-        pattern=re.compile(r"\bcat\s+\.env(?:\.[a-z]+)?\b"),
+        pattern=re.compile(r"\b(?:cat|head|tail)\s+\.env(?:\.[a-z]+)?\b"),
         message="Reading a .env file — denied.",
     ),
     DenyRule(
@@ -286,9 +302,13 @@ _C4_RULES: tuple[DenyRule, ...] = (
         rule_id="C4.6-scp-credential-dir",
         category="exfiltration",
         # scp/rsync/sftp touching .ssh/.aws/.gnupg anywhere in the cmdline.
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
         pattern=re.compile(
-            r"\b(?:scp|rsync|sftp)\s+.*(?:~|\$HOME|/home/[^/\s]+)?/?"
-            r"\.(?:ssh|aws|gnupg)(?:/|\b)"
+            r"\b(?:scp|rsync|sftp)\s+.*"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.(?:ssh|aws|gnupg)(?:[\\/]|\b)"
         ),
         message="scp/rsync/sftp of credential directory — denied.",
     ),
@@ -404,7 +424,14 @@ _C5_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C5.5-append-authorized-keys",
         category="priv-escalation",
-        pattern=re.compile(r">>?\s*(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/authorized_keys"),
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
+        pattern=re.compile(
+            r">>?\s*"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.ssh[\\/]authorized_keys"
+        ),
         message="Writing to ~/.ssh/authorized_keys.",
     ),
     DenyRule(

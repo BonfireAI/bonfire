@@ -39,6 +39,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from bonfire._safe_read import safe_read_capped_text
 from bonfire._safe_write import safe_write_text
 from bonfire.onboard.protocol import ConfigGenerated, ScanUpdate
 from bonfire.persona._toml_writer import escape_basic_string
@@ -834,12 +835,28 @@ def load_tools_config(project_path: Path) -> dict:
     if not local_path.is_file():
         return {}
     try:
-        with local_path.open("rb") as fh:
-            data = tomllib.load(fh)
+        # W11 M1: route through ``safe_read_capped_text`` so the read uses
+        # ``O_NOFOLLOW`` defense-in-depth. The prior ``open("rb")`` would
+        # dereference a race-planted symlink between the ``is_symlink``
+        # pre-check and the open, slurping attacker-controlled bytes into
+        # ``tomllib.load``. The 1 MiB cap matches the MCP scanner cap —
+        # legitimate ``tools.local.toml`` payloads are kilobytes at most.
+        # A symlink-at-open raises ``FileExistsError`` (an ``OSError``
+        # subclass) caught by the existing handler; a cap-exceeded read
+        # raises ``ValueError`` handled in the dedicated branch below.
+        text = safe_read_capped_text(local_path, max_bytes=1 * 1024 * 1024)
+        data = tomllib.loads(text)
+    except ValueError as exc:
+        # Cap exceeded — surface a warning and treat as absent. The
+        # operator can inspect the file directly to diagnose; this
+        # branch parallels the malformed-TOML branch below.
+        logger.warning("tools.local.toml at %s exceeds size cap; ignoring: %s", local_path, exc)
+        return {}
     except OSError:
-        # A read failure (permission, transient I/O) should not crash
-        # the caller; treat it as absent. The operator can inspect the
-        # file directly to diagnose.
+        # A read failure (permission, transient I/O, race-planted symlink
+        # caught by safe_read_capped_text) should not crash the caller;
+        # treat it as absent. The operator can inspect the file directly
+        # to diagnose.
         return {}
     except tomllib.TOMLDecodeError as exc:
         # A malformed operator-local file should not crash the caller;

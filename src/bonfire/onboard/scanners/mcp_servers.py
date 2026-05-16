@@ -28,6 +28,7 @@ import logging
 import os
 from pathlib import Path
 
+from bonfire._safe_read import safe_read_capped_text
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
 
 __all__ = ["scan"]
@@ -269,9 +270,23 @@ def _safe_resolve_config_path(path: Path, *, home_dir: Path, project_path: Path)
     return None
 
 
-def _read_text_sync(path: Path) -> str:
-    """Synchronous text read offloaded onto a worker thread."""
-    return path.read_text(encoding="utf-8")
+def _read_text_sync(path: Path, *, max_bytes: int) -> str:
+    """Synchronous text read offloaded onto a worker thread.
+
+    Routes through :func:`safe_read_capped_text` (W7.M read-side helper)
+    so the read uses ``O_NOFOLLOW`` defense-in-depth — a race-planted
+    symlink at the resolved path between ``_safe_resolve_config_path``
+    and this read is refused at ``open(2)`` time by the kernel. Without
+    the ``O_NOFOLLOW`` open, the prior ``Path.read_text(encoding="utf-8")``
+    would dereference the symlink and slurp the attacker-controlled
+    target's bytes into the JSON parser (W11 H1 TOCTOU gap).
+
+    Re-uses the caller's already-resolved byte cap so the symlink-refusal
+    is bolted onto the existing size-cap policy without changing the
+    visible limit. The W11 fix preserves the pre-existing
+    ``BONFIRE_MCP_SCAN_MAX_BYTES`` override semantics.
+    """
+    return safe_read_capped_text(path, max_bytes=max_bytes)
 
 
 async def _read_servers_from_config(
@@ -318,9 +333,15 @@ async def _read_servers_from_config(
         return []
 
     try:
-        raw = await asyncio.to_thread(_read_text_sync, safe_path)
+        raw = await asyncio.to_thread(_read_text_sync, safe_path, max_bytes=cap)
         data = json.loads(raw)
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        # ``OSError`` covers FileExistsError raised by safe_read_capped_text
+        # when a race-planted symlink is detected at open(2) time (W11 H1
+        # defense-in-depth). ``ValueError`` covers the cap-exceeded case
+        # — the symmetric counterpart to the existing stat()-based skip
+        # above (a file growing between stat and read past the cap is
+        # caught by the bounded read itself).
         _log.debug("Skipping %s: %s", safe_path, exc)
         return []
 

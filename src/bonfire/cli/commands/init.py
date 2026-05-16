@@ -9,7 +9,15 @@ from pathlib import Path
 
 import typer
 
+from bonfire._safe_read import safe_read_capped_text
 from bonfire._safe_write import safe_append_text, safe_write_text
+
+# Hard byte cap on operator-controlled config reads in ``bonfire init``.
+# ``.gitignore`` + ``bonfire.toml`` are kilobytes at most in legitimate
+# use; 1 MiB is comfortably beyond any honest payload while bounding the
+# damage from a planted oversized file. Centralised here so the 3 read
+# sites stay consistent.
+_INIT_READ_MAX_BYTES: int = 1 * 1024 * 1024
 
 # ``.bonfire/`` carries a MIX of operator-local state (the per-machine
 # ``tools.local.toml`` written by ``bonfire scan``) AND artefacts that
@@ -64,7 +72,10 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
         safe_write_text(gitignore_path, body)
         return
 
-    existing = gitignore_path.read_text()
+    # W11 M2: route through ``safe_read_capped_text`` so the read uses
+    # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
+    # between the ``is_symlink`` pre-check above and this read.
+    existing = safe_read_capped_text(gitignore_path, max_bytes=_INIT_READ_MAX_BYTES)
     existing_lines = [ln.strip() for ln in existing.splitlines()]
     if line in existing_lines:
         # Already covered — idempotent no-op.
@@ -110,8 +121,14 @@ def _has_legacy_tools_section(toml_path: Path) -> bool:
     if not toml_path.is_file() or toml_path.is_symlink():
         return False
     try:
-        body = toml_path.read_text(encoding="utf-8")
-    except OSError:
+        # W11 M2: route through ``safe_read_capped_text`` so the read uses
+        # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
+        # between the ``is_symlink`` pre-check above and this read. The
+        # cap-exceeded branch (``ValueError``) is treated identically to
+        # an unreadable file — the legacy-detection nudge is best-effort
+        # and MUST NOT crash ``bonfire init``.
+        body = safe_read_capped_text(toml_path, max_bytes=_INIT_READ_MAX_BYTES)
+    except (OSError, ValueError):
         return False
     # Match the section header at line start (TOML section syntax). Plain
     # substring is enough — a sub-table like ``[bonfire.tools.subkey]``
@@ -181,9 +198,20 @@ def init(
     gitignore_line_pre_existed = False
     if gitignore_path.is_file() and not gitignore_path.is_symlink():
         try:
-            existing_lines = [ln.strip() for ln in gitignore_path.read_text().splitlines()]
+            # W11 M2: route through ``safe_read_capped_text`` so the read
+            # uses ``O_NOFOLLOW`` defense-in-depth against a race-planted
+            # symlink between the ``is_symlink`` pre-check above and this
+            # read. The cap-exceeded branch (``ValueError``) is treated
+            # identically to an unreadable file — the pre-existence
+            # detection is best-effort cosmetic state for stdout.
+            existing_lines = [
+                ln.strip()
+                for ln in safe_read_capped_text(
+                    gitignore_path, max_bytes=_INIT_READ_MAX_BYTES
+                ).splitlines()
+            ]
             gitignore_line_pre_existed = _GITIGNORE_LINE in existing_lines
-        except OSError:
+        except (OSError, ValueError):
             gitignore_line_pre_existed = False
 
     # Legacy ``[bonfire.tools]`` migration nudge. Emit BEFORE

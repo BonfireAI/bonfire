@@ -10,7 +10,44 @@ from pathlib import Path
 
 from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
 from bonfire._safe_write import safe_append_text
-from bonfire.models.events import BonfireEvent  # noqa: TC001 — runtime use for model_dump()
+from bonfire.models.events import (
+    BonfireEvent,  # noqa: TC001 — runtime use for model_dump()
+    _validate_session_id,
+)
+
+
+def _validate_session_id_at_boundary(session_id: str) -> str:
+    """Defense-in-depth: validate ``session_id`` at the persistence
+    class boundary.
+
+    ``BonfireEvent.session_id`` is already validated by ``_validate_session_id``
+    at the model layer (allowing the empty-string sentinel for
+    ``AxiomLoaded``). But ``SessionPersistence`` is in
+    ``bonfire.session.__all__`` and external library consumers can call
+    every public method with a user-controlled string that NEVER
+    transits a ``BonfireEvent`` model. Without this check, a value like
+    ``"../../etc/passwd"`` interpolates into ``{session_id}.jsonl`` and
+    becomes a path-traversal write/read primitive at the filesystem
+    boundary (W11 H2 defense-in-depth gap).
+
+    The empty-string sentinel is REJECTED at the persistence boundary
+    even though the model accepts it: an empty ``session_id`` produces
+    ``.jsonl`` as the filename — a write/read against the parent
+    directory's hidden file. ``AxiomLoaded`` is a domain event that
+    legitimately omits ``session_id``; it MUST NOT be persisted under
+    that sentinel value via ``SessionPersistence.append_event``. The
+    layered check (model accepts ``""`` for ``AxiomLoaded`` ergonomics;
+    persistence refuses ``""`` to keep the on-disk shape sane) preserves
+    both contracts.
+    """
+    if session_id == "":
+        msg = (
+            "invalid session_id '': empty string is the BonfireEvent "
+            "outside-session sentinel and MUST NOT be persisted (would "
+            "produce '.jsonl' as the filename)."
+        )
+        raise ValueError(msg)
+    return _validate_session_id(session_id)
 
 
 class SessionPersistence:
@@ -31,7 +68,17 @@ class SessionPersistence:
         mode write sites but missed this append-mode site; a planted
         symlink at ``{session_id}.jsonl`` would otherwise redirect
         every JSONL event line to an attacker-controlled target.
+
+        W11 H2: ``_validate_session_id_at_boundary`` rejects path-
+        traversal shapes (``..``, ``/``, ``\\``, null, control chars,
+        oversized, empty) at this class boundary so external callers
+        passing user-controlled ``session_id`` cannot smuggle a write
+        outside ``self._session_dir``. The event itself already has its
+        ``session_id`` validated at the model layer; this is the parallel
+        defense for the kwarg, which a library consumer can pass
+        independently of any event.
         """
+        _validate_session_id_at_boundary(session_id)
         self._session_dir.mkdir(parents=True, exist_ok=True)
         path = self._session_path(session_id)
         line = json.dumps(event.model_dump(mode="json"))
@@ -57,7 +104,14 @@ class SessionPersistence:
         (live, dangling, looping) into the safe-read helper, which
         raises ``FileExistsError`` with the W7.M ``"symlink"`` log-grep
         substring.
+
+        W11 H2: ``_validate_session_id_at_boundary`` rejects path-
+        traversal shapes at this class boundary BEFORE the path is
+        constructed so a hostile ``session_id`` like ``"../../etc/passwd"``
+        never reaches ``Path.is_symlink`` against an attacker-chosen
+        location.
         """
+        _validate_session_id_at_boundary(session_id)
         path = self._session_path(session_id)
         if not path.is_symlink() and not path.exists():
             msg = f"No session file: {path}"
@@ -73,5 +127,12 @@ class SessionPersistence:
         return sorted(p.stem for p in self._session_dir.glob("*.jsonl"))
 
     def session_exists(self, session_id: str) -> bool:
-        """Check whether a session file exists."""
+        """Check whether a session file exists.
+
+        W11 H2: ``_validate_session_id_at_boundary`` rejects path-traversal
+        shapes BEFORE any filesystem call so a hostile ``session_id`` like
+        ``"../../etc/passwd"`` never produces a positive ``exists()``
+        return for an attacker-controlled path.
+        """
+        _validate_session_id_at_boundary(session_id)
         return self._session_path(session_id).exists()

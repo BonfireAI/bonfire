@@ -23,7 +23,7 @@ Every wave closes with a gate-tier declaration in its close-PR. The Wizard picks
 
 Every PR into `v0.1` requires **both**:
 
-- **Wizard** — Ishtar, the prompt architect. Standard dispatch review.
+- **Wizard** — the prompt-architect role. Standard dispatch review.
 - **code-reviewer** — superpowers agent. Independent lens.
 
 Two-lens review is non-negotiable. Drift happens when the same voice reviews the same work.
@@ -34,7 +34,7 @@ Two-lens review is non-negotiable. Drift happens when the same voice reviews the
 
 `ubuntu:24.04` Docker container. **Local execution only.** Never runs in CI.
 
-Rationale: API key stays on Anta's machine. Cost is observable in real time. No unattended runs draining the key. Pop!_OS 24.04 is Ubuntu-flavored, so box behavior mirrors host.
+Rationale: API key stays on the operator's machine. Cost is observable in real time. No unattended runs draining the key. Pop!_OS 24.04 is Ubuntu-flavored, so box behavior mirrors host.
 
 ### Contents
 

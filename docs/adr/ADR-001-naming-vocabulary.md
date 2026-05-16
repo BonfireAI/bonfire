@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-16
-**Decision makers:** Anta (Blacksmith King), Ishtar (Prompt Architect)
+**Decision makers:** Blacksmith King + Prompt Architect (engineer-operator + AI prompt-architect roles)
 **Research:** Triple-scout (Brand Architect, Developer Ergonomist, Lore Keeper) + Sage synthesis
 
 ## Context

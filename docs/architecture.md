@@ -18,18 +18,33 @@ fills that gap. Read it once on day one, then come back for the
 ## What Bonfire is
 
 Bonfire is **a pipeline of role-bound agents over a typed event bus**.
-Each stage of a run is owned by an agent that plays a specific role
-(scout, knight, warrior, cleric, bard, wizard, steward, sage, architect); each
-stage emits typed events on a shared bus; cross-cutting observers — cost
-tracking, session logging, knowledge ingest, display — subscribe to
-those events without ever calling stages back.
+Each stage of a run is owned by an agent that plays a specific role —
+researcher (Scout), tester (Knight), implementer (Warrior), verifier
+(Cleric), publisher (Bard), reviewer (Wizard), closer (Steward),
+synthesizer (Sage), analyst (Architect); each stage emits typed events
+on a shared bus; cross-cutting observers — cost tracking, session
+logging, knowledge ingest, display — subscribe to those events without
+ever calling stages back.
+
+The role names follow the three-layer vocabulary locked by
+[`ADR-001`](adr/ADR-001-naming-vocabulary.md): a generic layer for
+code (`researcher`, `tester`, …), a professional layer for default
+display (`Research Agent`, `Test Agent`, …), and an opt-in gamified
+layer for personality-themed display (`Scout`, `Knight`, …). Above and
+throughout this doc the generic name is primary and the gamified alias
+is parenthetical; the table in ADR-001 § Agent Roles is the binding
+reference.
 
 The framework ships an opinionated default: TDD-shaped 9-stage builds
-(scout, knight, warrior, prover, sage_correction_bounce, bard, wizard,
-merge_preflight, steward) with code review baked in, run against your
-own model keys, with quality gates between stages. Everything else —
-the agents, the backends, the personas, the workflows — is pluggable
-through small ``Protocol`` contracts.
+with the stage-name sequence ``scout``, ``knight``, ``warrior``,
+``prover``, ``sage_correction_bounce``, ``bard``, ``wizard``,
+``merge_preflight``, ``steward`` (these are the canonical wire-format
+``StageSpec.name`` strings emitted by ``standard_build()`` — see
+``bonfire.workflow.standard`` and the ratified gamified-key exception
+in ADR-001 § Ratified Exceptions). Code review is baked in, runs use
+your own model keys, and quality gates evaluate between stages.
+Everything else — the agents, the backends, the personas, the
+workflows — is pluggable through small ``Protocol`` contracts.
 
 Tagline (from `src/bonfire/__init__.py`):
 
@@ -43,7 +58,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 
 | Package | One-line purpose |
 |---|---|
-| `bonfire.engine` | Pipeline execution: `PipelineEngine`, per-stage `StageExecutor`, the six built-in quality gates, the checkpoint trio. |
+| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, gate evaluation, bounce, and budget watchdog), `StageExecutor` (a separately testable stage runner, re-exported but not driven by `PipelineEngine` today — the engine has its own inline stage loop), `ContextBuilder`, the six built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. |
 | `bonfire.dispatch` | Agent execution backends (Claude SDK, Pydantic AI), the `execute_with_retry` runner, `TierGate`, and the pre-exec security hook. |
 | `bonfire.models` | Cross-package data contracts — frozen Pydantic shapes for envelopes, plans, events, and configuration. Dependency-free. |
 | `bonfire.events` | Typed pub/sub spine — `EventBus` plus the `BonfireEvent` base contract; consumers live one level deeper. |
@@ -99,18 +114,33 @@ A single `bonfire run` follows the same path top-to-bottom every time:
    `standard_build`).
 2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
-   a handler, a list of gates, and dependency edges to earlier stages.
-3. **PipelineEngine.** `bonfire.engine.pipeline.PipelineEngine` walks
-   the plan in topological order and dispatches each stage to a
-   `StageExecutor`. It owns the `EventBus`, the `CheckpointManager`,
-   and the running cost / XP context.
-4. **StageExecutor.** For each stage, `bonfire.engine.executor`
-   constructs the input envelope, picks the right `StageHandler`, runs
-   it, and then runs the stage's `GateChain` over the result.
+   an optional handler name, a list of gate names, and dependency
+   edges to earlier stages.
+3. **PipelineEngine.** `bonfire.engine.pipeline.PipelineEngine`
+   constructs a `TopologicalSorter` over the plan, groups ready stages
+   by `parallel_group`, and runs each group either sequentially or
+   under an `asyncio.TaskGroup`. The engine holds the `AgentBackend`,
+   `EventBus`, `PipelineConfig`, the handler and gate registries, a
+   `ContextBuilder`, an optional `ToolPolicy`, and `BonfireSettings`.
+   It does **not** own a `CheckpointManager`; checkpoint persistence
+   is an opt-in surface (see "Checkpoints" below).
+4. **Inline stage execution.** For each stage the engine calls its
+   own `_execute_stage` method, which builds the per-stage context
+   via `ContextBuilder`, constructs the input envelope, and dispatches
+   it either to the named handler from the registry or, when no
+   handler is configured, to the agent backend through
+   `bonfire.dispatch.runner.execute_with_retry`. The standalone
+   `StageExecutor` class in `bonfire.engine.executor` implements the
+   same stage-runner contract and is re-exported from `bonfire.engine`
+   for downstream patching and for direct use by callers that want a
+   stage runner without the surrounding DAG / gate machinery; the
+   shipped `PipelineEngine` does not delegate to it today.
 5. **Handler.** A handler is either a plain agent dispatch (the
-   default for scouts, knights, warriors, sages) or one of the bespoke
-   handlers under `bonfire.handlers` (`Bard` for PR publication,
-   `Wizard` for review, `Steward` for closure, `Architect` for analysis).
+   default for the researcher / tester / implementer / synthesizer
+   roles — Scout / Knight / Warrior / Sage in the gamified vocabulary)
+   or one of the bespoke classes in `bonfire.handlers`: `Bard` for PR
+   publication (publisher), `Wizard` for review (reviewer), `Steward`
+   for closure (closer), `Architect` for analysis (analyst).
 6. **Dispatch backend.** Plain-dispatch handlers call into
    `bonfire.dispatch` — by default `ClaudeSDKBackend`, optionally
    `PydanticAIBackend` — through the `execute_with_retry` runner. The
@@ -123,14 +153,37 @@ A single `bonfire run` follows the same path top-to-bottom every time:
    consumers (`bonfire.events.consumers`) react to events without
    blocking the pipeline. Wiring is done once at composition time via
    `wire_consumers`.
-9. **Checkpoint and gates.** After each stage the engine writes a
-   checkpoint and evaluates the stage's `GateChain`. A failing
-   error-severity gate short-circuits the run; the pipeline reports
-   `PipelineResult(success=False)` with the gate's message.
+9. **Gates and bounce.** After each stage the engine evaluates the
+   stage's gate chain in registration order. A passing chain advances
+   the pipeline. A failing error-severity gate triggers an optional
+   single bounce to a recovery stage if `StageSpec.on_gate_failure`
+   is set, then re-runs the original stage and re-evaluates gates
+   exactly once (Sage decision D7 — no recursive retries). If the
+   gate still fails, the engine short-circuits and returns
+   `PipelineResult(success=False)` with the gate's failure result.
+   Budget enforcement runs at parallel-group boundaries: a group that
+   pushes accumulated cost above `plan.budget_usd` halts the run.
 
 The vocabulary in this section — *stage*, *handler*, *gate*,
 *envelope*, *plan* — is locked by
 [`ADR-001-naming-vocabulary.md`](adr/ADR-001-naming-vocabulary.md).
+
+### Checkpoints
+
+`PipelineEngine.run()` does **not** write checkpoints. The engine has
+no `CheckpointManager` dependency on its constructor, and the pipeline
+loop has no checkpoint write site. `CheckpointManager`
+(`bonfire.engine.checkpoint`) is a standalone, publicly-importable
+helper that persists a `PipelineResult` plus its `WorkflowPlan` to an
+atomic JSON file per session, and reads it back for resume. Callers
+that want save / restore semantics must drive the manager themselves
+around `PipelineEngine.run()` — typically: run the engine, take the
+returned `PipelineResult`, and call `CheckpointManager.save(...)`. The
+resume path on `PipelineEngine.run()` accepts a `completed=` mapping
+of already-done stages, which is what a caller would build from a
+loaded `CheckpointData`. The CLI does not yet wire this up; the
+machinery is shipped as an extension surface, not as a default
+behavior.
 
 ## Event bus and consumers
 

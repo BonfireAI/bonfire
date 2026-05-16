@@ -147,6 +147,30 @@ class PipelineFailed(BonfireEvent):
     # either the success OR the failure path. Default ``0.0`` keeps
     # legacy emitters round-tripping without raising.
     total_cost_usd: float = 0.0
+    # Bounce-target identity on bounce-target halt paths. When a stage's
+    # gate fails and the engine bounces to ``on_gate_failure`` which
+    # itself fails (target raises, target's own gate fails after the
+    # second eval, or the retry fails), ``failed_stage`` continues to
+    # name the ORIGINAL stage whose contract broke; ``failed_handler``
+    # names the bounce target that actually died. Default ``None`` keeps
+    # legacy emitters round-tripping without raising; populated
+    # explicitly on bounce-target halt branches in
+    # ``engine/pipeline.py``.
+    failed_handler: str | None = None
+    # Wall-clock duration of the pipeline run through the halt point.
+    # Symmetric with ``PipelineCompleted.duration_seconds`` so the cost
+    # ledger row reflects the real run length on the failure path
+    # (instead of every failed session looking instant). Computed at
+    # every halt-branch emit site as ``time.monotonic() - start``.
+    # Default ``0.0`` keeps legacy emitters round-tripping.
+    duration_seconds: float = 0.0
+    # Stage-count progress at halt time. Symmetric with
+    # ``PipelineCompleted.stages_completed`` so the XP consumer can
+    # distinguish stage-1 vs stage-19 failures (the calculator's
+    # penalty is sensitive to progress made before the halt).
+    # Populated at every halt-branch emit site as ``len(stages_done)``.
+    # Default ``0`` keeps legacy emitters round-tripping.
+    stages_completed: int = 0
 
 
 class PipelinePaused(BonfireEvent):

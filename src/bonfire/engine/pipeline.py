@@ -238,6 +238,8 @@ class PipelineEngine:
                             failed_stage="",
                             error_message=error_msg,
                             total_cost_usd=total_cost,
+                            duration_seconds=duration,
+                            stages_completed=len(stages_done),
                         )
                     )
                     return PipelineResult(
@@ -328,6 +330,8 @@ class PipelineEngine:
                     failed_stage=sname,
                     error_message=error_msg,
                     total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    stages_completed=len(stages_done),
                 )
             )
             return (
@@ -394,6 +398,8 @@ class PipelineEngine:
                     failed_stage=stage_name,
                     error_message=error_msg,
                     total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    stages_completed=len(stages_done),
                 )
             )
             return (
@@ -676,29 +682,40 @@ class PipelineEngine:
         session_id: str,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
-    ) -> tuple[Envelope | None, float]:
+    ) -> tuple[Envelope | None, float, str | None]:
         """Execute bounce-back: run target stage, then re-run original.
 
-        Returns ``(retry_envelope, cost_delta)`` on success, where
-        ``cost_delta`` is the FULL cost added by the bounce (bounce-target
-        cost + retry cost). The caller must credit this delta to its
+        Returns ``(retry_envelope, cost_delta, failed_handler)``.
+
+        On success, ``retry_envelope`` is the retried original's
+        envelope, ``cost_delta`` is the FULL cost added by the bounce
+        (bounce-target cost + retry cost), and ``failed_handler`` is
+        ``None`` (no halt). The caller must credit ``cost_delta`` to its
         running total so budget accounting includes the bounce target.
 
         On every failure branch (no target configured, target lookup
         miss, bounce-target failed, retry failed, second gate failure)
-        returns ``(None, cost_delta)`` where ``cost_delta`` reflects
-        every dollar the bounce path actually burned before halting.
-        Earlier versions returned a bare ``None`` on failure and the
-        bounce-target's cost vanished from ``PipelineResult.total_cost_usd``;
-        symmetric success/failure shape closes that accounting gap.
+        returns ``(None, cost_delta, failed_handler)`` where
+        ``cost_delta`` reflects every dollar the bounce path actually
+        burned before halting. ``failed_handler`` names the bounce
+        TARGET when the target's own execution failed (so the emitted
+        ``PipelineFailed`` event can identify which handler died);
+        ``None`` on every other branch (no bounce attempted, retry
+        failed on the original, second-gate failure — in those cases
+        ``failed_stage`` already names the original stage that broke
+        the contract).
+
+        Earlier versions returned ``(None, cost_delta)`` and the
+        bounce-target's identity was lost from the event stream;
+        threading ``failed_handler`` upward closes the H4 naming gap.
         """
         target_name = spec.on_gate_failure
         if not target_name:
-            return None, 0.0
+            return None, 0.0, None
 
         target_spec = stage_map.get(target_name)
         if not target_spec:
-            return None, 0.0
+            return None, 0.0, None
 
         # Execute bounce target.
         bounce_env = await self._execute_stage(
@@ -709,15 +726,31 @@ class PipelineEngine:
             session_id,
             initial_envelope,
         )
-        completed[target_name] = bounce_env
         bounce_cost = bounce_env.cost_usd
+        # If the bounce target is a stage already in ``completed``
+        # (typical: bounce target is the DAG-init stage whose work the
+        # original stage's gate flagged), the replacement quietly drops
+        # the prior envelope's cost from
+        # ``sum(env.cost_usd for env in completed.values())``. The
+        # resume-from-checkpoint path reads that sum as the seed total
+        # (engine/pipeline.py:165). Stamp the bounce-target envelope
+        # with the combined cost so the sum-of-stages invariant matches
+        # the engine accumulator. H6.
+        prior_target_env = completed.get(target_name)
+        if prior_target_env is not None:
+            bounce_env = bounce_env.model_copy(
+                update={"cost_usd": prior_target_env.cost_usd + bounce_cost}
+            )
+        completed[target_name] = bounce_env
         total_cost += bounce_cost
 
         if bounce_env.status == TaskStatus.FAILED:
             # Bounce target itself failed -- the dollars it spent still
             # left the wallet; surface them to the caller so budget
-            # accounting reflects the partial spend.
-            return None, bounce_cost
+            # accounting reflects the partial spend. Surface the
+            # bounce-target name so the emitted ``PipelineFailed`` can
+            # identify which handler died (H4).
+            return None, bounce_cost, target_name
 
         # Re-execute the original stage.
         retry_env = await self._execute_stage(
@@ -731,7 +764,10 @@ class PipelineEngine:
         retry_cost = retry_env.cost_usd
 
         if retry_env.status == TaskStatus.FAILED:
-            return None, bounce_cost + retry_cost
+            # The bounce target SUCCEEDED; the original's retry failed.
+            # ``failed_stage`` already names the original; no
+            # ``failed_handler`` distinction to make on this branch.
+            return None, bounce_cost + retry_cost, None
 
         # Re-evaluate gates on the retried result (ONCE -- Sage D7).
         passed, _second_failure = await self._evaluate_gates(
@@ -739,10 +775,13 @@ class PipelineEngine:
         )
         if not passed:
             # Second gate failure -- halt (no infinite loops). Still
-            # credit the bounce-target + retry cost to the caller.
-            return None, bounce_cost + retry_cost
+            # credit the bounce-target + retry cost to the caller. The
+            # bounce TARGET succeeded; the original's retried result
+            # failed the gate — ``failed_stage`` (the original) already
+            # carries operator context.
+            return None, bounce_cost + retry_cost, None
 
-        return retry_env, bounce_cost + retry_cost
+        return retry_env, bounce_cost + retry_cost, None
 
     # -- Gate result handling (shared by parallel + sequential) ---------------
 
@@ -776,12 +815,15 @@ class PipelineEngine:
             return None, 0.0
 
         # Try bounce-back if configured. ``_handle_bounce`` now ALWAYS
-        # returns a (retry_envelope_or_none, cost_delta) tuple so the
-        # bounce-target's spend lands in the running total regardless
-        # of whether the bounce succeeded.
+        # returns a (retry_envelope_or_none, cost_delta, failed_handler)
+        # tuple so the bounce-target's spend lands in the running total
+        # regardless of whether the bounce succeeded, and the bounce
+        # target's identity reaches the emitted ``PipelineFailed`` on
+        # bounce-target halt branches.
         bounce_cost_delta = 0.0
+        failed_handler: str | None = None
         if spec.on_gate_failure:
-            retry_env, bounce_cost_delta = await self._handle_bounce(
+            retry_env, bounce_cost_delta, failed_handler = await self._handle_bounce(
                 plan,
                 spec,
                 gate_failure,
@@ -792,6 +834,19 @@ class PipelineEngine:
                 initial_envelope,
             )
             if retry_env is not None:
+                # Stamp ``retry_env`` with the combined cost of the
+                # original (already in ``stages_done`` at this point —
+                # the caller wrote it before invoking us) PLUS the
+                # retry. Replacing ``stages_done[spec.name] = retry_env``
+                # without this stamp drops the original's cost from
+                # ``sum(env.cost_usd for env in stages_done.values())``,
+                # which the resume-from-checkpoint path reads as the
+                # seed total_cost (engine/pipeline.py:165). H6.
+                original_env = stages_done.get(spec.name)
+                if original_env is not None:
+                    retry_env = retry_env.model_copy(
+                        update={"cost_usd": original_env.cost_usd + retry_env.cost_usd}
+                    )
                 stages_done[spec.name] = retry_env
                 return None, bounce_cost_delta
 
@@ -808,6 +863,9 @@ class PipelineEngine:
                 failed_stage=stage_name,
                 error_message=gate_failure.message,
                 total_cost_usd=total_cost,
+                failed_handler=failed_handler,
+                duration_seconds=duration,
+                stages_completed=len(stages_done),
             )
         )
         return (

@@ -69,17 +69,20 @@ class CostLedgerConsumer:
     async def _on_pipeline_failed(self, event: PipelineFailed) -> None:
         """Persist a ``PipelineRecord`` for halt-path runs.
 
-        ``stages_completed`` is unknown on the failure path (the event
-        does not carry the count), so the ledger row records ``0`` —
-        downstream analyzers reading the persisted total still see the
-        partial spend the run actually accrued before halting.
+        Wave 11 Lane A grew ``PipelineFailed`` to carry
+        ``duration_seconds`` (M3) and ``stages_completed`` (M7),
+        symmetric with ``PipelineCompleted``. Forwarding both fields
+        means halt-path rows carry real run length and real progress
+        — every failed session no longer looks instant with zero
+        stages done, and downstream analyzers can compute meaningful
+        success-rate / mean-time-to-halt over the ledger.
         """
         record = PipelineRecord(
             timestamp=event.timestamp,
             session_id=event.session_id,
             total_cost_usd=event.total_cost_usd,
-            duration_seconds=0.0,
-            stages_completed=0,
+            duration_seconds=event.duration_seconds,
+            stages_completed=event.stages_completed,
         )
         self._append(record)
 

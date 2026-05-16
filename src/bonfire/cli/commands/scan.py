@@ -111,6 +111,24 @@ def scan(
     # ``_is_init_stub`` predicate is the single source of truth so this
     # check and ``write_config`` cannot drift.
     toml_path = Path.cwd() / "bonfire.toml"
+    # is_symlink() MUST be checked before exists(). Path.exists() follows
+    # symlinks, so a dangling symlink to an attacker-controlled target
+    # (e.g. ``bonfire.toml -> ~/.ssh/authorized_keys``) would satisfy
+    # ``exists() == False`` and let the write path open the symlink target
+    # in write+truncate mode — an arbitrary-write primitive. Refuse any
+    # symlink (dangling, live, or looping) with a message that names the
+    # symlink case explicitly so the user can distinguish it from a normal
+    # collision in logs.
+    if toml_path.is_symlink():
+        typer.echo(
+            f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+            "or overwrite a symlinked config. Remove the symlink and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    # The byte-for-byte stub from ``bonfire init`` is treated as "absent" so
+    # the README quickstart ``init && scan`` composes; ``_is_init_stub`` is
+    # the shared predicate that both this guard and ``write_config`` consult.
     if toml_path.exists() and not _is_init_stub(toml_path):
         typer.echo(
             f"bonfire.toml already exists at {toml_path}. Refusing to "

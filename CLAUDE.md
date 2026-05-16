@@ -236,7 +236,7 @@ release flips public, the integration branch for v0.2 is cut from `main`.
 
 ## Release Policy and Gates
 
-`bonfire-ai` is in pre-release (`0.1.0a1` alpha at the time of this writing).
+`bonfire-ai` is in pre-release (`0.1.0a2` alpha at the time of this writing).
 The original `0.1.0` tag shipped on 2026-04-28; the alpha label is restored
 to honestly reflect that release-gate items remain open. The full pre-release
 rules live in

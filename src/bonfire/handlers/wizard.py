@@ -326,21 +326,27 @@ class WizardHandler:
 
             thinking_depth = stage.metadata.get("thinking_depth_override", "thorough")
 
-            # ``max_budget_usd=0.0`` is the v0.1 non-nullable contract; the
-            # v1 parity value is ``None`` (uncapped). Widening the protocol
-            # is deferred to BON-W5.3-protocol-widen.
+            # Thread the user-configured budget through to the review
+            # dispatch -- previously hard-coded to ``0.0`` which silently
+            # bypassed the configured cap. The v0.1 protocol keeps
+            # ``max_budget_usd`` non-nullable (float), so we plumb the
+            # ``PipelineConfig`` value directly. A future widening to
+            # ``None`` (uncapped) for the reviewer-as-final-gate semantics
+            # is xfail-pinned in tests but out of scope here.
             options = DispatchOptions(
                 model=review_envelope.model,
                 max_turns=5,
-                max_budget_usd=0.0,
+                max_budget_usd=self._config.max_budget_usd,
                 thinking_depth=thinking_depth,
                 tools=["Read", "Grep", "Glob"],
                 permission_mode="dontAsk",
                 role=ROLE.value,
             )
 
-            # Timeout routing is deferred to BON-W5.3-protocol-widen -- the
-            # v0.1 ``PipelineConfig`` has no ``dispatch_timeout_seconds``.
+            # Timeout routing -- the v0.1 ``PipelineConfig`` has no
+            # ``dispatch_timeout_seconds`` field; ``getattr`` lets users
+            # opt in via a subclass / settings override without a hard
+            # dependency on the field being present.
             timeout_seconds = getattr(self._config, "dispatch_timeout_seconds", None)
 
             dispatch_result = await execute_with_retry(

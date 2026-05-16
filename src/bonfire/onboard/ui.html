@@ -280,10 +280,11 @@
 <script>
 (function() {
   'use strict';
-  // The page is gated by ?token=<value> on / — propagate that token to
-  // the WS handshake so the server's token gate lets the upgrade through.
-  // window.location.search includes the leading '?'.
-  var wsUrl = 'ws://' + window.location.host + '/ws' + window.location.search;
+  // Out-of-band token handoff. The URL bar carries NO token (it would
+  // leak via xdg-open's argv → /proc/<pid>/cmdline). On page load we fetch
+  // the WS token from GET /handoff (single-use, 30s deadline, Origin-checked)
+  // and hold it in this closure ONLY — never any browser persistent storage.
+  var wsToken = null;
   var statusEl = document.getElementById('status');
   var narrationEl = document.getElementById('narration');
   var chatEl = document.getElementById('chat');
@@ -338,11 +339,36 @@
   }
 
   function connect() {
-    ws = new WebSocket(wsUrl);
-    ws.onopen = function() { statusEl.textContent = 'connected \u2014 scanning...'; };
-    ws.onclose = function() { statusEl.textContent = 'disconnected'; };
-    ws.onerror = function() { statusEl.textContent = 'connection error'; };
-    ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
+    // Fetch the WS token via /handoff, then open the WebSocket. The
+    // handoff endpoint is single-use; a failure (race-loss, deadline) must
+    // surface visibly \u2014 fail open visibly, not silently.
+    fetch('/handoff', { method: 'GET', credentials: 'omit', cache: 'no-store' })
+      .then(function(response) {
+        if (!response.ok) {
+          statusEl.textContent = 'handoff failed (status ' + response.status
+            + ') \u2014 restart bonfire scan';
+          throw new Error('handoff non-200: ' + response.status);
+        }
+        return response.json();
+      })
+      .then(function(data) {
+        wsToken = data.token;
+        var wsUrl = 'ws://' + window.location.host + '/ws?token='
+          + encodeURIComponent(wsToken);
+        ws = new WebSocket(wsUrl);
+        ws.onopen = function() { statusEl.textContent = 'connected \u2014 scanning...'; };
+        ws.onclose = function() { statusEl.textContent = 'disconnected'; };
+        ws.onerror = function() { statusEl.textContent = 'connection error'; };
+        ws.onmessage = function(event) { handleMessage(JSON.parse(event.data)); };
+      })
+      .catch(function(err) {
+        // Already surfaced via statusEl above for non-200 responses; for
+        // network errors (server gone, fetch rejected) display a clear
+        // error message rather than letting the page silently hang.
+        if (statusEl.textContent.indexOf('handoff failed') === -1) {
+          statusEl.textContent = 'handoff error \u2014 ' + (err && err.message ? err.message : 'unknown');
+        }
+      });
   }
 
   function handleMessage(msg) {

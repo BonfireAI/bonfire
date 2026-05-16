@@ -5,11 +5,8 @@
 
 Pure synchronous primitive that collapses the three-tier ``or`` chain used
 at every dispatch call site (``StageExecutor``, ``PipelineEngine``,
-``WizardHandler``) into a single source-of-truth helper. Per the Sage
-architectural memo at
-``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md`` §C.1
-+ §F, this module replaces the inline precedence chain at the three call
-sites without altering its behavior.
+``WizardHandler``) into a single source-of-truth helper. Replaces the inline
+precedence chain at the three call sites without altering its behavior.
 
 The inner role-based primitive ``resolve_model_for_role`` continues to
 live at ``bonfire.agent.tiers`` (per the cluster-350 D-CL.1 lock); this

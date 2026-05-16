@@ -6,9 +6,7 @@
 Thin factory that builds a ``BonfireSettings`` instance for a pipeline
 run. Replaces the silent ``BonfireSettings()`` fallback at the three
 constructor sites (``StageExecutor``, ``PipelineEngine``,
-``WizardHandler``) with a warn-on-failure path per the Sage architectural
-memo at ``docs/audit/sage-decisions/cluster-351-sage-20260430T200000Z.md``
-§C.2 + §G.
+``WizardHandler``) with a warn-on-failure path.
 
 The factory is the single composition root for engine settings: callers
 that already hold a ``BonfireSettings`` should pass it through the

@@ -118,10 +118,7 @@ leaving this file.
 
 ## Canon Awareness
 
-Before any commit that touches canonical vocabulary — tier names, agent roles, claim counts (the Four Claims), palette names, mascot names (CHUNK), voice rules — consult **THE CANON**:
-<https://linear.app/bonfire-codeforge/document/the-canon-source-of-truth-for-all-surfaces-331e401a0fbf>
-
-bonfire-public is a customer-facing PyPI ship surface; canonical drift here propagates to every install. The Canon wins on contradiction — consult it before any change to canonical vocabulary, and never paraphrase or rename without amending Canon first. ADR-001's three-layer naming vocabulary (`knowledge/`, `cost/`, `workflow/`) is part of the Canon's surface-level vocabulary.
+Canonical vocabulary in this repo (tier names, agent roles, claim counts like the Four Claims, palette names, mascot names like CHUNK, voice rules) must remain stable. ADR-001's three-layer naming vocabulary (`knowledge/`, `cost/`, `workflow/`) is part of the public canon surface here. Don't paraphrase or rename without amending the relevant ADR first. bonfire-public is a customer-facing PyPI ship surface; canonical drift here propagates to every install.
 
 ## Agent Commit Protocol
 
@@ -371,26 +368,3 @@ If a rule in `CONTRIBUTING.md` and a rule in this CLAUDE.md disagree:
 agent-runtime concerns. If they disagree on something fundamental, file an
 issue.
 
-## Links Upward
-
-This repo is one of several in the Bonfire constellation. The constellation has
-three governance layers above this file:
-
-- **Workspace coordinator:** `/home/ishtar/Projects/CLAUDE.md` (operator-local;
-  not in this repo). Defines the multi-repo path-resolution protocol and the
-  boot sequence every session runs before this file is read.
-- **Forge constitution:** `ishtar/CLAUDE.md` (operator-local; in the `ishtar/`
-  repo). Defines the prompt-architect role, the dual-workflow pattern, and the
-  Canon Awareness framing this file mirrors.
-- **Internal v1 codebase:** `bonfire/CLAUDE.md` (operator-local; in the
-  private `bonfire/` repo). The v1 source that this public tree ports from.
-  **Module names differ** (per ADR-001 § Module Renames above) — the public
-  tree is the source of truth for module naming inside this repo.
-
-External contributors are not expected to read the operator-local files. They
-exist for the maintainer's multi-repo workflow. This section documents them so
-a fresh-boot agent session knows where its parents are.
-
-For the canonical vocabulary across the public Bonfire surfaces (Free / Website
-/ Cyberdeck), see THE CANON:
-<https://linear.app/bonfire-codeforge/document/the-canon-source-of-truth-for-all-surfaces-331e401a0fbf>

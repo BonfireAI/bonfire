@@ -5,8 +5,11 @@ Synthesized from Knight-A orchestration + Knight-B contract fidelity.
 VaultAdvisor is the ONLY advisory channel for v0.1 (compiler interface dropped —
 Sage D3). It is fail-open: the pipeline proceeds without advice whenever the
 vault is slow, missing, or broken. In v0.1 VaultAdvisor ships against the
-``VaultBackend`` Protocol only — there is no default concrete backend, and
-``StageExecutor`` treats the advisor as optional (Sage D4).
+``VaultBackend`` Protocol only — there is no default concrete backend.
+(Historically ``StageExecutor`` was the lone consumer wiring the advisor; that
+class was deleted in Wave 11 Lane E along with the dead stage-execution path.
+The advisor itself remains live at ``bonfire.engine.advisor``; engine-side
+wiring is parked pending a follow-up ticket.)
 
 Contract locked:
     1. VaultAdvisor is importable from ``bonfire.engine.advisor`` (not __all__).

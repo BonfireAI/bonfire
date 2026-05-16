@@ -2,11 +2,14 @@
 
 Synthesized from Knight-A orchestration lens + Knight-B contract-fidelity lens.
 
-Locks the 15-symbol ``__all__`` surface. The 15th symbol —
-``SageCorrectionResolvedGate`` — is promoted into ``__all__`` once the
-sage-correction-bounce stage is wired into the standard build pipeline.
-The compiler interface (V1 ``compiler`` kwarg, V1
-``test_executor_compiler.py``) is intentionally omitted for v0.1.
+Locks the 14-symbol ``__all__`` surface. ``SageCorrectionResolvedGate``
+was promoted into ``__all__`` once the sage-correction-bounce stage was
+wired into the standard build pipeline. The compiler interface (V1
+``compiler`` kwarg, V1 ``test_executor_compiler.py``) is intentionally
+omitted for v0.1. ``StageExecutor`` was on the surface as the 15th
+symbol until Wave 11 Lane E (BON-1098) deleted the dead execution path
+that had diverged from ``PipelineEngine._execute_stage`` on four Probe
+N+7 findings (H1/H2/H3/M4).
 
 Shim pattern: per-test lazy ``import`` inside each test body. This
 produces granular per-test RED rather than one collection ERROR, so the
@@ -18,7 +21,7 @@ from __future__ import annotations
 import pytest
 
 # ---------------------------------------------------------------------------
-# Canonical 15-symbol public surface.
+# Canonical 14-symbol public surface.
 # ---------------------------------------------------------------------------
 
 _EXPECTED_PUBLIC: tuple[str, ...] = (
@@ -34,7 +37,6 @@ _EXPECTED_PUBLIC: tuple[str, ...] = (
     "RedPhaseGate",
     "ReviewApprovalGate",
     "SageCorrectionResolvedGate",
-    "StageExecutor",
     "TestPassGate",
     "VerificationGate",
 )
@@ -61,15 +63,16 @@ class TestAllList:
 
         assert set(_e.__all__) == set(_EXPECTED_PUBLIC)
 
-    def test_all_list_contains_exactly_15_symbols(self) -> None:
-        """The v0.1 engine exports exactly 15 names — no compiler symbols."""
+    def test_all_list_contains_exactly_14_symbols(self) -> None:
+        """The v0.1 engine exports exactly 14 names — no compiler symbols,
+        no ``StageExecutor`` (deleted in Wave 11 Lane E)."""
         from bonfire import engine as _e
 
-        assert len(set(_e.__all__)) == 15
+        assert len(set(_e.__all__)) == 14
 
     def test_sage_correction_resolved_gate_in_all(self) -> None:
-        """``SageCorrectionResolvedGate`` is the 15th symbol — promoted into
-        ``__all__`` once the sage-correction-bounce stage is wired."""
+        """``SageCorrectionResolvedGate`` is promoted into ``__all__`` once
+        the sage-correction-bounce stage is wired."""
         from bonfire import engine as _e
 
         assert "SageCorrectionResolvedGate" in _e.__all__
@@ -124,17 +127,14 @@ class TestSymbolImportability:
 
 
 class TestSubmoduleLayout:
-    """V1's 7-file layout is preserved in v0.1."""
+    """V1's submodule layout is preserved in v0.1, minus ``executor.py``
+    which was deleted in Wave 11 Lane E along with the ``StageExecutor``
+    class it housed (BON-1098)."""
 
     def test_pipeline_submodule(self) -> None:
         from bonfire.engine import pipeline
 
         assert pipeline is not None
-
-    def test_executor_submodule(self) -> None:
-        from bonfire.engine import executor
-
-        assert executor is not None
 
     def test_gates_submodule(self) -> None:
         from bonfire.engine import gates
@@ -180,11 +180,6 @@ class TestTypeShapes:
 
         assert isinstance(_e.PipelineResult, type)
         assert issubclass(_e.PipelineResult, BaseModel)
-
-    def test_stage_executor_is_a_class(self) -> None:
-        from bonfire import engine as _e
-
-        assert isinstance(_e.StageExecutor, type)
 
     def test_context_builder_is_a_class(self) -> None:
         from bonfire import engine as _e

@@ -86,7 +86,9 @@ def config() -> PipelineConfig:
 
 
 class TestPipelineConstructorAcceptsToolPolicy:
-    """Sage D5 — mirror of StageExecutor; additive kwarg, backward compat."""
+    """Sage D5 — additive ``tool_policy=`` kwarg, backward compat. (Pre-Wave-11-
+    Lane-E this contract was also mirrored on the standalone ``StageExecutor``
+    class; Lane E deleted that class.)"""
 
     def test_default_tool_policy_is_none(self, bus: EventBus, config: PipelineConfig) -> None:
         """Sage D5 — no kwarg → ``self._tool_policy is None``."""

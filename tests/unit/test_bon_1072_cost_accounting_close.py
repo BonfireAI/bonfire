@@ -22,6 +22,12 @@ Probe N+6 surfaced a cost-accounting defect family with three legs:
       iterations. Anyone calling the public executor directly (out-of-tree
       consumers, future pipeline rewrites) loses that accounting.
 
+      Wave 11 Lane E (BON-1098) closed the drift permanently by deleting
+      the ``StageExecutor`` class outright; only the live
+      ``PipelineEngine._execute_stage`` path remains. The M2 parity test
+      below therefore exercises only the engine path now (the
+      ``"executor"`` parametrize branch was dropped with the class).
+
   M3. ``_handle_bounce`` accumulates the bounce target's cost into a local
       variable. On the SUCCESS path that local is returned to the caller
       and credited to ``total_cost``. On every FAILURE branch
@@ -60,7 +66,6 @@ from unittest.mock import patch
 import pytest
 
 from bonfire.cost.consumer import CostLedgerConsumer
-from bonfire.engine.executor import StageExecutor
 from bonfire.engine.pipeline import PipelineEngine
 from bonfire.events.bus import EventBus
 from bonfire.events.consumers.cost import CostTracker
@@ -538,46 +543,32 @@ class TestBounceTargetCostPreservedOnFailure:
 
 
 # ===========================================================================
-# Leg M2 — StageExecutor.execute_single matches PipelineEngine._execute_stage
+# Leg M2 — PipelineEngine._execute_stage stamps cumulative iteration cost
 # ===========================================================================
 
 
 class TestStageExecutorCumulativeCostParity:
-    """The two stage-execution code paths must stamp the same
-    cumulative-iteration cost onto the returned envelope.
+    """``PipelineEngine._execute_stage`` MUST stamp the sum of every
+    iteration's cost onto the returned envelope's ``cost_usd`` field.
 
-    Parametrize across both paths against the same backend + spec so any
-    drift (now or future) trips the test.
+    Pre-Wave-11-Lane-E this contract was asserted across BOTH the
+    standalone ``StageExecutor.execute_single`` path AND the engine
+    path; the parametrize matrix is now collapsed to just ``"engine"``
+    because Lane E deleted the ``StageExecutor`` class and the dead
+    code path that was diverging (BON-1098 / Probe N+7 findings
+    H1/H2/H3/M4). The class name on this test is preserved so the M2
+    leg is still discoverable by ticket-history grep.
     """
 
     @staticmethod
     def _build_path_runner(path: str):
-        """Return an async callable ``(spec, plan, sid) -> Envelope`` for
-        either the executor or the engine path.
+        """Return an async callable ``(spec, plan, sid, backend) -> Envelope``
+        for the engine path.
 
-        ``path`` is one of ``"executor"`` or ``"engine"``.
+        ``path`` is ``"engine"`` (only). Preserved as a shape-stable hook
+        so that a future second execution surface can re-introduce a
+        parametrize axis without rewriting callers.
         """
-        from bonfire.engine.context import ContextBuilder
-
-        async def run_executor(
-            spec: StageSpec,
-            plan: WorkflowPlan,
-            session_id: str,
-            backend: Any,
-        ) -> Envelope:
-            ex = StageExecutor(
-                backend=backend,
-                bus=EventBus(),
-                config=PipelineConfig(),
-                context_builder=ContextBuilder(),
-            )
-            return await ex.execute_single(
-                stage=spec,
-                prior_results={},
-                total_cost=0.0,
-                plan=plan,
-                session_id=session_id,
-            )
 
         async def run_engine(
             spec: StageSpec,
@@ -591,17 +582,18 @@ class TestStageExecutorCumulativeCostParity:
             result = await engine.run(plan, session_id=session_id)
             return result.stages[spec.name]
 
-        return run_executor if path == "executor" else run_engine
+        if path != "engine":
+            raise ValueError(f"unsupported path: {path!r} (only 'engine' remains after Lane E)")
+        return run_engine
 
-    @pytest.mark.parametrize("path", ["executor", "engine"])
+    @pytest.mark.parametrize("path", ["engine"])
     async def test_successful_stage_stamps_cumulative_iteration_cost(self, path: str) -> None:
         """After two failed iterations and a third successful one, the
         returned envelope's ``cost_usd`` MUST equal the sum of all three
         iteration costs.
 
         ``PipelineEngine._execute_stage`` stamps this via
-        ``cumulative_iteration_cost`` (Wave 9 Lane A). The public
-        ``StageExecutor.execute_single`` must mirror that.
+        ``cumulative_iteration_cost`` (Wave 9 Lane A).
         """
 
         class _FailTwiceThenSucceed:

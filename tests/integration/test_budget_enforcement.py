@@ -19,8 +19,8 @@ Scenarios locked:
     error.lower()`` — no exception leaks past the never-raise shell.
 
 Conservative lens: every fixture mirrors the conventions in
-``tests/unit/test_engine_gates.py``, ``test_engine_pipeline.py``,
-``test_engine_executor.py``, and ``test_sdk_backend_tool_presence.py``.
+``tests/unit/test_engine_gates.py``, ``test_engine_pipeline.py``, and
+``test_sdk_backend_tool_presence.py``.
 """
 
 from __future__ import annotations
@@ -238,13 +238,22 @@ class TestBudgetRemainingClamping:
         assert "budget" in result.error.lower()
         assert result.total_cost_usd >= plan.budget_usd  # exhausted, not negative
 
-    async def test_executor_clamps_budget_remaining_for_context_builder(self) -> None:
-        """StageExecutor clamps ``budget_remaining_usd`` at zero when
-        ``total_cost > plan.budget_usd`` — the value handed to ``ContextBuilder``
-        is never negative (Sage D6, executor.py:178).
+    async def test_engine_clamps_budget_remaining_for_context_builder(self) -> None:
+        """``PipelineEngine._execute_stage`` clamps ``budget_remaining_usd``
+        at zero when the running ``total_cost`` has already exceeded
+        ``plan.budget_usd`` — the value handed to ``ContextBuilder.build``
+        is never negative (Sage D6, ``pipeline.py``: the
+        ``max(0, plan.budget_usd - total_cost)`` clamp on the live engine
+        path).
+
+        Pre-Wave-11-Lane-E this test exercised the standalone
+        ``StageExecutor.execute_single`` path; that class was deleted
+        along with the dead path it owned. The clamp invariant moved
+        unchanged onto :meth:`PipelineEngine._execute_stage`, so the
+        test is retargeted to drive the live engine and assert the same
+        observable.
         """
         from bonfire.engine.context import ContextBuilder
-        from bonfire.engine.executor import StageExecutor
 
         captured: dict[str, Any] = {}
 
@@ -253,26 +262,28 @@ class TestBudgetRemainingClamping:
                 captured.update(kwargs)
                 return "ctx"
 
-        executor = StageExecutor(
-            backend=_RecordingBackend(cost=0.0),
-            bus=EventBus(),
-            config=PipelineConfig(),
-            context_builder=_SpyBuilder(),
-        )
-        stage = StageSpec(name="s1", agent_name="a1")
         plan = WorkflowPlan(
             name="p",
             workflow_type=WorkflowType.STANDARD,
-            stages=[stage],
+            stages=[StageSpec(name="s1", agent_name="a1")],
             budget_usd=5.0,
         )
-        await executor.execute_single(
-            stage=stage,
-            prior_results={},
-            total_cost=20.0,  # > plan.budget_usd
-            plan=plan,
-            session_id="sess-1",
+        # Seed the pipeline with a pre-completed dummy stage whose cost
+        # already exceeds ``plan.budget_usd``; that drives the engine's
+        # ``total_cost`` accumulator above the budget BEFORE the only
+        # real stage executes, which exercises the
+        # ``max(0, plan.budget_usd - total_cost)`` clamp on the path
+        # into ``ContextBuilder.build``.
+        seed_envelope = Envelope(task="seed", agent_name="seed").with_result(
+            "seed-done", cost_usd=20.0
         )
+        engine = PipelineEngine(
+            backend=_RecordingBackend(cost=0.0),
+            bus=EventBus(),
+            config=PipelineConfig(),
+            context_builder=_SpyBuilder(),  # type: ignore[arg-type]
+        )
+        await engine.run(plan, session_id="sess-1", completed={"seed": seed_envelope})
 
         assert "budget_remaining_usd" in captured
         assert captured["budget_remaining_usd"] >= 0.0

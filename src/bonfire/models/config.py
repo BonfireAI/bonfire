@@ -47,6 +47,12 @@ class PipelineConfig(BaseModel):
     max_turns: int = 10
     max_budget_usd: float = 5.0
     persona: str = "falcor"
+    # Explicit opt-in to ingest the project's ``CLAUDE.md`` /
+    # ``.claude/settings.json`` into the dispatched agent's system prompt.
+    # File presence alone is NOT enough; this key MUST be ``true``.
+    # See ``bonfire.dispatch.sdk_backend._resolve_setting_sources`` for the
+    # canonical gate.
+    trust_project_settings: bool = False
 
     @field_validator("max_budget_usd")
     @classmethod

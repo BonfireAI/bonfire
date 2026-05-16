@@ -21,6 +21,7 @@ from pathlib import Path
 
 import typer
 
+from bonfire.onboard.config_generator import _is_init_stub
 from bonfire.onboard.server import FrontDoorServer
 
 # Sentinel marking "caller did not override the conversation timeout".
@@ -154,11 +155,18 @@ def scan(
     indefinitely.
     """
     # Fail fast — before starting the Front Door server / browser dance —
-    # if bonfire.toml already exists. A user with a hand-tuned config must
-    # not silently lose it; tell them how to recover. Mirrors the existing
-    # guard in ``bonfire init``. ``write_config`` also raises
-    # ``FileExistsError`` as a defense-in-depth check; this early exit
-    # spares the user the conversation flow when the outcome is doomed.
+    # if bonfire.toml already exists AND is not the exact init stub. A
+    # user with a hand-tuned config must not silently lose it; tell them
+    # how to recover. Mirrors the existing guard in ``bonfire init``.
+    # ``write_config`` also consults ``_is_init_stub`` as a
+    # defense-in-depth check; this early exit spares the user the
+    # conversation flow when the outcome is doomed.
+    #
+    # The byte-for-byte stub from ``bonfire init`` is treated as
+    # "absent" — that lets the README quickstart ``init && scan`` compose
+    # without forcing the user to delete the stub by hand. The shared
+    # ``_is_init_stub`` predicate is the single source of truth so this
+    # check and ``write_config`` cannot drift.
     toml_path = Path.cwd() / "bonfire.toml"
     # is_symlink() MUST be checked before exists(). Path.exists() follows
     # symlinks, so a dangling symlink to an attacker-controlled target
@@ -175,7 +183,10 @@ def scan(
             err=True,
         )
         raise typer.Exit(code=1)
-    if toml_path.exists():
+    # The byte-for-byte stub from ``bonfire init`` is treated as "absent" so
+    # the README quickstart ``init && scan`` composes; ``_is_init_stub`` is
+    # the shared predicate that both this guard and ``write_config`` consult.
+    if toml_path.exists() and not _is_init_stub(toml_path):
         typer.echo(
             f"bonfire.toml already exists at {toml_path}. Refusing to "
             "overwrite. Remove or move the existing file and re-run.",

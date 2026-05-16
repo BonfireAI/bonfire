@@ -11,15 +11,84 @@ conversation profile dict. Each config value is annotated with its source
 from __future__ import annotations
 
 import os
+import stat
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from bonfire.onboard.protocol import ConfigGenerated, ScanUpdate
 from bonfire.persona._toml_writer import escape_basic_string
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    pass
 
 __all__ = ["generate_config", "write_config"]
+
+
+# ---------------------------------------------------------------------------
+# init->scan composability predicate
+# ---------------------------------------------------------------------------
+#
+# ``bonfire init`` writes exactly ``b"[bonfire]\n"`` to ``bonfire.toml``
+# (see ``bonfire.cli.commands.init``). The prior overwrite-guard
+# refuses to overwrite ANY existing ``bonfire.toml`` — including that
+# stub — which breaks the README quickstart ``bonfire init . && bonfire
+# scan``. This shared predicate lets the writer and the scan-CLI
+# fail-fast both treat that exact stub (and only that stub) as
+# "absent". Any user customization — one added key, a comment,
+# anything past the section header — falls back into the overwrite
+# guard and is preserved.
+#
+# Symlinks and non-regular files always return False here; the broader
+# O_NOFOLLOW write-defense story is handled separately and this
+# predicate must not widen the attack surface. The 64-byte size cap
+# is defense-in-depth: a stub is 10 bytes, so an oversize file is
+# never slurped to check stub-ness.
+
+INIT_STUB_BYTES = b"[bonfire]\n"
+_MAX_STUB_BYTES = 64
+
+
+def _is_init_stub(path: Path) -> bool:
+    """Return True iff ``path`` is the exact byte-for-byte stub from ``init``.
+
+    Tolerates only trailing ASCII whitespace (spaces, tabs, CR, LF) so a
+    Windows checkout or an editor that appends a final newline still
+    reads as a stub. Anything else — a leading comment, an added key,
+    a second section — is treated as a user customization and the
+    overwrite guard takes over.
+
+    Symlinks, non-regular files, and files larger than 64 bytes are
+    refused without raising. The size gate fires BEFORE any
+    ``read_bytes`` call so adversarial inputs are never slurped.
+    """
+    # Symlinks: never a stub. The symlink-write defense is handled
+    # separately; this predicate must not widen the overwrite path
+    # through a symlink. ``is_symlink`` reads metadata without
+    # following, and returns True for dangling symlinks too — so this
+    # also covers the "broken target" case.
+    if path.is_symlink():
+        return False
+
+    try:
+        st = path.stat()
+    except OSError:
+        return False
+
+    if not stat.S_ISREG(st.st_mode):
+        return False
+
+    # Size gate FIRST — must short-circuit BEFORE read_bytes so an
+    # adversarial 1 MiB file starting with ``[bonfire]\n`` is never
+    # whole-file slurped to check stub-ness.
+    if st.st_size > _MAX_STUB_BYTES:
+        return False
+
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return False
+
+    return raw.rstrip(b" \t\r\n") == INIT_STUB_BYTES.rstrip(b" \t\r\n")
 
 
 # ---------------------------------------------------------------------------
@@ -415,10 +484,20 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     ``bonfire.cli.commands.init`` (where the file is only written when it
     does not already exist).
 
+    The one exception is the exact byte-for-byte stub that ``bonfire init``
+    writes (``b"[bonfire]\\n"``). That stub carries no user content, so
+    overwriting it composes the README quickstart (``bonfire init .``
+    then ``bonfire scan``) without forcing the user to delete the stub by
+    hand. The ``_is_init_stub`` predicate is the shared source of truth —
+    the CLI fail-fast in ``scan.py`` consults it too, so the two paths
+    cannot drift. The stub-overwrite path unlinks the stub before the
+    ``os.open(O_EXCL)`` call below, since ``O_EXCL`` would otherwise
+    refuse to create over the existing file.
+
     Symlinks (dangling, live, or looping) are refused BEFORE the
     ``exists()`` check, because ``Path.exists()`` follows symlinks and
-    would otherwise let a dangling symlink slip through to ``write_text``
-    — which would then open the symlink TARGET in write+truncate mode and
+    would otherwise let a dangling symlink slip through to the writer —
+    which would then open the symlink TARGET in write+truncate mode and
     yield an arbitrary-write primitive. The actual write uses
     ``os.open(..., O_CREAT | O_EXCL | O_NOFOLLOW)`` as defense-in-depth so
     a TOCTOU race between the ``is_symlink()`` check and the write cannot
@@ -427,11 +506,12 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     Raises
     ------
     FileExistsError
-        If ``project_path / "bonfire.toml"`` already exists OR is a
-        symlink. The message names the path and tells the user how to
-        recover. The symlink branch's message contains the literal
-        substring ``"symlink"`` so log-grep can distinguish symlink
-        refusal from regular collision. No ``--force`` flag in v0.1.
+        If ``project_path / "bonfire.toml"`` already exists AND it is
+        not the exact init stub, OR if it is a symlink. The message
+        names the path and tells the user how to recover. The symlink
+        branch's message contains the literal substring ``"symlink"``
+        so log-grep can distinguish symlink refusal from regular
+        collision. No ``--force`` flag in v0.1.
     """
     target = project_path / "bonfire.toml"
     # is_symlink() MUST be checked before exists(). Path.exists() follows
@@ -445,11 +525,17 @@ def write_config(config_toml: str, project_path: Path) -> Path:
         )
         raise FileExistsError(msg)
     if target.exists():
-        msg = (
-            f"bonfire.toml already exists at {target}. Refusing to "
-            "overwrite. Remove or move the existing file and re-run."
-        )
-        raise FileExistsError(msg)
+        if _is_init_stub(target):
+            # The byte-for-byte stub from ``bonfire init`` is overwritable.
+            # ``O_EXCL`` below refuses any existing file, so the stub must
+            # be unlinked here before the create-exclusive open.
+            target.unlink()
+        else:
+            msg = (
+                f"bonfire.toml already exists at {target}. Refusing to "
+                "overwrite. Remove or move the existing file and re-run."
+            )
+            raise FileExistsError(msg)
     # Defense-in-depth: O_CREAT | O_EXCL refuses an existing file
     # atomically (closing the TOCTOU window against the exists() check
     # above); O_NOFOLLOW refuses a symlink at open(2) time (closing the

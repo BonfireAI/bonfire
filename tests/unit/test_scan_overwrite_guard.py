@@ -81,7 +81,7 @@ class TestWriteConfigOverwriteGuard:
         but the actionable shape is.
         """
         existing = tmp_path / "bonfire.toml"
-        existing.write_text("[bonfire]\n")
+        existing.write_text('# already configured\n[bonfire]\nname = "demo"\n')
 
         with pytest.raises(FileExistsError) as exc_info:
             write_config('[bonfire]\nname = "x"\n', tmp_path)
@@ -150,7 +150,7 @@ class TestScanCommandRefusesOverwrite:
     ) -> None:
         """The error message names the file and tells the user how to recover."""
         existing = tmp_path / "bonfire.toml"
-        existing.write_text("[bonfire]\n")
+        existing.write_text('# already configured\n[bonfire]\nname = "demo"\n')
         monkeypatch.chdir(tmp_path)
 
         with patch("bonfire.cli.commands.scan._run_scan", new_callable=AsyncMock) as mock_run:

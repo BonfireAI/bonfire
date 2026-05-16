@@ -10,6 +10,7 @@ conversation profile dict. Each config value is annotated with its source
 
 from __future__ import annotations
 
+import re
 import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -46,6 +47,22 @@ __all__ = ["generate_config", "write_config"]
 
 INIT_STUB_BYTES = b"[bonfire]\n"
 _MAX_STUB_BYTES = 64
+
+# Narrow widening (W8.F): also recognize the exact byte shape that
+# ``bonfire persona set <name>`` emits when run immediately after
+# ``bonfire init`` — ``[bonfire]\npersona = "<basic-string>"`` — as
+# still-a-stub, so the documented ``init && persona set && scan`` flow
+# composes. The pattern is anchored via ``fullmatch`` against the
+# trailing-whitespace-stripped bytes; the TOML basic-string body
+# permits any byte except an unescaped ``"`` or ``\`` plus ``\X``
+# escapes. The widening is persona-key-SPECIFIC by design: a hand-added
+# ``name = "..."`` key (or any other single key) must still fall into
+# the overwrite refusal per the W7.M / PR #103 defense. See
+# ``tests/unit/test_init_persona_scan_composability.py`` for the upper
+# bound (4 GREEN canaries pinning narrowness).
+_PERSONA_STUB_RE = re.compile(
+    rb'\[bonfire\]\npersona = "(?:[^"\\]|\\.)*"',
+)
 
 
 def _is_init_stub(path: Path) -> bool:
@@ -88,7 +105,15 @@ def _is_init_stub(path: Path) -> bool:
     except OSError:
         return False
 
-    return raw.rstrip(b" \t\r\n") == INIT_STUB_BYTES.rstrip(b" \t\r\n")
+    stripped = raw.rstrip(b" \t\r\n")
+    if stripped == INIT_STUB_BYTES.rstrip(b" \t\r\n"):
+        return True
+    # Narrow widening (W8.F): accept the exact ``persona set`` output
+    # shape ``[bonfire]\npersona = "<basic-string>"`` (anchored via
+    # ``fullmatch``) as still-a-stub so ``init && persona set && scan``
+    # composes. Anything else — a second key, a second section, a
+    # different key name — falls back into the overwrite guard.
+    return _PERSONA_STUB_RE.fullmatch(stripped) is not None
 
 
 # ---------------------------------------------------------------------------

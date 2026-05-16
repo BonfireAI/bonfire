@@ -92,6 +92,5 @@ def test_no_sage_memo_or_mirror_probe_refs_in_source_or_integration_tests() -> N
         "integration tests.\n"
         "CONTRIBUTING.md §3 forbids internal references in public code.\n"
         "Rewrite each comment as plain English (inline rationale, public ADR "
-        "pointer).\n"
-        + "\n".join(f"  {p}:{n}: {line}" for p, n, line in offenders)
+        "pointer).\n" + "\n".join(f"  {p}:{n}: {line}" for p, n, line in offenders)
     )

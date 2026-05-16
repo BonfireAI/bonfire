@@ -152,9 +152,7 @@ class TestResolveSettingSourcesHelper:
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text(
-            "[bonfire]\ntrust_project_settings = true\n"
-        )
+        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
         result = _resolve_setting_sources(str(tmp_path))
         assert result == ["project"], (
             "Co-located ``bonfire.toml`` with explicit "
@@ -240,9 +238,7 @@ class TestResolveSettingSourcesHelper:
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text(
-            "[bonfire]\ntrust_project_settings = true\n"
-        )
+        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
         a = _resolve_setting_sources(str(tmp_path))
         b = _resolve_setting_sources(str(tmp_path))
         assert a == b == ["project"]

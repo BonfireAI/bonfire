@@ -102,12 +102,7 @@ class TestBonfireTomlWithoutKeyBlocks:
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        toml = (
-            "[bonfire]\n"
-            'model = "claude-sonnet-4-6"\n'
-            "max_turns = 5\n"
-            "max_budget_usd = 2.0\n"
-        )
+        toml = '[bonfire]\nmodel = "claude-sonnet-4-6"\nmax_turns = 5\nmax_budget_usd = 2.0\n'
         (tmp_path / "bonfire.toml").write_text(toml)
         result = _resolve_setting_sources(str(tmp_path))
         assert result == [], (
@@ -121,9 +116,7 @@ class TestBonfireTomlWithoutKeyBlocks:
 
         (tmp_path / "bonfire.toml").write_text('[memory]\nsession_dir = ".bonfire/sessions"\n')
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == [], (
-            f"Missing ``[bonfire]`` table MUST default-deny. Got {result!r}."
-        )
+        assert result == [], f"Missing ``[bonfire]`` table MUST default-deny. Got {result!r}."
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +131,7 @@ class TestExplicitKeyLoads:
         """``trust_project_settings = true`` → ``["project"]``."""
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text(
-            "[bonfire]\ntrust_project_settings = true\n"
-        )
+        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
         result = _resolve_setting_sources(str(tmp_path))
         assert result == ["project"], (
             "Explicit ``[bonfire].trust_project_settings = true`` MUST "
@@ -152,10 +143,7 @@ class TestExplicitKeyLoads:
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
         toml = (
-            "[bonfire]\n"
-            'model = "claude-opus-4-7"\n'
-            "trust_project_settings = true\n"
-            "max_turns = 10\n"
+            '[bonfire]\nmodel = "claude-opus-4-7"\ntrust_project_settings = true\nmax_turns = 10\n'
         )
         (tmp_path / "bonfire.toml").write_text(toml)
         result = _resolve_setting_sources(str(tmp_path))
@@ -176,13 +164,10 @@ class TestExplicitFalseBlocks:
         """``trust_project_settings = false`` → ``[]``."""
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text(
-            "[bonfire]\ntrust_project_settings = false\n"
-        )
+        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = false\n")
         result = _resolve_setting_sources(str(tmp_path))
         assert result == [], (
-            "Explicit ``trust_project_settings = false`` MUST resolve to "
-            f"``[]``. Got {result!r}."
+            f"Explicit ``trust_project_settings = false`` MUST resolve to ``[]``. Got {result!r}."
         )
 
 
@@ -246,9 +231,7 @@ class TestMalformedTomlDenies:
 
         (tmp_path / "bonfire.toml").write_text("this is not = = valid toml [[[\n")
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == [], (
-            f"Malformed TOML MUST default-deny without raising. Got {result!r}."
-        )
+        assert result == [], f"Malformed TOML MUST default-deny without raising. Got {result!r}."
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +254,7 @@ class TestEnvOverridePreserved:
         monkeypatch.setenv("BONFIRE_TRUST_PROJECT_SETTINGS", "1")
         result = _resolve_setting_sources(str(tmp_path))
         assert result == ["project"], (
-            "Env override MUST trust even when TOML key is missing. "
-            f"Got {result!r}."
+            f"Env override MUST trust even when TOML key is missing. Got {result!r}."
         )
 
     def test_env_override_loads_when_key_false(
@@ -288,14 +270,11 @@ class TestEnvOverridePreserved:
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text(
-            "[bonfire]\ntrust_project_settings = false\n"
-        )
+        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = false\n")
         monkeypatch.setenv("BONFIRE_TRUST_PROJECT_SETTINGS", "1")
         result = _resolve_setting_sources(str(tmp_path))
         assert result == ["project"], (
-            "Env override MUST trust even when TOML key explicitly disables. "
-            f"Got {result!r}."
+            f"Env override MUST trust even when TOML key explicitly disables. Got {result!r}."
         )
 
     def test_env_override_loads_without_bonfire_toml(
@@ -309,9 +288,7 @@ class TestEnvOverridePreserved:
         (tmp_path / "CLAUDE.md").write_text("# Foreign\n")
         monkeypatch.setenv("BONFIRE_TRUST_PROJECT_SETTINGS", "1")
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == ["project"], (
-            f"Env override MUST trust foreign repos. Got {result!r}."
-        )
+        assert result == ["project"], f"Env override MUST trust foreign repos. Got {result!r}."
 
 
 # ---------------------------------------------------------------------------

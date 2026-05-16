@@ -548,3 +548,412 @@ class TestDotenvReadVerbBroadening:
             "from ``cat`` to ``cat|head|tail`` so swap-the-verb bypass "
             "is closed."
         )
+
+
+# ---------------------------------------------------------------------------
+# UNC + extended-length Windows path coverage (W8.H)
+#
+# The slash-collapse step in ``_canonicalize_write_edit_path`` destroys the
+# leading ``//`` marker that distinguishes UNC and extended-length forms
+# from regular paths. The matcher must detect these shapes BEFORE the
+# collapse fires and re-run on the underlying tail so the credential
+# floor still triggers.
+# ---------------------------------------------------------------------------
+
+
+UNC_DENY_PATHS = [
+    # Plain UNC -> ~/.ssh/id_rsa shape.
+    r"\\server\share\Users\alice\.ssh\id_rsa",
+    r"\\server\share\Users\alice\.ssh\authorized_keys",
+    r"\\fileserver\home\Users\bob\.ssh\id_ed25519",
+    # UNC pointing at AWS credentials.
+    r"\\server\share\Users\alice\.aws\credentials",
+    # UNC pointing at npmrc / pypirc.
+    r"\\server\share\Users\alice\.npmrc",
+    r"\\server\share\Users\alice\.pypirc",
+]
+
+
+EXTLEN_DENY_PATHS = [
+    # Extended-length drive form.
+    r"\\?\C:\Users\alice\.ssh\id_rsa",
+    r"\\?\C:\Users\alice\.ssh\authorized_keys",
+    r"\\?\D:\Users\bob\.aws\credentials",
+    r"\\?\C:\Users\alice\.npmrc",
+    # Extended-length UNC form.
+    r"\\?\UNC\server\share\Users\alice\.ssh\id_rsa",
+    r"\\?\UNC\fileserver\home\Users\bob\.aws\credentials",
+]
+
+
+class TestWindowsUNCDeny:
+    r"""UNC ``\\server\share\<credential>`` must DENY."""
+
+    @pytest.mark.parametrize("path", UNC_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_unc_write_denied(self, path: str) -> None:
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"UNC Write of {path!r} must deny — UNC path strips to the "
+            "tail which is a credential path."
+        )
+
+    @pytest.mark.parametrize("path", UNC_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_unc_edit_denied(self, path: str) -> None:
+        result = await _run_write_edit("Edit", path)
+        assert _is_deny(result), (
+            f"UNC Edit of {path!r} must deny — UNC path strips to the "
+            "tail which is a credential path."
+        )
+
+
+class TestWindowsExtendedLengthDeny:
+    r"""Extended-length ``\\?\C:\...`` and ``\\?\UNC\...`` must DENY."""
+
+    @pytest.mark.parametrize("path", EXTLEN_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_extlen_write_denied(self, path: str) -> None:
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Extended-length Write of {path!r} must deny — the "
+            r"``\\?\`` prefix must not bypass the deny floor."
+        )
+
+    @pytest.mark.parametrize("path", EXTLEN_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_extlen_edit_denied(self, path: str) -> None:
+        result = await _run_write_edit("Edit", path)
+        assert _is_deny(result), (
+            f"Extended-length Edit of {path!r} must deny — the "
+            r"``\\?\`` prefix must not bypass the deny floor."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Modern credential paths (W8.I)
+#
+# The deny list expanded to cover GitHub CLI, npm, PyPI, cargo, Azure CLI,
+# gcloud, and the global git config. Each new prefix gets a plain hit,
+# a traversal hit (``..`` escape that lands on the same canonical), and
+# a case-fold hit (the case-fold layer kicks in on macOS / Windows; the
+# case-fold tests are in TestCaseInsensitiveDeny below). The hits below
+# exercise the plain + traversal axes on Linux.
+# ---------------------------------------------------------------------------
+
+
+MODERN_CREDENTIAL_DENY_PATHS = [
+    # GitHub CLI hosts.yml.
+    "~/.config/gh/hosts.yml",
+    "/home/alice/.config/gh/hosts.yml",
+    # Traversal that lands back on the same target.
+    "/home/alice/x/../.config/gh/hosts.yml",
+    # npmrc.
+    "~/.npmrc",
+    "/home/alice/.npmrc",
+    "/home/alice/projects/../.npmrc",
+    # pypirc.
+    "~/.pypirc",
+    "/home/alice/.pypirc",
+    "/home/alice/Documents/../.pypirc",
+    # Cargo credentials (plain + toml variants).
+    "~/.cargo/credentials",
+    "~/.cargo/credentials.toml",
+    "/home/alice/.cargo/credentials",
+    "/home/alice/.cargo/credentials.toml",
+    "/home/alice/projects/../.cargo/credentials",
+    # Azure CLI - any file under the directory.
+    "~/.azure/accessTokens.json",
+    "~/.azure/azureProfile.json",
+    "/home/alice/.azure/accessTokens.json",
+    "/home/alice/projects/../.azure/azureProfile.json",
+    # gcloud - both ~/.config/gcloud/ and ~/.gcloud/ variants.
+    "~/.config/gcloud/application_default_credentials.json",
+    "~/.config/gcloud/credentials.db",
+    "~/.gcloud/credentials",
+    "/home/alice/.config/gcloud/application_default_credentials.json",
+    "/home/alice/.gcloud/credentials",
+    "/home/alice/x/../.config/gcloud/application_default_credentials.json",
+    # Global git config.
+    "~/.gitconfig",
+    "/home/alice/.gitconfig",
+    "/home/alice/projects/../.gitconfig",
+]
+
+
+class TestModernCredentialDeny:
+    """New credential prefixes for GitHub CLI / npm / pypi / cargo / azure /
+    gcloud / global git config.
+    """
+
+    @pytest.mark.parametrize("path", MODERN_CREDENTIAL_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_modern_credential_write_denied(self, path: str) -> None:
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Write of {path!r} must deny — modern credential prefix must be in the deny floor."
+        )
+
+    @pytest.mark.parametrize("path", MODERN_CREDENTIAL_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_modern_credential_edit_denied(self, path: str) -> None:
+        result = await _run_write_edit("Edit", path)
+        assert _is_deny(result), (
+            f"Edit of {path!r} must deny — modern credential prefix must be in the deny floor."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Shell-rc persistence vectors (W8.J)
+#
+# Writes / appends / edits to shell-rc files establish session-survival
+# code. The hook payload only sees the target ``file_path``, so a write
+# via ``>`` and an append via ``>>`` are indistinguishable at this layer —
+# both are denied by virtue of the prefix match. The Edit-tool form is
+# also covered.
+# ---------------------------------------------------------------------------
+
+
+SHELL_RC_DENY_PATHS = [
+    # Bash family.
+    "~/.bashrc",
+    "~/.bash_profile",
+    "~/.bash_logout",
+    "~/.bash_aliases",
+    "~/.profile",
+    "/home/alice/.bashrc",
+    "/home/alice/.bash_profile",
+    "/home/alice/.bash_logout",
+    "/home/alice/.bash_aliases",
+    "/home/alice/.profile",
+    # Zsh family.
+    "~/.zshrc",
+    "~/.zprofile",
+    "~/.zshenv",
+    "~/.zlogin",
+    "~/.zlogout",
+    "/home/alice/.zshrc",
+    "/home/alice/.zprofile",
+    "/home/alice/.zshenv",
+    "/home/alice/.zlogin",
+    "/home/alice/.zlogout",
+    # Fish config.
+    "~/.config/fish/config.fish",
+    "/home/alice/.config/fish/config.fish",
+    # Traversal variants - kernel resolves to the same target.
+    "/home/alice/projects/../.bashrc",
+    "/home/alice/x/y/../../.zshrc",
+    "/home/alice/Documents/../.config/fish/config.fish",
+    # Windows PowerShell profiles - prefix match on the Documents dir.
+    "~/Documents/PowerShell/profile.ps1",
+    "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1",
+    "~/Documents/WindowsPowerShell/profile.ps1",
+    "~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
+    "/home/alice/Documents/PowerShell/profile.ps1",
+]
+
+
+class TestShellRcDeny:
+    """Writes / edits to shell-rc files (persistence vector) must DENY."""
+
+    @pytest.mark.parametrize("path", SHELL_RC_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_shell_rc_write_denied(self, path: str) -> None:
+        # Write tool covers both ``>`` overwrite and ``>>`` append semantics
+        # at the hook layer — the payload is the target path; the hook
+        # doesn't distinguish open-mode.
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Write to shell-rc target {path!r} must deny — "
+            "persistence vector. Append (``>>``) and overwrite (``>``) "
+            "both surface as Write at this layer."
+        )
+
+    @pytest.mark.parametrize("path", SHELL_RC_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_shell_rc_edit_denied(self, path: str) -> None:
+        result = await _run_write_edit("Edit", path)
+        assert _is_deny(result), f"Edit of shell-rc target {path!r} must deny — persistence vector."
+
+
+# ---------------------------------------------------------------------------
+# Case-insensitive filesystems (W8.M)
+#
+# macOS HFS+ / APFS and Windows NTFS resolve ``~/.SSH/id_rsa`` and
+# ``~/.ssh/id_rsa`` to the same inode. The matcher must case-fold both
+# sides on those platforms. POSIX Linux is case-sensitive (correct
+# semantics preserved).
+#
+# Mocks ``sys.platform`` so the test runs deterministically regardless of
+# host OS.
+# ---------------------------------------------------------------------------
+
+
+CASE_FOLD_DENY_PATHS = [
+    # SSH variants.
+    "~/.SSH/id_rsa",
+    "~/.Ssh/authorized_keys",
+    "/Users/alice/.SSH/id_rsa",
+    "/Users/Alice/.SSH/AUTHORIZED_KEYS",
+    # AWS variants.
+    "~/.AWS/credentials",
+    "/Users/alice/.AWS/Credentials",
+    # GnuPG variants.
+    "~/.GNUPG/secring.gpg",
+    "/Users/alice/.Gnupg/private-keys-v1.d/x.key",
+    # Docker variants.
+    "~/.DOCKER/config.json",
+    # netrc.
+    "~/.NETRC",
+    # Modern credentials.
+    "~/.NPMRC",
+    "~/.PYPIRC",
+    "~/.GITCONFIG",
+    "~/.AZURE/accessTokens.json",
+    "~/.CARGO/credentials",
+    "~/.CONFIG/gh/hosts.yml",
+    "~/.CONFIG/gcloud/application_default_credentials.json",
+    # Shell-rc.
+    "~/.BASHRC",
+    "~/.ZSHRC",
+    # dotenv tail-match.
+    "/Users/alice/project/.ENV",
+    "/Users/alice/project/.Env.Local",
+]
+
+
+class TestCaseInsensitiveDenyMacOS:
+    """On macOS the matcher MUST case-fold both sides."""
+
+    @pytest.mark.parametrize("path", CASE_FOLD_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_case_fold_write_denied_macos(
+        self, path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys as _sys
+
+        monkeypatch.setattr(_sys, "platform", "darwin")
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"macOS Write of case-variant {path!r} must deny — "
+            "HFS+/APFS resolve case-insensitively."
+        )
+
+    @pytest.mark.parametrize("path", CASE_FOLD_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_case_fold_edit_denied_macos(
+        self, path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys as _sys
+
+        monkeypatch.setattr(_sys, "platform", "darwin")
+        result = await _run_write_edit("Edit", path)
+        assert _is_deny(result), (
+            f"macOS Edit of case-variant {path!r} must deny — HFS+/APFS resolve case-insensitively."
+        )
+
+
+WINDOWS_CASE_FOLD_DENY_PATHS = [
+    r"C:\Users\Alice\.SSH\id_rsa",
+    r"C:\Users\Alice\.SSH\AUTHORIZED_KEYS",
+    r"C:\Users\Alice\.AWS\Credentials",
+    r"C:\Users\Alice\.NPMRC",
+    r"C:\Users\Alice\.PYPIRC",
+    r"C:\Users\Alice\.GITCONFIG",
+    r"C:\Users\Alice\Documents\PowerShell\PROFILE.PS1",
+    r"C:\Users\Alice\Documents\WindowsPowerShell\PROFILE.PS1",
+]
+
+
+class TestCaseInsensitiveDenyWindows:
+    """On Windows the matcher MUST case-fold both sides (NTFS default)."""
+
+    @pytest.mark.parametrize("path", WINDOWS_CASE_FOLD_DENY_PATHS)
+    @pytest.mark.asyncio
+    async def test_case_fold_write_denied_windows(
+        self, path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys as _sys
+
+        monkeypatch.setattr(_sys, "platform", "win32")
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Windows Write of case-variant {path!r} must deny — "
+            "NTFS resolves case-insensitively by default."
+        )
+
+
+class TestCaseInsensitiveAllowedOnLinux:
+    """POSIX Linux MUST stay case-sensitive — ``~/.SSH/id_rsa`` is a
+    DIFFERENT file from ``~/.ssh/id_rsa`` on a case-sensitive filesystem,
+    and the matcher MUST NOT false-positive deny it.
+    """
+
+    LINUX_NOT_DENIED = [
+        # Different case from the deny prefix — on Linux these are
+        # separate files. ``.SSH`` directory is legitimate user content.
+        "~/.SSH/id_rsa",
+        "~/.AWS/credentials",
+        "~/.NPMRC",
+        "~/.PYPIRC",
+        "~/.GITCONFIG",
+        "/home/alice/.BASHRC",
+        "/home/alice/.ZSHRC",
+        # Mixed-case prefix in the middle.
+        "~/.Cargo/credentials",
+    ]
+
+    @pytest.mark.parametrize("path", LINUX_NOT_DENIED)
+    @pytest.mark.asyncio
+    async def test_case_variant_allowed_on_linux(
+        self, path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys as _sys
+
+        # Force POSIX Linux semantics even if the host happens to be
+        # macOS/Windows running the suite. The contract: case-sensitive
+        # filesystems require an EXACT match.
+        monkeypatch.setattr(_sys, "platform", "linux")
+        result = await _run_write_edit("Write", path)
+        assert not _is_deny(result), (
+            f"Linux Write of case-variant {path!r} must NOT deny — "
+            "POSIX Linux is case-sensitive; a different-case filename "
+            "is a different file."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Linux regression smoke for the new defenses
+#
+# Every new deny prefix (modern credentials, shell-rc) must STILL fire on
+# Linux at the canonical lowercase form. Mirrors the pattern of
+# ``TestLinuxRegressionSmoke`` above.
+# ---------------------------------------------------------------------------
+
+
+LINUX_NEW_DEFENSE_DENY_SMOKE = [
+    "/home/alice/.config/gh/hosts.yml",
+    "/home/alice/.npmrc",
+    "/home/alice/.pypirc",
+    "/home/alice/.cargo/credentials",
+    "/home/alice/.cargo/credentials.toml",
+    "/home/alice/.azure/accessTokens.json",
+    "/home/alice/.config/gcloud/application_default_credentials.json",
+    "/home/alice/.gcloud/credentials",
+    "/home/alice/.gitconfig",
+    "/home/alice/.bashrc",
+    "/home/alice/.zshrc",
+    "/home/alice/.profile",
+    "/home/alice/.config/fish/config.fish",
+]
+
+
+class TestNewDefenseLinuxSmoke:
+    @pytest.mark.parametrize("path", LINUX_NEW_DEFENSE_DENY_SMOKE)
+    @pytest.mark.asyncio
+    async def test_new_defense_linux_write_denied(self, path: str) -> None:
+        result = await _run_write_edit("Write", path)
+        assert _is_deny(result), (
+            f"Linux Write of {path!r} must deny — new deny prefix "
+            "must fire on canonical Linux paths."
+        )

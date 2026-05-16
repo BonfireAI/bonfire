@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import sys
 import unicodedata
 from typing import TYPE_CHECKING, Any
 
@@ -162,6 +163,49 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
     "~/.kube/config",
     # netrc
     "~/.netrc",
+    # GitHub CLI — ``~/.config/gh/hosts.yml`` carries oauth tokens.
+    "~/.config/gh/hosts.yml",
+    # npm auth — ``~/.npmrc`` stores the ``_authToken`` for publish + scoped
+    # registries.
+    "~/.npmrc",
+    # PyPI upload — ``~/.pypirc`` carries the token for ``twine upload``.
+    "~/.pypirc",
+    # Rust registry — ``~/.cargo/credentials`` (legacy plain) and
+    # ``~/.cargo/credentials.toml`` (modern) both store cargo publish tokens.
+    "~/.cargo/credentials",
+    "~/.cargo/credentials.toml",
+    # Azure CLI — entire credentials directory is sensitive (tokens,
+    # service-principal secrets). Match as a prefix so any file under
+    # ``~/.azure/`` is denied.
+    "~/.azure/",
+    # GCP / gcloud — credentials live under ``~/.config/gcloud/`` on Linux
+    # and ``~/.gcloud/`` historically. Match both prefixes.
+    "~/.config/gcloud/",
+    "~/.gcloud/",
+    # git global config — may contain ``[credential]`` helpers or embed an
+    # OAuth token in URL rewrites. Treat as deny.
+    "~/.gitconfig",
+    # Shell-rc persistence vectors. A write or append (``>>``) to any of
+    # these establishes session-survival code. Match each rc file exactly
+    # so neighboring docs / examples are not caught.
+    "~/.bashrc",
+    "~/.bash_profile",
+    "~/.bash_logout",
+    "~/.bash_aliases",
+    "~/.profile",
+    "~/.zshrc",
+    "~/.zprofile",
+    "~/.zshenv",
+    "~/.zlogin",
+    "~/.zlogout",
+    "~/.config/fish/config.fish",
+    # PowerShell profiles on Windows resolve under either
+    # ``~/Documents/PowerShell/`` (PowerShell Core) or
+    # ``~/Documents/WindowsPowerShell/`` (legacy). Match the directory
+    # prefix so profile.ps1 + Microsoft.PowerShell_profile.ps1 + module
+    # auto-loads are all denied.
+    "~/Documents/PowerShell/",
+    "~/Documents/WindowsPowerShell/",
     # Root home
     "/root/",
     # System state
@@ -187,6 +231,81 @@ WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
 # symlink-bypass family. The literal ``self`` aliases are handled via the
 # prefix list above; the numeric-pid forms need a regex match.
 _PROC_NUMERIC_BYPASS_RE = re.compile(r"^/proc/[0-9]+/(?:cwd|root)/")
+
+
+# Windows UNC: ``\\server\share\<rest>`` — after backslash normalization
+# arrives as ``//server/share/<rest>``. The kernel resolves UNC to a remote
+# share; if ``<rest>`` matches a credential path on that share
+# (``Users/<u>/.ssh/id_rsa``, etc.) the deny floor must still fire.
+_WIN_UNC_RE = re.compile(r"^//([^/]+)/([^/]+)(/.*)?$")
+# Windows extended-length: ``\\?\C:\<rest>`` → ``//?/C:/<rest>``; the
+# ``\\?\`` prefix is a syntactic device that disables Win32 path-length
+# limits and silently bypasses prefix-shape matchers that expect
+# ``C:/Users/<u>/...``. Extended-length UNC: ``\\?\UNC\server\share\<rest>``
+# → ``//?/UNC/server/share/<rest>``.
+_WIN_EXTLEN_RE = re.compile(r"^//\?/(?:UNC/)?(.*)$")
+
+
+def _strip_windows_unc_or_extlen(file_path: str) -> str | None:
+    r"""Detect Windows UNC + extended-length shapes and return the underlying
+    POSIX-style path for re-canonicalization.
+
+    Returns:
+        The stripped/rewritten path (still a string with forward slashes) if
+        ``file_path`` matched UNC or extended-length, else ``None``.
+
+    Behavior:
+        - Extended-length UNC ``\\?\UNC\server\share\Users\u\.ssh\id_rsa``
+          -> ``/Users/u/.ssh/id_rsa`` (drop ``\\?\UNC\server\share``; the
+          tail is what the kernel actually opens on the remote share).
+        - Extended-length ``\\?\C:\Users\u\.ssh\id_rsa`` ->
+          ``C:/Users/u/.ssh/id_rsa`` (drop ``\\?\``; the underlying form is
+          a normal drive path that downstream canonicalization handles).
+        - UNC ``\\server\share\Users\u\.ssh\id_rsa`` ->
+          ``/Users/u/.ssh/id_rsa`` (drop ``\\server\share``; treat the tail
+          as a normal POSIX path so the home-prefix collapse fires).
+
+    The double-slash detection is performed BEFORE the multi-slash collapse
+    that ``_canonicalize_write_edit_path_with_underflow`` runs - by the time
+    that collapse fires the UNC marker is destroyed.
+    """
+    if "\\" not in file_path and not file_path.startswith("//"):
+        return None
+    # Normalize backslashes so the regex can be authored in POSIX form.
+    s = file_path.replace("\\", "/") if "\\" in file_path else file_path
+    # Extended-length first (``\\?\``) — it has a more specific prefix than
+    # generic UNC (``\\server``). Both UNC + extended-length-UNC are
+    # rewritten so the tail re-enters canonicalization as a clean path.
+    m = _WIN_EXTLEN_RE.match(s)
+    if m is not None:
+        tail = m.group(1)
+        # ``\\?\UNC\server\share\<rest>`` lands here with tail
+        # ``server/share/<rest>`` — strip the share prefix so ``<rest>``
+        # alone is canonicalized. If the input was the non-UNC variant
+        # (``\\?\C:\...``) the tail is ``C:/<rest>`` and is left as-is
+        # for the normal drive-path canonicalization to consume.
+        if s.startswith("//?/UNC/"):
+            unc_parts = tail.split("/", 2)
+            if len(unc_parts) < 3:
+                # Malformed extended-length UNC (no share or no tail) —
+                # refuse: nothing meaningful to scan.
+                return ""
+            return "/" + unc_parts[2]
+        return tail
+    m = _WIN_UNC_RE.match(s)
+    if m is not None:
+        tail = m.group(3) or ""
+        # ``\\server\share`` with no tail → an empty stripped form.
+        # Canonicalization will land on ``""``; the matcher treats that
+        # as a non-match (no credential reference) and the original
+        # would not reach a credential file anyway.
+        return tail
+    return None
+
+
+# Sentinel returned by ``_strip_windows_unc_or_extlen`` for malformed
+# UNC/extended-length inputs that should be refused outright.
+_MALFORMED_UNC = ""
 
 
 # Public exported reasons keep the SecurityDenied pattern_id slug stable
@@ -347,8 +466,19 @@ def _canonicalize_write_edit_path_with_underflow(file_path: str) -> tuple[str, b
     return s, underflowed
 
 
+def _is_case_insensitive_fs() -> bool:
+    """Return True when the local filesystem is case-insensitive.
+
+    macOS HFS+ / APFS (default) and Windows NTFS resolve ``~/.SSH/id_rsa``
+    and ``~/.ssh/id_rsa`` to the same inode. The deny matcher must
+    case-fold both sides on those platforms; pure-POSIX Linux stays
+    case-sensitive (the correct semantics).
+    """
+    return sys.platform == "darwin" or sys.platform == "win32"
+
+
 def _match_write_edit_sensitive_path(file_path: str) -> bool:
-    """Return True if ``file_path`` resolves under any deny prefix.
+    r"""Return True if ``file_path`` resolves under any deny prefix.
 
     Also covers the ``.env`` family and the ``..`` cross-user / cross-root
     escape family. The matcher runs the following passes:
@@ -356,14 +486,21 @@ def _match_write_edit_sensitive_path(file_path: str) -> bool:
     1. Numeric-pid /proc symlink-bypass match on the post-backslash-normalize
        form (``/proc/<pid>/cwd/`` or ``/proc/<pid>/root/``). The literal
        ``/proc/self/...`` aliases are in the prefix list below.
-    2. Canonicalize the path. If dot-segment resolution underflowed past the
+    2. Windows UNC + extended-length detection: ``\\server\share\<rest>``
+       and ``\\?\<rest>`` bypass the home-prefix collapse because the
+       slash-collapse step destroys the leading ``//`` marker. Detect
+       these shapes early and re-run the matcher on the stripped tail.
+    3. Canonicalize the path. If dot-segment resolution underflowed past the
        anchor (cross-user / cross-root traversal attempt), refuse — the
        kernel resolves the original path to a DIFFERENT user's home or to
        a path outside any deny prefix entirely.
-    3. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
-    4. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
+    4. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
+       On case-insensitive filesystems (macOS, Windows) the comparison is
+       case-folded; POSIX Linux stays case-sensitive.
+    5. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
        segment-anchored — ``/path/to/.env`` matches, ``/path/env.txt``
-       does not, ``/path/.env_example.txt`` does not).
+       does not, ``/path/.env_example.txt`` does not). The tail match
+       is ALSO case-folded on case-insensitive filesystems.
     """
     if not file_path:
         return False
@@ -376,25 +513,43 @@ def _match_write_edit_sensitive_path(file_path: str) -> bool:
     proc_probe = _MULTI_SLASH_RE.sub("/", proc_probe)
     if _PROC_NUMERIC_BYPASS_RE.match(proc_probe):
         return True
+    # Windows UNC + extended-length: detect BEFORE main canonicalization so
+    # the slash-collapse does not destroy the ``//`` UNC marker. If the
+    # strip helper returns a tail, re-evaluate that tail through the full
+    # matcher (one level of recursion — the stripped tail is normal POSIX
+    # or drive-letter form and cannot recurse again).
+    stripped = _strip_windows_unc_or_extlen(file_path)
+    if stripped is not None:
+        if stripped == _MALFORMED_UNC:
+            # Malformed extended-length UNC (no share or no tail) → refuse.
+            return True
+        # Recurse on the stripped form. The stripped form starts with ``/``
+        # or with a drive letter (``C:/...``) — neither path re-triggers
+        # the UNC strip, so recursion is bounded at depth 1.
+        return _match_write_edit_sensitive_path(stripped)
     canonical, underflowed = _canonicalize_write_edit_path_with_underflow(file_path)
     if underflowed:
         # Cross-user / cross-root escape attempt — kernel resolves the
         # original path to a target the alice-anchored deny scan can't see.
         # Refuse outright. Fail-CLOSED is the v0.1 contract.
         return True
+    case_fold = _is_case_insensitive_fs()
+    canonical_cmp = canonical.casefold() if case_fold else canonical
     for prefix in WRITE_EDIT_SENSITIVE_PATH_DENY:
-        if canonical.startswith(prefix):
+        prefix_cmp = prefix.casefold() if case_fold else prefix
+        if canonical_cmp.startswith(prefix_cmp):
             return True
     # Last segment match for .env / .env.* (segment-anchored).
     # Get the final path segment.
     segment = canonical.rsplit("/", 1)[-1]
-    if segment == ".env":
+    segment_cmp = segment.casefold() if case_fold else segment
+    if segment_cmp == ".env":
         return True
-    if segment.startswith(".env."):
+    if segment_cmp.startswith(".env."):
         # ``.env.example`` is whitelisted because it's documentation, not
         # secrets; everything else under ``.env.<suffix>`` is treated as a
         # real dotenv file.
-        if segment == ".env.example":
+        if segment_cmp == ".env.example":
             return False
         return True
     return False

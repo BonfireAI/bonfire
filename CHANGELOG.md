@@ -4,6 +4,97 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a4] — 2026-05-16
+
+The fourth alpha release of `bonfire-ai`. A coordinated hardening pass against
+the cost-accounting, security, and onboarding surfaces of the runtime, plus
+release-prep docs hygiene that the [0.1.0a3] cut left stale. The stable
+`0.1.0` tag remains held until the full release-gate ladder (per
+[`docs/release-policy.md`](docs/release-policy.md)) clears in code, in CI,
+and in a fresh release-gate Box.
+
+### Added
+
+- **`DispatchFailed.cost_usd` field and new `PipelineFailed` event.** Bus
+  observers can now reconstruct cumulative cost on failure paths. Three
+  `DispatchFailed` emit sites in `dispatch/runner.py` and four
+  `PipelineFailed` emit sites in `engine/pipeline.py` thread cumulative
+  cost through the bus.
+- **`CostTracker` and `CostLedgerConsumer` dual-subscribe.** `CostTracker`
+  observes both `DispatchCompleted` AND `DispatchFailed`;
+  `CostLedgerConsumer` observes both `PipelineCompleted` AND
+  `PipelineFailed`. Bus-observed total now equals
+  `PipelineResult.total_cost_usd` on success, failure, bounce, and
+  parallel-group paths.
+- **`safe_read_capped_text` mirrored to symmetric read sites.** The Wave-9
+  safe-write rollout now covers `session/persistence.py::read_events`,
+  `xp/tracker.py::XPTracker.events`, and the `bonfire init` gitignore
+  append. Symlink, oversize, and TOCTOU shapes are refused with typed
+  errors.
+
+### Changed
+
+- **`StageExecutor.execute_single` cumulative-cost stamp aligned with
+  `PipelineEngine._execute_stage`.** The public re-exported API applies
+  the same `cumulative_iteration_cost` stamp as the live engine path.
+  Note: full execution-path consolidation between the two
+  implementations is queued for a subsequent alpha.
+- **`bonfire init` re-runs report `Already present:` for pre-existing
+  artifacts.** Previously emitted `Created:` on every re-run regardless
+  of whether the artifact actually existed.
+- **WebSocket message-size cap unified to 8 KiB.** The Pydantic max
+  (`onboard/protocol.py::MAX_USER_MESSAGE_LEN`) and the websockets server
+  cap now share a single source of truth.
+- **Legacy `[bonfire.tools]` section emits a migration warning.** Project
+  TOMLs with the legacy section now get a `typer.echo` instructing the
+  move to `.bonfire/tools.local.toml`.
+- **`--conversation-timeout -1` renders as `unbounded` in `--help`.**
+
+### Fixed
+
+- **`_HOME_PREFIX_RE` no longer accepts `..` or `.` as a username
+  segment.** A greedy `[^/]+` in `_HOME_PREFIX_RE` previously matched the
+  literal `..` segment, letting inputs like `/home/../etc/sudoers`
+  canonicalize to `~/etc/sudoers` and bypass
+  `WRITE_EDIT_SENSITIVE_PATH_DENY`. The regex now uses a negative
+  lookahead to exclude `./` and `../` username slots; the entire deny
+  floor is restored.
+- **`_handle_bounce` failure-path branches preserve `bounce_target`
+  cost.** Refactored from `tuple[Envelope, float] | None` to
+  `tuple[Envelope | None, float]`; cost-delta is now credited on every
+  halt path.
+- **`_validate_session_id` and `_envelope_id_re` regex use `\Z`
+  anchor.** Trailing `\n` (CRLF / log-injection shape) is now rejected.
+  Previously `$` allowed it.
+- **`bonfire cost session <bad>` validates at the CLI boundary.**
+  Invalid session IDs fail at the typer parsing layer rather than
+  mid-execution.
+- **`Unknown record type None` warning aggregated** to one summary line
+  per legacy ledger load (was per-record spam).
+- **`bonfire init <existing-file>` raises a tailored error.** Previously
+  raised a `FileExistsError` traceback to the user; now `typer.echo` +
+  `Exit(1)`.
+
+### Security
+
+- **`C1.1-rm-rf-non-temp` regex anchor normalized to `\b`.** Switched
+  from `(?:^|[|;&]\s+)` to `\b` to match the rest of the catalogue.
+  Bypass forms `/bin/rm`, `exec rm`, `\rm`, `time/nice/command rm` are
+  now caught.
+- **`WRITE_EDIT_SENSITIVE_PATH_DENY` expanded with six modern
+  surfaces:** `~/.ssh/config`, `~/.config/git/config`, `/etc/cron.d/`,
+  `/etc/systemd/system/`, `/usr/local/bin/`, `/etc/ld.so.preload`.
+- **`_safe_resolve_config_path` refuses home-symlink targets
+  unconditionally.** Symlinks whose targets escape the active
+  write-floor now return a typed error rather than silently following.
+
+### Internal
+
+- **Release-prep docs hygiene.** README, CHANGELOG, `docs/release-policy.md`,
+  `docs/scan-front-door-protocol.md`, `src/bonfire/__init__.py` fallback
+  `__version__`, and `src/bonfire/cli/app.py` docstring all aligned with
+  the current alpha label.
+
 ## [0.1.0a3] — 2026-05-16
 
 The third alpha release of `bonfire-ai`. Bonfire is a pipeline runtime
@@ -46,10 +137,6 @@ passes" mean what it should on the integration branch.
 
 ### Changed
 
-- **Version bump to `0.1.0`.** PyPI classifier advances from `Development
-  Status :: 3 - Alpha` to `4 - Beta` per
-  [`docs/release-policy.md`](docs/release-policy.md). The
-  `bonfire-ai==0.1.0` install is the first non-alpha drop.
 - **BREAKING: `DispatchOptions.permission_mode` default flipped to
   `"default"` (SDK ask-mode).** The previous default `"dontAsk"` is now
   framed as defense-in-depth rather than the primary trust gate; explicit
@@ -399,3 +486,4 @@ end-to-end CLI verb are still in progress and ship in subsequent
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1
 [0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2
 [0.1.0a3]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a3
+[0.1.0a4]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a4

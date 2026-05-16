@@ -649,7 +649,7 @@ class PipelineEngine:
         (bounce-target cost + retry cost). The caller must credit this delta
         to its running total so budget accounting includes the bounce target.
         Returns None if the bounce fails or the second gate check fails
-        (Sage D7 -- single bounce, no recursion).
+        (bounce is single-shot; no recursion).
         """
         target_name = spec.on_gate_failure
         if not target_name:

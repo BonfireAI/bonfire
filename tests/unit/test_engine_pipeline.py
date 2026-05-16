@@ -860,8 +860,8 @@ class TestBounceBack:
         assert result.success is False
 
     async def test_bounce_total_cost_includes_bounce_target_cost(self) -> None:
-        """Probe N+4 H-P2 (W8.D) RED — successful bounce must NOT drop the
-        bounce-target's cost from ``result.total_cost_usd``.
+        """Successful bounce must NOT drop the bounce-target's cost from
+        ``result.total_cost_usd``.
 
         ``_handle_bounce`` runs the bounce target then re-runs the original
         stage. Today, ``_handle_gate_result`` returns only the re-executed
@@ -887,9 +887,7 @@ class TestBounceBack:
                 self._costs = costs
                 self.calls: list[Envelope] = []
 
-            async def execute(
-                self, envelope: Envelope, *, options: DispatchOptions
-            ) -> Envelope:
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
                 self.calls.append(envelope)
                 cost = self._costs[envelope.agent_name]
                 return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
@@ -938,8 +936,8 @@ class TestBounceBack:
         )
 
     async def test_bounce_target_cost_counted_against_budget(self) -> None:
-        """Probe N+4 H-P2 (W8.D) RED — successful bounce must NOT bypass
-        ``budget_usd`` by dropping the bounce-target's cost from accounting.
+        """Successful bounce must NOT bypass ``budget_usd`` by dropping the
+        bounce-target's cost from accounting.
 
         Because ``_handle_bounce`` drops the bounce-target's cost, the
         post-bounce group-boundary budget check (pipeline.py line 227) sees
@@ -961,9 +959,7 @@ class TestBounceBack:
                 self._costs = costs
                 self.calls: list[Envelope] = []
 
-            async def execute(
-                self, envelope: Envelope, *, options: DispatchOptions
-            ) -> Envelope:
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
                 self.calls.append(envelope)
                 cost = self._costs[envelope.agent_name]
                 return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
@@ -999,9 +995,7 @@ class TestBounceBack:
             "budget bypass: real total (1.20) exceeds budget (1.00) but pipeline "
             f"reported success=True with total_cost_usd={result.total_cost_usd}"
         )
-        assert "budget" in result.error.lower(), (
-            f"expected budget halt, got error={result.error!r}"
-        )
+        assert "budget" in result.error.lower(), f"expected budget halt, got error={result.error!r}"
 
 
 # ===========================================================================

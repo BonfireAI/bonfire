@@ -54,6 +54,7 @@ include = [
     "src/bonfire/onboard/ui.html",
     "src/bonfire/py.typed",
     "src/bonfire/integrations/builtins/*.ism.md",
+    "src/bonfire/skill/*.md",
 ]
 
 [tool.pytest.ini_options]

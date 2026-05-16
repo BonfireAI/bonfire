@@ -233,6 +233,29 @@ def handoff() -> None:
     _lazy_run("bonfire.cli.commands.handoff", "handoff")()
 
 
+@app.command("install-skill")
+def install_skill(
+    target: str = typer.Option(
+        "~/.claude/skills/bonfire/",
+        "--target",
+        help=(
+            "Directory to install the skill into. Defaults to "
+            "~/.claude/skills/bonfire/. The directory is created if absent."
+        ),
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help=(
+            "Overwrite an existing skill at the target even when its "
+            "content diverges from the bundled version."
+        ),
+    ),
+) -> None:
+    """Copy the bundled Claude Code skill to a user-writable location."""
+    _lazy_run("bonfire.cli.commands.install_skill", "install_skill")(target=target, force=force)
+
+
 # ---------------------------------------------------------------------------
 # Subcommand groups — built locally so ``bonfire --help`` lists the names
 # without importing the underlying command modules. Each subcommand body

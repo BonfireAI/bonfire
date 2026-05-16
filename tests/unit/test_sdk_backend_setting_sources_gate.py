@@ -142,14 +142,24 @@ class TestResolveSettingSourcesHelper:
         )
 
     def test_co_located_bonfire_toml_returns_project(self, tmp_path: Path) -> None:
-        """Project signal: ``bonfire.toml`` at cwd → ``["project"]``."""
+        """Project signal: ``bonfire.toml`` with explicit opt-in → ``["project"]``.
+
+        BON-1043 tightened the gate: file presence ALONE is no longer
+        sufficient — the TOML must carry the explicit
+        ``[bonfire].trust_project_settings = true`` opt-in. See
+        ``tests/dispatch/test_trust_project_settings_key.py`` for the
+        BON-1043 contract surface.
+        """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text("[bonfire]\n")
+        (tmp_path / "bonfire.toml").write_text(
+            "[bonfire]\ntrust_project_settings = true\n"
+        )
         result = _resolve_setting_sources(str(tmp_path))
         assert result == ["project"], (
-            "Co-located ``bonfire.toml`` is the opt-in signal; resolver MUST "
-            f"return ``['project']``. Got {result!r}."
+            "Co-located ``bonfire.toml`` with explicit "
+            "``trust_project_settings = true`` is the opt-in signal; "
+            f"resolver MUST return ``['project']``. Got {result!r}."
         )
 
     def test_env_override_returns_project(
@@ -223,10 +233,16 @@ class TestResolveSettingSourcesHelper:
         )
 
     def test_resolver_returns_fresh_list_each_call(self, tmp_path: Path) -> None:
-        """Each call returns an independent list — no shared-mutable state."""
+        """Each call returns an independent list — no shared-mutable state.
+
+        Fixture updated for BON-1043: file presence alone no longer trusts;
+        the explicit ``trust_project_settings = true`` key is required.
+        """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text("[bonfire]\n")
+        (tmp_path / "bonfire.toml").write_text(
+            "[bonfire]\ntrust_project_settings = true\n"
+        )
         a = _resolve_setting_sources(str(tmp_path))
         b = _resolve_setting_sources(str(tmp_path))
         assert a == b == ["project"]

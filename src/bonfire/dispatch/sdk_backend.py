@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tomllib
 import traceback as tb_module
 from contextlib import aclosing
 from pathlib import Path
@@ -88,25 +89,56 @@ def _format_error_traceback(exc: BaseException) -> str | None:
     return _summarise_traceback(exc)
 
 
+def _bonfire_toml_opts_in(cwd_path: Path) -> bool:
+    """Return ``True`` iff ``cwd_path/bonfire.toml`` explicitly opts in.
+
+    The required opt-in is a literal boolean ``true`` at
+    ``[bonfire].trust_project_settings``. File presence alone is NOT
+    sufficient — a malicious clone shipping an empty ``[bonfire]`` table
+    must not silently trust the repo's ``CLAUDE.md`` /
+    ``.claude/settings.json``.
+
+    Strict-bool: string ``"true"`` / int ``1`` are NOT honored. Malformed
+    TOML and missing-table cases return ``False`` (fail-safe deny).
+    """
+    toml_path = cwd_path / "bonfire.toml"
+    if not toml_path.is_file():
+        return False
+    try:
+        with toml_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    section = data.get("bonfire")
+    if not isinstance(section, dict):
+        return False
+    value = section.get("trust_project_settings")
+    # Strict-bool check: ``isinstance(True, int)`` is True in Python, so we
+    # must filter on ``type is bool`` to keep ``1`` from passing as truthy.
+    return type(value) is bool and value is True
+
+
 def _resolve_setting_sources(cwd: str | None) -> list[str]:
     """Return ``['project']`` iff the cwd opts into Bonfire, else ``[]``.
 
-    Gate behind:
+    Gate behind (any one is sufficient):
       * empty cwd (``None`` or ``""``) — the caller's own cwd, trusted by
         default (the bonfire-public-tree dogfood path).
       * ``BONFIRE_TRUST_PROJECT_SETTINGS`` env var set to exactly ``"1"``
-        (strict equality — no normalization).
-      * a co-located ``bonfire.toml`` file at the cwd.
+        (strict equality — no normalization). The operator escape hatch.
+      * a co-located ``bonfire.toml`` containing
+        ``[bonfire].trust_project_settings = true`` (literal boolean).
+        File presence ALONE is NOT enough.
 
-    Foreign repos without ``bonfire.toml`` return ``[]`` — their
-    ``CLAUDE.md`` and ``.claude/`` contents are NOT ingested into the
-    dispatched agent's system prompt.
+    Foreign repos (and repos with a non-opted-in ``bonfire.toml``) return
+    ``[]`` — their ``CLAUDE.md`` and ``.claude/`` contents are NOT ingested
+    into the dispatched agent's system prompt.
     """
     if cwd is None or cwd == "":
         return ["project"]
     if os.environ.get("BONFIRE_TRUST_PROJECT_SETTINGS") == "1":
         return ["project"]
-    if (Path(cwd) / "bonfire.toml").is_file():
+    if _bonfire_toml_opts_in(Path(cwd)):
         return ["project"]
     return []
 

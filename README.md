@@ -169,6 +169,7 @@ model = "claude-sonnet-4-6"         # default model when no role match
 max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
 persona = "falcor"                  # CLI output persona
+trust_project_settings = false      # opt-in: ingest CLAUDE.md / .claude/ (see Security)
 
 [models]                            # bring your own provider key — strings live here
 reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
@@ -189,6 +190,24 @@ The `[models]` section holds the strings Bonfire passes verbatim to
 the agent backend. To use a different provider, swap the strings to
 that provider's model identifiers and plug in a matching
 `AgentBackend` (see Extension Points below).
+
+### Trusting Project Settings (security)
+
+Bonfire dispatches agents with the Claude Agent SDK, which can ingest
+the project's `CLAUDE.md` and `.claude/settings.json` into the agent's
+system prompt and hook table. Bonfire defaults to **deny**: a foreign
+repo's project settings are NOT loaded unless one of these holds:
+
+- `bonfire.toml` contains `[bonfire] trust_project_settings = true`
+  (literal boolean — strings and ints are ignored).
+- The environment variable `BONFIRE_TRUST_PROJECT_SETTINGS=1` is set
+  (operator escape hatch, strict equality on the value `"1"`).
+- The dispatch `cwd` is empty / `None` (in-tree dogfood path).
+
+Why this matters: a malicious clone could otherwise plant instructions
+in its `CLAUDE.md` or wire hostile hooks in `.claude/settings.json`
+that would silently land in any agent you dispatch from inside that
+repo. Opt-in is required.
 
 ## Per-Role Model Routing
 

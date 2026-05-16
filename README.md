@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
 
-> ### Alpha — `v0.1.0a2`
+> ### Alpha — `v0.1.0a2` (install with `pip install --pre bonfire-ai`)
 >
 > This is the first functional release of `bonfire-ai`. The pipeline
 > engine, the role-bound cadre, the quality gates, the persona system,
@@ -47,7 +47,7 @@ code is the deliverable.
 ## Quick Start
 
 ```bash
-pip install bonfire-ai
+pip install --pre bonfire-ai   # --pre required: alpha until 0.1.0 ships
 ```
 
 The PyPI package is `bonfire-ai`; the installed console script is

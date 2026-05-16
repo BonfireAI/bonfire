@@ -217,8 +217,17 @@ def _safe_resolve_config_path(path: Path, *, home_dir: Path, project_path: Path)
 
     Returns the path itself if it is not a symlink. If it IS a symlink,
     returns the resolved target IFF that target lives under
-    ``home_dir`` or ``project_path``. Otherwise returns ``None`` and
-    logs a WARNING.
+    ``project_path`` (the write-floor). Any other target — including
+    targets under ``$HOME`` outside the write-floor — is refused with
+    a WARNING.
+
+    The ``home_dir`` parameter is retained so the discovery walk in
+    ``_build_config_sources`` can still locate the literal config-file
+    paths under ``$HOME`` (those are direct paths, not symlinks). For
+    the symlink branch the policy is the tighter write-floor rule:
+    a compromised symlink in a discoverable config location must not
+    silently widen the scanner's read surface across the home
+    directory.
     """
     try:
         is_link = path.is_symlink()
@@ -238,8 +247,19 @@ def _safe_resolve_config_path(path: Path, *, home_dir: Path, project_path: Path)
         )
         return None
 
-    if _is_under_root(resolved, home_dir) or _is_under_root(resolved, project_path):
+    if _is_under_root(resolved, project_path):
         return resolved
+
+    if _is_under_root(resolved, home_dir):
+        _log.warning(
+            "MCP config symlink %s resolves under $HOME but outside the "
+            "write-floor (%s -> %s); refused. Move the target into the "
+            "project directory or read the file directly without a symlink.",
+            path,
+            path,
+            resolved,
+        )
+        return None
 
     _log.warning(
         "MCP config symlink %s resolves outside safe roots (%s); skipping",

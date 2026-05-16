@@ -11,10 +11,12 @@ This file pins down three contracts:
      skipped with a WARNING naming the path and size. The default cap
      is 1 MiB; the env var ``BONFIRE_MCP_SCAN_MAX_BYTES`` overrides.
   2. **Symlink policy**: a symlink whose resolved target lives under
-     the configured ``home_dir`` or ``project_path`` is followed; a
-     symlink resolving OUTSIDE those roots is skipped with a WARNING.
-     This policy is what we pin (the alternative — refuse all symlinks
-     unconditionally — would break real-world dotfile management).
+     the configured ``project_path`` (the write-floor) is followed; a
+     symlink resolving to any path under ``$HOME`` outside the
+     write-floor — or anywhere else outside both roots — is skipped
+     with a WARNING. The home-target refusal closes a bypass where a
+     compromised symlink in a discoverable config location silently
+     reads from arbitrary home paths into the discovered-server set.
   3. **Async-safe read**: the disk read goes through
      ``asyncio.to_thread`` (or an equivalent executor offload) so a slow
      read does not block the event loop. We assert by patching
@@ -144,21 +146,23 @@ class TestSizeCap:
 
 
 class TestSymlinkPolicy:
-    """Symlinks resolving outside ``home_dir`` / ``project_path`` are refused.
+    """Symlink targets MUST resolve under ``project_path`` (the write-floor).
 
-    Policy choice locked here: a config-location symlink is followed
-    iff its resolved target lives under one of the two configured
-    roots. This catches the ``/dev/zero`` / arbitrary-host-path class
-    of risk without breaking dotfile managers that symlink within
-    ``home_dir``.
+    Tightened policy: a config-location symlink is followed iff its
+    resolved target lives under ``project_path``. Targets that resolve
+    under ``$HOME`` outside the write-floor are refused with a WARNING,
+    closing the bypass where a malicious symlink in a discoverable
+    config location silently exfiltrates data from arbitrary home
+    paths. End-to-end coverage of the home-target refusal lives in
+    ``test_bon_1073_security_polish.py``.
     """
 
-    async def test_symlink_within_home_is_followed(
+    async def test_symlink_within_project_is_followed(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A symlink whose target lives under ``home_dir`` is read normally."""
+        """A symlink whose target lives under ``project_path`` is read normally."""
         from bonfire.onboard.scanners.mcp_servers import scan
 
         home_dir = tmp_path / "home"
@@ -166,8 +170,8 @@ class TestSymlinkPolicy:
         project_path = tmp_path / "proj"
         project_path.mkdir()
 
-        # Real file lives under ``home_dir`` (allowed).
-        real_target = home_dir / "dotfiles" / "zed-settings.json"
+        # Real file lives under ``project_path`` (the write-floor — allowed).
+        real_target = project_path / "configs" / "zed-settings.json"
         real_target.parent.mkdir(parents=True)
         real_target.write_text(
             json.dumps(
@@ -192,7 +196,7 @@ class TestSymlinkPolicy:
 
         zed_events = [e for e in events if e.value == "Zed"]
         assert zed_events, (
-            f"symlink within home_dir must be followed and produce events; got: {events!r}"
+            f"symlink within project_path must be followed and produce events; got: {events!r}"
         )
         assert count >= 1
 

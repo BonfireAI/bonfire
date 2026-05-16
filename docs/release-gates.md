@@ -16,7 +16,7 @@ Every wave closes with a gate-tier declaration in its close-PR. The Wizard picks
 |------|------|-----------------|
 | **Infra** | Waves 2–3 (transfers, no runnable pipeline) | Unit tests green + Wizard + code-reviewer |
 | **Integration** | Waves 4–5 (scaffolding, partial pipeline) | Infra + integration tests green |
-| **E2E** | Waves 6+ (runnable `bonfire run`) | Integration + **box E2E PASS verdict** |
+| **E2E** | Waves 6+ (runnable engine end-to-end via library use; the `bonfire run` CLI verb is post-v0.1) | Integration + **box E2E PASS verdict** |
 | **Release** | v0.1.0 tag + re-publish | E2E + every README example executable + re-publish checklist |
 
 ## Reviewer cadence
@@ -48,8 +48,8 @@ Rationale: API key stays on the operator's machine. Cost is observable in real t
 1. Host invokes `tests/e2e/scripts/e2e-box.sh <wave>`.
 2. **Host clones the fixture into `.e2e-runs/<run-id>/target/` via SSH.** Credentials stay on the host.
 3. Container launches with `ANTHROPIC_API_KEY` from host `.env`, output dir mounted at `/workspace/out`, and the fixture bind-mounted read-write at `/workspace/target`.
-4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, then use the package as a library to fix the broken test and emit Bonfire-shaped artifacts (cost log, session log, branch with bard-pattern naming, review-verdict JSON). v0.2 swaps the library-use prompt for an end-to-end `bonfire run` invocation once the `pipeline` command module ships per the public-port plan.
-5. Claude operates as a library client of `bonfire-ai`: it reads the package's source, applies its components, and emits the artifacts the gate expects. v0.1 ships the artifact contract; v0.2 swaps in the full pipeline.
+4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, then use the package as a library to fix the broken test and emit Bonfire-shaped artifacts (cost log, session log, branch with bard-pattern naming, review-verdict JSON). A later 0.1.x release swaps the library-use prompt for an end-to-end `bonfire run` invocation once the `pipeline` command module ships per the public-port plan (see [`README.md` § What's Not There Yet](../README.md) — the CLI verb is deferred to `v0.1.1`).
+5. Claude operates as a library client of `bonfire-ai`: it reads the package's source, applies its components, and emits the artifacts the gate expects. v0.1 ships the artifact contract; the later 0.1.x release that lands the `bonfire run` CLI verb swaps in the full pipeline.
 6. Post-run: diff filter + pytest + verdict JSON emission via the fixture's `gate/check-verdict.sh`.
 7. Verdict written to host at `.e2e-runs/<run-id>/verdict.json`.
 8. Both review lenses (Wizard + code-reviewer) read the verdict. Maintainer signs the merge.
@@ -93,7 +93,7 @@ The schema IS the contract. To tighten the bar, add an assertion to the schema a
 v0.1 ships the minimum viable:
 
 - Per-agent-dispatch line in `.bonfire/costs.jsonl`.
-- Stdout summary at the end of `bonfire run`.
+- Stdout summary at the end of a pipeline run (driven via library use in v0.1; via the `bonfire run` CLI verb when it lands in a later 0.1.x release).
 
 Throttle, budget caps, and full configuration module defer to **v0.2** (see BON-204 epic in the internal tracker).
 

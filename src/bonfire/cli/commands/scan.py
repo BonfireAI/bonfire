@@ -23,8 +23,21 @@ import typer
 
 from bonfire.onboard.server import FrontDoorServer
 
+# Sentinel marking "caller did not override the conversation timeout".
+# When ``_run_scan`` receives this sentinel it omits the kwarg from the
+# inner ``run_front_door`` call so the flow's documented default
+# (``DEFAULT_CONVERSATION_TIMEOUT``) governs. Using a sentinel — rather
+# than a numeric default — keeps the v1 ``_run_scan(port=..., no_browser=...)``
+# call signature stable for the contract-locked CLI tests that pin the
+# exact kwargs threaded into this function.
+_TIMEOUT_UNSET: object = object()
 
-async def _run_scan(port: int, no_browser: bool) -> None:
+
+async def _run_scan(
+    port: int,
+    no_browser: bool,
+    conversation_timeout: float | None | object = _TIMEOUT_UNSET,
+) -> None:
     """Start the Front Door server, run the flow, block until shutdown.
 
     The flow is driven by any WebSocket client connecting to ``/ws``. With
@@ -33,6 +46,10 @@ async def _run_scan(port: int, no_browser: bool) -> None:
     connect a client to ``server.ws_url`` manually. Either way, the server
     blocks on ``server.client_connected.wait()`` until the first client
     arrives.
+
+    ``conversation_timeout`` (seconds, or ``None`` to wait indefinitely)
+    is forwarded to ``run_front_door``. When left at the sentinel
+    default, the flow's own default governs.
     """
     server = FrontDoorServer(port=port)
     await server.start()
@@ -62,9 +79,23 @@ async def _run_scan(port: int, no_browser: bool) -> None:
         await server.client_connected.wait()
 
     try:
-        from bonfire.onboard.flow import run_front_door
+        from bonfire.onboard.flow import (
+            BrowserDisconnectedError,
+            ConversationTimeoutError,
+            run_front_door,
+        )
 
-        config_path = await run_front_door(server, Path.cwd())
+        # Only forward the timeout kwarg when the caller actually set it,
+        # so default invocations don't perturb ``run_front_door``'s own
+        # documented default value.
+        if conversation_timeout is _TIMEOUT_UNSET:
+            config_path = await run_front_door(server, Path.cwd())
+        else:
+            config_path = await run_front_door(
+                server,
+                Path.cwd(),
+                conversation_timeout=conversation_timeout,  # type: ignore[arg-type]
+            )
         typer.echo(f"Config written to {config_path}")
         # Block until last client disconnects or Ctrl-C
         await server.shutdown_event.wait()
@@ -79,23 +110,49 @@ async def _run_scan(port: int, no_browser: bool) -> None:
         # idempotent and runs in the ``finally`` below.
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    except BrowserDisconnectedError as exc:
+        # The browser (or scripted WS client) dropped before all three
+        # onboarding answers arrived. The flow has already torn down its
+        # wait-block tasks; surface a tailored remediation message and
+        # exit non-zero so the user (or wrapping shell) sees a clean
+        # failure rather than a Python traceback.
+        typer.echo(
+            "Browser closed before onboarding completed. Re-run `bonfire scan` to retry.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+    except ConversationTimeoutError as exc:
+        # The wall-clock budget for Act II elapsed before the user
+        # answered all three questions. Tell the user how to retry with
+        # a longer budget instead of letting the timeout exception
+        # propagate as a raw traceback.
+        typer.echo(
+            "Onboarding timed out. The conversation took longer than the "
+            "5-minute default. Re-run `bonfire scan` to retry, or pass "
+            "`--conversation-timeout SECONDS` to extend the window.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
     finally:
         await server.stop()
 
 
 def scan(
-    port: int = typer.Option(0, "--port", "-p", help="Port to bind (0 = random)."),
-    no_browser: bool = typer.Option(
-        False,
-        "--no-browser",
-        help=(
-            "Suppress browser auto-launch only. The WebSocket server still "
-            "binds and waits for any client (browser, websocat, or scripted "
-            "WS driver) to connect to /ws."
-        ),
-    ),
+    port: int = 0,
+    no_browser: bool = False,
+    conversation_timeout: float | None | object = _TIMEOUT_UNSET,
 ) -> None:
-    """Launch The Front Door — WS-driven onboarding scan."""
+    """Launch The Front Door — WS-driven onboarding scan.
+
+    Plain callable; the Typer command that exposes the CLI flags
+    (``--port``, ``--no-browser``, ``--conversation-timeout``) lives in
+    :mod:`bonfire.cli.app` and forwards the resolved values here.
+
+    ``conversation_timeout`` is forwarded to ``_run_scan`` only when set
+    by the caller — when left at the sentinel default, ``run_front_door``
+    governs with its documented default. Pass ``None`` to wait
+    indefinitely.
+    """
     # Fail fast — before starting the Front Door server / browser dance —
     # if bonfire.toml already exists. A user with a hand-tuned config must
     # not silently lose it; tell them how to recover. Mirrors the existing
@@ -127,6 +184,15 @@ def scan(
         raise typer.Exit(code=1)
 
     try:
-        asyncio.run(_run_scan(port=port, no_browser=no_browser))
+        if conversation_timeout is _TIMEOUT_UNSET:
+            asyncio.run(_run_scan(port=port, no_browser=no_browser))
+        else:
+            asyncio.run(
+                _run_scan(
+                    port=port,
+                    no_browser=no_browser,
+                    conversation_timeout=conversation_timeout,  # type: ignore[arg-type]
+                )
+            )
     except KeyboardInterrupt:
         typer.echo("\nFront Door closed.")

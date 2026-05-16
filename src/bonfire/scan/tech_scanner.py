@@ -10,6 +10,7 @@ file extensions to produce a list of ``VaultEntry`` records with
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -152,28 +153,57 @@ class TechScanner:
     # ------------------------------------------------------------------
 
     async def scan(self) -> list[VaultEntry]:
-        """Scan the project and return one VaultEntry per detected technology."""
-        entries: list[VaultEntry] = []
-        file_counts = self._count_files()
+        """Scan the project and return one VaultEntry per detected technology.
 
-        # 1. Language detection from config files
+        Filesystem walks (``Path.rglob``) and dependency-manifest reads
+        (``Path.read_text``) are blocking syscalls. The two sync helpers
+        that own them — ``_count_files`` (rglob) and ``_detect_frameworks``
+        (read_text) — run via :func:`asyncio.to_thread` so the
+        orchestrator's event loop stays responsive when scanners fan out
+        in parallel, even on a large repo where ``rglob`` traverses
+        thousands of paths.
+        """
+        entries: list[VaultEntry] = []
+
+        # _count_files walks rglob; _scan_language_manifests does
+        # cheap is_file() probes on a fixed handful of paths. Bundle
+        # both into one off-loop hop to amortize the thread handoff.
+        file_counts, language_entries = await asyncio.to_thread(self._scan_languages_blocking)
+        entries.extend(language_entries)
+        _ = file_counts  # retained for future inspection paths
+
+        # 2. Framework detection from dependency files — read_text on
+        # requirements.txt / pyproject.toml / package.json. Off-loop.
+        framework_entries = await asyncio.to_thread(self._detect_frameworks)
+        entries.extend(framework_entries)
+
+        return entries
+
+    def _scan_languages_blocking(
+        self,
+    ) -> tuple[dict[str, int], list[VaultEntry]]:
+        """Synchronous helper: count files + walk language manifests.
+
+        Encapsulates the blocking part of phase 1 so ``scan`` makes a
+        single ``asyncio.to_thread`` hop for all language-detection I/O.
+        Returns ``(file_counts, language_entries)``.
+        """
+        file_counts = self._count_files()
+        entries: list[VaultEntry] = []
         for manifest, (tech, category) in LANGUAGE_MANIFESTS.items():
             if (self._project_path / manifest).is_file():
                 count = file_counts.get(tech, 0)
-                entry = self._make_entry(
-                    technology=tech,
-                    category=category,
-                    confidence="high",
-                    detection_method="config_file",
-                    source_file=manifest,
-                    file_count=count,
+                entries.append(
+                    self._make_entry(
+                        technology=tech,
+                        category=category,
+                        confidence="high",
+                        detection_method="config_file",
+                        source_file=manifest,
+                        file_count=count,
+                    )
                 )
-                entries.append(entry)
-
-        # 2. Framework detection from dependency files
-        entries.extend(self._detect_frameworks())
-
-        return entries
+        return file_counts, entries
 
     async def scan_and_store(self, vault: VaultBackend) -> int:
         """Scan, deduplicate via content_hash, store new entries. Return count stored."""

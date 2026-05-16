@@ -104,6 +104,11 @@ _PREFILTER_KEYWORDS: tuple[str, ...] = (
     "usermod",
     "alias",
     "cat",
+    # ``head`` and ``tail`` are reading verbs that leak secrets just as
+    # readily as ``cat`` — C4.1/4.2/4.3 alternations match all three, so
+    # the prefilter must let them through to the regex pool.
+    "head",
+    "tail",
     "bash",
     "sh ",
     "zsh",
@@ -179,11 +184,19 @@ _WRITE_EDIT_SENSITIVE_PATH_REASON = (
 )
 
 
-# Regex that recognizes a ``$HOME/`` or ``/home/<user>/`` or ``/root/.``
-# prefix so we can canonicalize file_path to a ``~`` form before the prefix
-# scan. ``/root/`` itself is one of the deny prefixes — for ``/root/...``
-# inputs we keep the literal form (the ``/root/`` rule matches it directly).
-_HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+)(/|$)")
+# Regex that recognizes a ``$HOME/`` or ``/home/<user>/`` (Linux) or
+# ``/Users/<user>/`` (macOS) or ``[A-Za-z]:/Users/<user>/`` (Windows, after
+# backslash → forward-slash normalization) prefix so we can canonicalize
+# file_path to a ``~`` form before the prefix scan. ``/root/`` itself is one
+# of the deny prefixes — for ``/root/...`` inputs we keep the literal form
+# (the ``/root/`` rule matches it directly).
+#
+# Cross-platform extension: macOS ``/Users/<u>/`` and Windows
+# ``[A-Za-z]:/Users/<u>/`` are first-class home-prefix forms. Windows
+# backslash separators are normalized to forward slashes BEFORE this regex
+# is applied (see ``_canonicalize_write_edit_path``) so the alternation only
+# needs the forward-slash form.
+_HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+|/Users/[^/]+|[A-Za-z]:/Users/[^/]+)(/|$)")
 
 
 def _canonicalize_write_edit_path(file_path: str) -> str:
@@ -192,13 +205,34 @@ def _canonicalize_write_edit_path(file_path: str) -> str:
 
     Order:
         1. Strip leading ``./`` (one round; bash doesn't repeat it).
-        2. Replace ``$HOME/`` or ``/home/<user>/`` with ``~/``.
+        2. Normalize Windows backslash separators to forward slashes — both
+           raw (``C:\\Users\\alice``) and escaped (``C:\\\\Users\\\\alice``)
+           collapse to ``C:/Users/alice``.
+        3. Replace ``$HOME/`` or ``/home/<user>/`` or ``/Users/<user>/`` or
+           ``[A-Za-z]:/Users/<user>/`` with ``~/``.
+
+    Backslash normalization MUST happen BEFORE both the regex substitution
+    AND the rsplit-on-``/`` tail-segment match (``rsplit("/", 1)``) so a
+    Windows path bearing only backslashes does not arrive at the tail match
+    as a single segment.
 
     /root/ is NOT canonicalized — it has its own dedicated deny prefix.
     """
     s = file_path
     if s.startswith("./"):
         s = s[2:]
+    # Windows separator normalization. Single-pass + run-collapse:
+    #   1. Every backslash (single or arbitrary run) becomes a forward slash.
+    #   2. Any resulting run of two or more slashes collapses to a single
+    #      slash.
+    # The collapse step handles BOTH JSON-doubled-escape inputs
+    # (``C:\\\\Users\\\\alice`` → ``C://Users//alice`` after step 1) AND
+    # Windows UNC ``\\server\share`` shapes (→ ``//server/share`` after
+    # step 1), each of which would otherwise produce ``//`` artifacts that
+    # bypass ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
+    if "\\" in s:
+        s = s.replace("\\", "/")
+        s = re.sub(r"/{2,}", "/", s)
     s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
     return s
 
@@ -264,7 +298,7 @@ _IFS_RE = re.compile(r"\$\{IFS\}|\$IFS\$[0-9]|\$IFS")
 _BACKSLASH_NEWLINE_RE = re.compile(r"\\\n")
 
 # ASCII control bytes EXCEPT tab (\x09), newline (\x0a), and carriage return
-# (\x0d). Closes the NUL-byte bypass (Mirror Probe finding S1.5): a payload
+# (\x0d). Closes the NUL-byte bypass: a payload
 # like ``rm\x00-rf /`` sneaks past the C1.1 ``\s+``-separator deny rule
 # because ``\s`` does not match ``\x00``. Strip these BEFORE downstream
 # matching so the deny regex sees the rejoined token.

@@ -112,9 +112,16 @@ class BardHandler:
         *,
         git_workflow: Any,
         github_client: Any,
-        base_branch: str = "master",
+        base_branch: str = "main",
         config: PipelineConfig | None = None,
     ) -> None:
+        # ``base_branch`` default is ``"main"`` (modern OSS convention; GitHub
+        # default since 2020). Repos still on ``master`` should pass
+        # ``base_branch="master"`` explicitly at construction. A future
+        # enhancement may auto-detect via ``git symbolic-ref
+        # refs/remotes/origin/HEAD`` and fall back to ``"main"`` -- deferred
+        # because async-detection-at-construction would change the handler's
+        # sync constructor contract.
         self._git_workflow = git_workflow
         self._github_client = github_client
         self._base_branch = base_branch

@@ -49,7 +49,6 @@ import pytest
 
 from bonfire._safe_write import safe_write_text
 
-
 # ---------------------------------------------------------------------------
 # Platform gate — symlink support required.
 # ---------------------------------------------------------------------------
@@ -239,8 +238,7 @@ class TestSafeWriteTextExistingFile:
 
         # Partial / empty file MUST be cleaned up.
         assert not target.exists(), (
-            f"safe_write_text left a half-written file at {target} after a "
-            "write-step failure"
+            f"safe_write_text left a half-written file at {target} after a write-step failure"
         )
 
 
@@ -306,8 +304,7 @@ class TestPersonaSiteSymlinkReject:
         result = runner.invoke(app, ["persona", "set", "falcor"])
 
         assert result.exit_code != 0, (
-            f"bonfire persona set followed a symlink and exited 0; "
-            f"output:\n{result.output}"
+            f"bonfire persona set followed a symlink and exited 0; output:\n{result.output}"
         )
         assert not attack_target.exists(), (
             f"attack target {attack_target} was created through the symlink "
@@ -356,9 +353,7 @@ class TestPersonaSiteSymlinkReject:
 class TestCheckpointSiteSymlinkReject:
     """``CheckpointManager.save`` must not write through a dangling symlink."""
 
-    def test_checkpoint_save_refuses_dangling_symlink_at_tmp_path(
-        self, safe_tmp: Path
-    ) -> None:
+    def test_checkpoint_save_refuses_dangling_symlink_at_tmp_path(self, safe_tmp: Path) -> None:
         """Dangling symlink planted at ``{session_id}.json.tmp`` is refused.
 
         ``CheckpointManager.save`` writes to ``{session_id}.json.tmp``
@@ -397,6 +392,226 @@ class TestCheckpointSiteSymlinkReject:
 
         # The arbitrary-write primitive must NOT have fired.
         assert not attack_target.exists(), (
-            f"checkpoint.save followed the symlink and created "
-            f"{attack_target}"
+            f"checkpoint.save followed the symlink and created {attack_target}"
         )
+
+    def test_checkpoint_save_refuses_dangling_symlink_at_final_path(self, safe_tmp: Path) -> None:
+        """Dangling symlink at ``{session_id}.json`` (final path) is refused.
+
+        BON-1044's first pass closed the tmp-path primitive but left
+        ``os.replace(tmp_path, final_path)`` exposed: ``os.replace``
+        follows symlinks at the destination, so a symlink planted at
+        ``{session_id}.json -> ~/.ssh/authorized_keys`` lets the rename
+        atomic-replace THROUGH the symlink — the JSON payload deposited
+        at the symlink target. Same defect-family as the tmp-path
+        primitive, missed at the final rename step. This test pins the
+        ``is_symlink()`` guard on ``final_path``.
+        """
+        from unittest.mock import MagicMock
+
+        from bonfire.engine.checkpoint import CheckpointManager
+
+        checkpoint_dir = safe_tmp / "checkpoints"
+        checkpoint_dir.mkdir()
+
+        session_id = "session_under_attack_final"
+        attack_target = safe_tmp / "attack_target_final"
+        assert not attack_target.exists()
+
+        # Plant the dangling symlink at the FINAL path (not the tmp path).
+        # The tmp-path write succeeds; the os.replace step is what gets
+        # caught by the new final_path guard.
+        final_path = checkpoint_dir / f"{session_id}.json"
+        final_path.symlink_to(attack_target)
+
+        manager = CheckpointManager(checkpoint_dir)
+
+        # Minimal mocks matching CheckpointManager.save surface.
+        result = MagicMock()
+        result.stages = {}
+        result.total_cost_usd = 0.0
+        plan = MagicMock()
+        plan.name = "test-plan"
+        plan.task_description = "test"
+
+        with pytest.raises(FileExistsError, match="symlink"):
+            manager.save(session_id, result, plan)
+
+        # Arbitrary-write primitive must NOT have fired through the
+        # final-path symlink.
+        assert not attack_target.exists(), (
+            f"checkpoint.save followed the final-path symlink and created {attack_target}"
+        )
+        # Final-path symlink should still be there, pointing at the
+        # never-created target — refusal must not delete operator state.
+        assert final_path.is_symlink(), (
+            "final-path symlink was destroyed during refusal — refusal "
+            "must leave operator state untouched"
+        )
+        # The freshly-written tmp file should be cleaned up so we don't
+        # leak it on the refusal path.
+        tmp_path = checkpoint_dir / f"{session_id}.json.tmp"
+        assert not tmp_path.exists(), (
+            f"checkpoint.save left a stray tmp file at {tmp_path} after "
+            "refusing the final-path symlink"
+        )
+
+
+# ---------------------------------------------------------------------------
+# OSError translation: ONLY ELOOP / EMLINK get the symlink-message
+# ---------------------------------------------------------------------------
+
+
+class TestOSErrorTranslationGate:
+    """Non-symlink OSErrors must NOT be re-labeled as "symlink".
+
+    BON-1044 first pass translated EVERY non-FileExistsError OSError
+    into a FileExistsError mentioning "symlink". That mis-classifies
+    EPERM, EISDIR, ENOSPC, EROFS, ENAMETOOLONG, EACCES as "symlink
+    detected" and corrupts the W7.M log-grep signal. The contract here
+    pins ONLY ELOOP/EMLINK as the symlink-translation gate.
+    """
+
+    def test_eperm_propagates_untranslated(self, safe_tmp: Path, monkeypatch) -> None:
+        """EPERM from os.open propagates as PermissionError, NOT FileExistsError."""
+        import errno as _errno
+
+        target = safe_tmp / "config.toml"
+
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            if str(path) == str(target):
+                raise PermissionError(_errno.EPERM, "Operation not permitted")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr("bonfire._safe_write.os.open", fake_open)
+
+        # MUST propagate as the original OSError subclass (PermissionError),
+        # NOT be re-labeled as FileExistsError with "symlink".
+        with pytest.raises(PermissionError):
+            safe_write_text(target, "[bonfire]\n")
+
+    def test_eisdir_propagates_untranslated(self, safe_tmp: Path, monkeypatch) -> None:
+        """EISDIR (path is a directory) propagates as IsADirectoryError, NOT 'symlink'."""
+        import errno as _errno
+
+        target = safe_tmp / "config.toml"
+
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            if str(path) == str(target):
+                raise IsADirectoryError(_errno.EISDIR, "Is a directory")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr("bonfire._safe_write.os.open", fake_open)
+
+        with pytest.raises(IsADirectoryError):
+            safe_write_text(target, "[bonfire]\n")
+
+    def test_enospc_propagates_untranslated(self, safe_tmp: Path, monkeypatch) -> None:
+        """ENOSPC (disk full) propagates as OSError, NOT 'symlink' mis-label."""
+        import errno as _errno
+
+        target = safe_tmp / "config.toml"
+
+        real_open = os.open
+
+        def fake_open(path, flags, *args, **kwargs):
+            if str(path) == str(target):
+                raise OSError(_errno.ENOSPC, "No space left on device")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr("bonfire._safe_write.os.open", fake_open)
+
+        # MUST surface as a plain OSError with ENOSPC errno preserved
+        # — not FileExistsError("symlink") which would have an operator
+        # chasing a non-existent attack vector while their disk is full.
+        with pytest.raises(OSError) as excinfo:
+            safe_write_text(target, "[bonfire]\n")
+        assert excinfo.value.errno == _errno.ENOSPC
+        assert not isinstance(excinfo.value, FileExistsError), (
+            "ENOSPC must NOT be translated to FileExistsError"
+        )
+        assert "symlink" not in str(excinfo.value).lower(), (
+            "ENOSPC must NOT carry the W7.M 'symlink' substring"
+        )
+
+    def test_eloop_translates_to_symlink_filenotexists(self, safe_tmp: Path, monkeypatch) -> None:
+        """ELOOP race branch: real symlink discovered at open(2) time → 'symlink' message.
+
+        Covers L1 from review. We monkeypatch ``Path.is_symlink`` to
+        return False (simulating the pre-check missing the symlink due
+        to a race), then plant an actual symlink so ``os.open`` with
+        ``O_NOFOLLOW`` hits ELOOP and the translation fires.
+
+        Uses ``allow_existing=True`` so ``O_EXCL`` is NOT set —
+        otherwise the Linux kernel returns ``EEXIST`` (caught by the
+        ``FileExistsError`` branch above) rather than ``ELOOP``,
+        bypassing the symlink-translation branch under test. That
+        path is exercised separately by ``checkpoint`` saves which
+        legitimately use ``allow_existing=True``.
+        """
+        attack_target = safe_tmp / "race_attack_target"
+        assert not attack_target.exists()
+
+        link = safe_tmp / "config.toml"
+        link.symlink_to(attack_target)
+
+        # Force the pre-check to lie and say "not a symlink" — simulates
+        # the TOCTOU window between is_symlink() and os.open(O_NOFOLLOW).
+        monkeypatch.setattr(Path, "is_symlink", lambda self: False)
+
+        with pytest.raises(FileExistsError, match="symlink"):
+            safe_write_text(link, "[bonfire]\n", allow_existing=True)
+
+        # Even though the pre-check was bypassed, the O_NOFOLLOW
+        # defense-in-depth must have prevented the write.
+        assert not attack_target.exists(), (
+            f"O_NOFOLLOW failed to block race-planted symlink; "
+            f"{attack_target} was created via ELOOP path bypass"
+        )
+
+
+# ---------------------------------------------------------------------------
+# mode= parameter contract
+# ---------------------------------------------------------------------------
+
+
+class TestSafeWriteTextModeParameter:
+    """``mode=`` controls the filesystem permission bits on the new file."""
+
+    def test_mode_0o600_applied(self, safe_tmp: Path) -> None:
+        """``mode=0o600`` produces a file with 0o600 permission bits.
+
+        Run ``os.umask(0)`` for the duration of the assertion so the
+        process umask doesn't strip mode bits and false-RED the test.
+        """
+        target = safe_tmp / "secret.toml"
+
+        old_umask = os.umask(0)
+        try:
+            safe_write_text(target, "secret\n", mode=0o600)
+        finally:
+            os.umask(old_umask)
+
+        assert target.exists()
+        assert not target.is_symlink()
+        actual_mode = target.stat().st_mode & 0o777
+        assert actual_mode == 0o600, f"mode=0o600 not applied; got 0o{actual_mode:o}"
+
+    def test_mode_0o644_default(self, safe_tmp: Path) -> None:
+        """Default invocation (no ``mode=``) produces a 0o644 file."""
+        target = safe_tmp / "config.toml"
+
+        old_umask = os.umask(0)
+        try:
+            safe_write_text(target, "[bonfire]\n")  # no mode kwarg
+        finally:
+            os.umask(old_umask)
+
+        assert target.exists()
+        assert not target.is_symlink()
+        actual_mode = target.stat().st_mode & 0o777
+        assert actual_mode == 0o644, f"default mode 0o644 not applied; got 0o{actual_mode:o}"

@@ -121,6 +121,30 @@ class CheckpointManager:
         # legitimately exist from a previous failed run; the original
         # contract was to overwrite, so ``allow_existing=True``.
         safe_write_text(tmp_path, payload, allow_existing=True)
+
+        # ``os.replace`` follows symlinks at the *destination*: if
+        # ``{session_id}.json`` is a symlink to (e.g.) ``~/.ssh/authorized_keys``,
+        # the rename atomically replaces the symlink target with our JSON
+        # payload — same defect-family as the tmp-path primitive, missed
+        # at the final rename step. Reject any symlink at ``final_path``
+        # before the rename. The ``"symlink"`` substring preserves the
+        # W7.M log-grep contract so callers and log scrapers handle
+        # tmp-path and final-path symlink refusals identically.
+        if final_path.is_symlink():
+            # Best-effort cleanup of our freshly-written tmp file so we
+            # don't leak it on the refusal path. Swallow OSError because
+            # cleanup failure must not mask the security signal.
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            msg = (
+                f"refusing to finalize checkpoint at {final_path}: "
+                "target is a symlink. Refusing to follow or overwrite a "
+                "symlinked path. Remove the symlink and re-run."
+            )
+            raise FileExistsError(msg)
+
         os.replace(str(tmp_path), str(final_path))
 
         return final_path

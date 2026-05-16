@@ -52,6 +52,7 @@ This primitive is reachable today (before this module lands) at:
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 
@@ -63,6 +64,17 @@ __all__ = ["safe_write_text"]
 # uniform and the ``is_symlink()`` pre-check is the only defense
 # layer. Windows is not in v0.1's symlink threat model.
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+
+# Errnos that O_NOFOLLOW raises when the path is a symlink. Linux + glibc
+# return ELOOP; some BSDs (and historic glibc) return EMLINK. Any other
+# OSError (EPERM, EISDIR, ENOSPC, EROFS, ENAMETOOLONG, EACCES, ...) is a
+# distinct failure mode and MUST NOT be mis-classified as a symlink-refusal
+# — that would break the W7.M log-grep contract for downstream callers
+# trying to distinguish "you got attacked" from "disk full".
+_SYMLINK_ERRNOS: frozenset[int] = frozenset(
+    {errno.ELOOP} | ({errno.EMLINK} if hasattr(errno, "EMLINK") else set())
+)
 
 
 def safe_write_text(
@@ -116,9 +128,13 @@ def safe_write_text(
       ``is_symlink()`` pre-check and the ``open(2)`` system call: a
       concurrent process planting a symlink between the two operations
       causes ``open(2)`` to fail with ``ELOOP`` (Linux) / ``EMLINK``
-      (some BSDs). The OSError is translated into a uniform
+      (some BSDs). ONLY those two errnos are translated into a uniform
       ``FileExistsError`` with a ``"symlink"`` message so callers
-      handle both pre-check and race paths identically.
+      handle both pre-check and race paths identically. Other OSErrors
+      (``EPERM``, ``EISDIR``, ``ENOSPC``, ``EROFS``, ``ENAMETOOLONG``,
+      ``EACCES``, ...) propagate untranslated — mis-classifying "disk
+      full" as "symlink detected" would corrupt the W7.M log-grep
+      signal downstream operators rely on.
     * ``O_EXCL`` (set when ``allow_existing=False``) closes the TOCTOU
       race against the ``exists()`` check a caller may have performed
       before invoking ``safe_write_text``.
@@ -161,17 +177,28 @@ def safe_write_text(
         )
         raise FileExistsError(msg) from None
     except OSError as exc:
-        # Race: a symlink appeared between the is_symlink() pre-check
-        # and this open(2). O_NOFOLLOW makes open(2) fail with ELOOP
-        # on Linux / EMLINK on some BSDs. Re-raise as FileExistsError
-        # with a "symlink" message so the caller contract is uniform.
-        msg = (
-            f"refusing to write to {path}: detected symlink at open via "
-            f"O_NOFOLLOW ({exc.strerror or exc}). "
-            "Refusing to follow or overwrite a symlinked path. "
-            "Remove the symlink and re-run."
-        )
-        raise FileExistsError(msg) from exc
+        # Only the O_NOFOLLOW symlink-detection errnos get translated to
+        # the W7.M "symlink"-mentioning FileExistsError. Other OSErrors
+        # (EPERM, EISDIR, ENOSPC, EROFS, ENAMETOOLONG, EACCES, ...) are
+        # genuinely different failure modes and MUST propagate
+        # untranslated — mis-classifying "disk full" as "symlink
+        # detected" would silently corrupt the log-grep signal that
+        # downstream operators rely on to flag attempted attacks.
+        if exc.errno in _SYMLINK_ERRNOS:
+            # Race: a symlink appeared between the is_symlink() pre-check
+            # and this open(2). O_NOFOLLOW makes open(2) fail with ELOOP
+            # on Linux / EMLINK on some BSDs. Re-raise as FileExistsError
+            # with a "symlink" message so the caller contract is uniform.
+            msg = (
+                f"refusing to write to {path}: detected symlink at open via "
+                f"O_NOFOLLOW ({exc.strerror or exc}). "
+                "Refusing to follow or overwrite a symlinked path. "
+                "Remove the symlink and re-run."
+            )
+            raise FileExistsError(msg) from exc
+        # Not a symlink-detection errno — let it propagate so callers
+        # can react to the real underlying condition.
+        raise
 
     try:
         with os.fdopen(fd, "w", encoding=encoding) as f:

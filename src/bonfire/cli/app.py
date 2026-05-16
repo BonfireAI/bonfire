@@ -177,13 +177,19 @@ def scan(
         ),
     ),
     conversation_timeout: float = typer.Option(
+        # ``-1.0`` is a sentinel meaning "user did not pass the flag"; the
+        # library default (``DEFAULT_CONVERSATION_TIMEOUT`` = 300s) governs
+        # in that case. ``show_default=False`` hides Typer's auto-generated
+        # ``[default: -1.0]`` so the help text below stays the single
+        # source of truth for the user-visible default.
         -1.0,
         "--conversation-timeout",
         help=(
             "Maximum seconds to wait for the onboarding conversation to "
-            "complete before timing out (default 300). Pass 0 to disable."
+            "complete before timing out (default: 300). Pass 0 to disable."
         ),
         min=-1.0,
+        show_default=False,
     ),
 ) -> None:
     """Launch The Front Door — WS-driven onboarding scan."""

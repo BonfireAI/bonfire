@@ -199,6 +199,50 @@ _WRITE_EDIT_SENSITIVE_PATH_REASON = (
 _HOME_PREFIX_RE = re.compile(r"^(?:\$HOME|/home/[^/]+|/Users/[^/]+|[A-Za-z]:/Users/[^/]+)(/|$)")
 
 
+_MULTI_SLASH_RE = re.compile(r"/{2,}")
+
+
+def _resolve_dot_segments(path: str) -> str:
+    """Resolve ``.`` and ``..`` segments in ``path``.
+
+    Walks ``path`` segment-wise, dropping ``.`` and popping the predecessor
+    on ``..``. The anchor (``~/``, ``/``, or none for relative paths) is
+    preserved and acts as a floor — a ``..`` that would pop past the anchor
+    is dropped (clamped), so adversarial inputs like
+    ``/home/alice/Documents/../.ssh/id_rsa`` collapse to ``~/.ssh/id_rsa``
+    after the home substitution, while ``/etc/sudoers/../passwd`` collapses
+    to ``/etc/passwd`` — both reaching the deny-prefix scan in their
+    canonical form.
+
+    Empty segments (from accidental trailing slashes) are also dropped.
+    """
+    if path.startswith("~/"):
+        anchor = "~/"
+        tail = path[2:]
+    elif path == "~":
+        return "~"
+    elif path.startswith("/"):
+        anchor = "/"
+        tail = path[1:]
+    else:
+        anchor = ""
+        tail = path
+    if "/" not in tail and tail not in (".", ".."):
+        # Fast path: a single segment that is not itself a dot-segment.
+        return anchor + tail
+    resolved: list[str] = []
+    for seg in tail.split("/"):
+        if seg == "" or seg == ".":
+            continue
+        if seg == "..":
+            if resolved:
+                resolved.pop()
+            # Else: ``..`` underflows past the anchor — clamp by dropping.
+            continue
+        resolved.append(seg)
+    return anchor + "/".join(resolved)
+
+
 def _canonicalize_write_edit_path(file_path: str) -> str:
     """Collapse home-equivalent prefixes to ``~`` so the prefix matcher
     is straightforward.
@@ -208,32 +252,47 @@ def _canonicalize_write_edit_path(file_path: str) -> str:
         2. Normalize Windows backslash separators to forward slashes — both
            raw (``C:\\Users\\alice``) and escaped (``C:\\\\Users\\\\alice``)
            collapse to ``C:/Users/alice``.
-        3. Replace ``$HOME/`` or ``/home/<user>/`` or ``/Users/<user>/`` or
+        3. Collapse any run of two or more forward slashes to a single
+           slash — unconditional so pure-POSIX ``//`` / ``///`` shapes
+           don't bypass the prefix scan.
+        4. Replace ``$HOME/`` or ``/home/<user>/`` or ``/Users/<user>/`` or
            ``[A-Za-z]:/Users/<user>/`` with ``~/``.
+        5. Resolve ``.`` / ``..`` segments in the path tail, clamped at the
+           anchor (``~/`` or ``/``) so ``..`` cannot escape past the home
+           or filesystem root.
 
     Backslash normalization MUST happen BEFORE both the regex substitution
     AND the rsplit-on-``/`` tail-segment match (``rsplit("/", 1)``) so a
     Windows path bearing only backslashes does not arrive at the tail match
     as a single segment.
 
+    Slash-collapse MUST run unconditionally (not gated behind a backslash
+    check): pure-POSIX inputs like ``/home/alice//.ssh/id_rsa`` would
+    otherwise leave a ``//`` artifact that bypasses ``_HOME_PREFIX_RE``'s
+    ``[^/]+`` greedy match and silently slip past the deny floor.
+
+    Dot-segment resolution MUST run AFTER the home substitution so the
+    ``~/`` anchor (rather than the literal ``/home/<user>/``) is the
+    clamp boundary — this keeps adversarial ``../`` traversal inside the
+    home prefix scope of the deny matcher.
+
     /root/ is NOT canonicalized — it has its own dedicated deny prefix.
     """
     s = file_path
     if s.startswith("./"):
         s = s[2:]
-    # Windows separator normalization. Single-pass + run-collapse:
-    #   1. Every backslash (single or arbitrary run) becomes a forward slash.
-    #   2. Any resulting run of two or more slashes collapses to a single
-    #      slash.
-    # The collapse step handles BOTH JSON-doubled-escape inputs
-    # (``C:\\\\Users\\\\alice`` → ``C://Users//alice`` after step 1) AND
-    # Windows UNC ``\\server\share`` shapes (→ ``//server/share`` after
-    # step 1), each of which would otherwise produce ``//`` artifacts that
-    # bypass ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
+    # Windows separator normalization — only fires when backslashes are
+    # present (no-op on pure-POSIX inputs).
     if "\\" in s:
         s = s.replace("\\", "/")
-        s = re.sub(r"/{2,}", "/", s)
+    # Unconditional slash-collapse: handles BOTH backslash-derived runs
+    # (``C:\\\\Users\\\\alice`` → ``C:////Users////alice`` after step 1)
+    # AND pure-POSIX adversarial runs (``/home/alice//.ssh/id_rsa``),
+    # each of which would otherwise leave ``//`` artifacts that bypass
+    # ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
+    s = _MULTI_SLASH_RE.sub("/", s)
     s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
+    s = _resolve_dot_segments(s)
     return s
 
 

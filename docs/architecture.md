@@ -46,6 +46,23 @@ your own model keys, and quality gates evaluate between stages.
 Everything else — the agents, the backends, the personas, the
 workflows — is pluggable through small ``Protocol`` contracts.
 
+Within the standard build, the ``prover`` stage is a **verifier-role
+alias**: ``standard_build()`` emits ``StageSpec(role="prover", ...)``
+and the tier resolver in ``bonfire.agent.tiers`` normalizes ``"prover"``
+to ``AgentRole.VERIFIER`` through ``GAMIFIED_TO_GENERIC`` (alongside
+the canonical ``"cleric"`` alias). The prover stage runs after Warrior
+to verify the implementation against the failing tests; with
+``allowed_tools = ["Read", "Bash", "Grep", "Glob"]`` per
+``DefaultToolPolicy._FLOOR``, it is the read-and-execute counterpart to
+Warrior's read-write-edit toolset. Display translation resolves through
+``ROLE_DISPLAY["verifier"]`` (→ "Verify Agent" / "Cleric"); ``"prover"``
+itself is not a key in ``ROLE_DISPLAY``, which is intentional — the
+gamified workflow-stage name aliases to the canonical verifier role for
+display. **Note for ADR-001:** workflow-factory emission of gamified
+strings into ``StageSpec.role`` is a second ratified surface alongside
+``DefaultToolPolicy._FLOOR`` keys; ADR-001 § Ratified Exceptions should
+be amended in a follow-up to formally enumerate it.
+
 Tagline (from `src/bonfire/__init__.py`):
 
 > *Define agents. Wire stages. Ship quality.*
@@ -58,7 +75,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 
 | Package | One-line purpose |
 |---|---|
-| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, gate evaluation, bounce, and budget watchdog), `StageExecutor` (a separately testable stage runner, re-exported but not driven by `PipelineEngine` today — the engine has its own inline stage loop), `ContextBuilder`, the six built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. |
+| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, gate evaluation, bounce, and budget watchdog), `StageExecutor` (a separately testable stage runner, re-exported but not driven by `PipelineEngine` today — the engine has its own inline stage loop), `ContextBuilder`, the eight built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. |
 | `bonfire.dispatch` | Agent execution backends (Claude SDK, Pydantic AI), the `execute_with_retry` runner, `TierGate`, and the pre-exec security hook. |
 | `bonfire.models` | Cross-package data contracts — frozen Pydantic shapes for envelopes, plans, events, and configuration. Dependency-free. |
 | `bonfire.events` | Typed pub/sub spine — `EventBus` plus the `BonfireEvent` base contract; consumers live one level deeper. |
@@ -69,7 +86,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 | Package | One-line purpose |
 |---|---|
 | `bonfire.agent` | Canonical `AgentRole` enum and the role↔display vocabulary. |
-| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Steward`, `Architect`) — the bespoke logic for stages that aren't a plain agent dispatch. |
+| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Steward`, `Architect`, `MergePreflight`, `SageCorrectionBounce`) — the bespoke logic for stages that aren't a plain agent dispatch. The verifier-role `MergePreflight` runs a deterministic pre-merge full-suite pytest against the simulated merged tip to catch cross-wave interactions; the synthesizer-role `SageCorrectionBounce` auto-bounces under-marked xfail decorators to a tool-restricted Sage correction agent before publication. |
 | `bonfire.persona` | CLI display translation only — turns events into character-voiced lines via TOML-defined personas. Never touches prompts. |
 | `bonfire.prompt` | Prompt compiler with priority-based truncation, identity blocks, and U-shape ordering. |
 
@@ -106,12 +123,26 @@ documented in `ADR-001`.
 
 ## Pipeline flow
 
-A single `bonfire run` follows the same path top-to-bottom every time:
+> **v0.1 disclaimer.** The CLI verb `bonfire run` described in this section
+> is **post-v0.1 design surface, not a shipped v0.1 command.** v0.1 ships
+> the engine as a library — `from bonfire.engine import PipelineEngine`
+> and `await engine.run(plan)` drives a real pipeline against a real
+> backend — plus the CLI subcommands `init`, `scan`, `status`, `resume`,
+> `handoff`, `persona`, and `cost`. The end-to-end `bonfire run` verb
+> that wires the engine through the CLI is deferred to a later 0.1.x
+> release (see [`README.md` § What's Not There Yet](../README.md)). The
+> pipeline flow described below is the shape the engine executes today
+> when driven from the library; it is also the shape `bonfire run` will
+> drive when the verb lands.
 
-1. **CLI entry.** `bonfire.cli.app` parses the command and instantiates
-   the composition root. The user-facing `bonfire run`-style commands
-   resolve a workflow plan from `bonfire.workflow` (e.g.
-   `standard_build`).
+A single pipeline run follows the same path top-to-bottom every time:
+
+1. **Entry point.** Today: a library caller imports `bonfire.engine`,
+   resolves a `WorkflowPlan` from `bonfire.workflow` (e.g.
+   `standard_build()`), constructs a `PipelineEngine`, and `await`s
+   `engine.run(plan)`. Tomorrow (post-v0.1): the `bonfire run`-style
+   CLI verb in `bonfire.cli.app` will resolve the same workflow plan
+   through the same composition root.
 2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
    an optional handler name, a list of gate names, and dependency
@@ -140,7 +171,10 @@ A single `bonfire run` follows the same path top-to-bottom every time:
    roles — Scout / Knight / Warrior / Sage in the gamified vocabulary)
    or one of the bespoke classes in `bonfire.handlers`: `Bard` for PR
    publication (publisher), `Wizard` for review (reviewer), `Steward`
-   for closure (closer), `Architect` for analysis (analyst).
+   for closure (closer), `Architect` for analysis (analyst),
+   `MergePreflight` for the pre-merge full-suite pytest gate (verifier),
+   and `SageCorrectionBounce` for auto-bouncing under-marked xfail
+   decorators to a tool-restricted Sage agent (synthesizer).
 6. **Dispatch backend.** Plain-dispatch handlers call into
    `bonfire.dispatch` — by default `ClaudeSDKBackend`, optionally
    `PydanticAIBackend` — through the `execute_with_retry` runner. The
@@ -248,7 +282,7 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
 
 ## Gates and quality
 
-`bonfire.engine.gates` ships six built-in `QualityGate` implementations
+`bonfire.engine.gates` ships eight built-in `QualityGate` implementations
 plus the `GateChain` composer. The chain runs gates in registration
 order and short-circuits on the first error-severity failure.
 
@@ -260,6 +294,8 @@ order and short-circuits on the first error-severity failure.
 | `VerificationGate` | The result text contains "verified" or "checks passed". |
 | `ReviewApprovalGate` | The result text contains "approve" or "approved". |
 | `CostLimitGate` | The pipeline's accumulated cost is within the configured budget. |
+| `MergePreflightGate` | The `MergePreflightHandler` envelope reports `COMPLETED` (clean → `info`; with `META_PREFLIGHT_TEST_DEBT_NOTED` set → `warning`, allow-with-annotation per Sage Q6). Any non-COMPLETED status (cross-wave interaction, pure-warrior bug, pytest collection error, merge conflict) blocks the merge with `error` severity. Gate name is locked at `"merge_preflight_passed"`. |
+| `SageCorrectionResolvedGate` | The `SageCorrectionBounceHandler` envelope reports a non-ambiguous resolution. Clean resolutions (`corrected`, `not_needed_*`, skip path) pass with `info`; `warrior_bug` verdicts and Wizard-escalated bounces pass with `warning` (the bounce is visible but does not block); `ambiguous` classifier verdicts block with `error` (forces Wizard inspection). Gate name is locked at `"sage_correction_resolved"`. |
 
 `GateChain.evaluate_all` does **not** wrap individual gate exceptions —
 a raising gate propagates to `PipelineEngine.run()`, which catches it

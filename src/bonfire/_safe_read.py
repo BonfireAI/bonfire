@@ -41,15 +41,26 @@ scanner pretending the file does not exist.
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 from pathlib import Path
 
 __all__ = [
+    "MAX_CHECKPOINT_BYTES",
     "SAFE_READ_TRUNCATION_MARKER",
     "resolve_cap_bytes",
+    "safe_read_capped_text",
     "safe_read_text",
 ]
+
+# Hard byte cap on checkpoint files. Checkpoints contain pipeline state
+# (envelopes, plan name, cost) — kilobytes in practice, hundreds of
+# kilobytes for very large fan-out runs. A 10 MiB cap is comfortably
+# beyond any legitimate checkpoint while bounding the damage from a
+# planted oversized file (e.g. attacker fills the checkpoint dir with a
+# 5 GB file to exhaust RAM during ``CheckpointManager.latest()``).
+MAX_CHECKPOINT_BYTES: int = 10 * 1024 * 1024
 
 _log = logging.getLogger(__name__)
 
@@ -161,3 +172,121 @@ def safe_read_text(
     truncated = raw[:cap]
     text = truncated.decode(encoding, errors="replace")
     return text + SAFE_READ_TRUNCATION_MARKER
+
+
+# ``os.O_NOFOLLOW`` is POSIX-only. On Windows the flag is not defined;
+# we fall back to a zero-value bitmask so the open() call shape stays
+# uniform and the ``is_symlink()`` pre-check is the only defense
+# layer. Windows is not in v0.1's symlink threat model.
+_O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+
+# Errnos that O_NOFOLLOW raises when the path is a symlink. Linux + glibc
+# return ELOOP; some BSDs (and historic glibc) return EMLINK. Any other
+# OSError is a distinct failure mode and propagates untranslated.
+_SYMLINK_ERRNOS: frozenset[int] = frozenset(
+    {errno.ELOOP} | ({errno.EMLINK} if hasattr(errno, "EMLINK") else set())
+)
+
+
+def safe_read_capped_text(
+    path: Path,
+    *,
+    max_bytes: int,
+    encoding: str = "utf-8",
+) -> str:
+    """Read *path* as text, refusing symlinks and capping at *max_bytes*.
+
+    Symmetric companion to :func:`bonfire._safe_write.safe_write_text`.
+    Where :func:`safe_read_text` (the scanner-facing helper) deliberately
+    follows symlinks so a scanner can fingerprint a project tree, this
+    helper refuses them — intended for operator-controlled read sites
+    (e.g. ``engine/checkpoint.py``) where the read path is a known file
+    Bonfire itself created and any symlink at that path is suspicious.
+
+    Defense layers:
+
+    1. **Pre-check** — :meth:`pathlib.Path.is_symlink` (does NOT follow
+       symlinks). Any symlink at *path* is refused with a
+       ``FileExistsError`` whose message contains the literal substring
+       ``"symlink"`` (W7.M log-grep contract carried forward).
+    2. **Defense-in-depth** — :func:`os.open` with ``O_NOFOLLOW`` closes
+       the TOCTOU window between the pre-check and the read. On Linux,
+       a race-planted symlink causes ``open(2)`` to fail with ``ELOOP``;
+       we translate to the same ``FileExistsError("symlink ...")`` shape.
+    3. **Size cap** — at most ``max_bytes + 1`` bytes are read. If the
+       file exceeds the cap a ``ValueError`` is raised — checkpoint
+       data is fully consumed by ``json.loads`` so silent truncation is
+       NOT acceptable (it would produce a JSONDecodeError downstream
+       and lose the security signal).
+
+    Parameters
+    ----------
+    path
+        The read target. MUST NOT be a symlink. Symlinks (dangling,
+        live, or looping) are refused before any read.
+    max_bytes
+        Hard byte cap. Files larger than this raise ``ValueError``.
+    encoding
+        Text encoding for the returned string. Default ``"utf-8"``.
+
+    Raises
+    ------
+    FileExistsError
+        If *path* is a symlink (message contains the literal substring
+        ``"symlink"``).
+    FileNotFoundError
+        If *path* does not exist (passed through unchanged).
+    ValueError
+        If the file exceeds *max_bytes*.
+    OSError
+        Other open(2)/read(2) failures (permissions, etc.) propagate
+        untranslated.
+    """
+    # Pre-check: is_symlink() does NOT follow the link, so a dangling
+    # symlink is correctly identified even though Path.exists() returns
+    # False for a dangling link.
+    if path.is_symlink():
+        msg = (
+            f"refusing to read from {path}: target is a symlink. "
+            "Refusing to follow a symlinked path. "
+            "Remove the symlink and re-run."
+        )
+        raise FileExistsError(msg)
+
+    flags = os.O_RDONLY | _O_NOFOLLOW
+
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        # Only the O_NOFOLLOW symlink-detection errnos get translated to
+        # the W7.M "symlink"-mentioning FileExistsError. Other OSErrors
+        # (ENOENT, EPERM, EISDIR, EACCES, ...) propagate untranslated.
+        if exc.errno in _SYMLINK_ERRNOS:
+            msg = (
+                f"refusing to read from {path}: detected symlink at open via "
+                f"O_NOFOLLOW ({exc.strerror or exc}). "
+                "Refusing to follow a symlinked path. "
+                "Remove the symlink and re-run."
+            )
+            raise FileExistsError(msg) from exc
+        raise
+
+    try:
+        with os.fdopen(fd, "rb") as fh:
+            # Read cap+1 bytes so we can distinguish "fits exactly" from
+            # "exceeds cap" without trusting any external stat().
+            raw = fh.read(max_bytes + 1)
+    except Exception:
+        # fdopen takes ownership of fd; on failure the context manager
+        # closes it. Nothing else to clean up.
+        raise
+
+    if len(raw) > max_bytes:
+        msg = (
+            f"refusing to read {path}: file exceeds cap of {max_bytes} bytes "
+            f"(read at least {len(raw)} bytes). Refused to prevent unbounded "
+            "memory consumption from a planted oversized file."
+        )
+        raise ValueError(msg)
+
+    return raw.decode(encoding)

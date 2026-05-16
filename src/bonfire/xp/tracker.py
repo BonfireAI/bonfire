@@ -9,6 +9,8 @@ import json
 import time
 from pathlib import Path
 
+from bonfire._safe_write import safe_append_text
+
 # ---------------------------------------------------------------------------
 # Level ladder: (threshold, level_number, tier_name) — descending order
 # ---------------------------------------------------------------------------
@@ -51,6 +53,13 @@ class XPTracker:
     ) -> None:
         """Append an XP event to the JSONL file.
 
+        Uses ``safe_append_text`` to refuse symlinks at
+        ``xp_events.jsonl`` (via ``is_symlink()`` pre-check +
+        ``O_NOFOLLOW`` defense-in-depth). The W7.M ``safe_write_text``
+        rollout closed truncate-mode write sites but missed this
+        append-mode site; a planted symlink would otherwise redirect
+        every recorded XP event to an attacker-controlled target.
+
         Note: No file-level locking is used. Bonfire runs one pipeline
         at a time, so concurrent writes are not expected. If concurrent
         pipelines are introduced, this method must be wrapped in a
@@ -62,8 +71,7 @@ class XPTracker:
             "respawn": respawn,
             "timestamp": time.time(),
         }
-        with self._jsonl_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event) + "\n")
+        safe_append_text(self._jsonl_path, json.dumps(event) + "\n")
 
     def events(self) -> list[dict]:
         """Read all events from the JSONL file."""

@@ -34,7 +34,6 @@ import websockets
 
 from bonfire.onboard.server import FrontDoorServer
 
-
 # ---------------------------------------------------------------------------
 # Helpers — HTTP client. The codebase's established pattern is
 # ``urllib.request.urlopen`` (see tests/unit/test_onboard_server.py:104, 124,
@@ -44,9 +43,7 @@ from bonfire.onboard.server import FrontDoorServer
 # ---------------------------------------------------------------------------
 
 
-async def _http_get(
-    url: str, origin: str | None = None
-) -> tuple[int, dict[str, str], bytes]:
+async def _http_get(url: str, origin: str | None = None) -> tuple[int, dict[str, str], bytes]:
     """Run a blocking ``urlopen`` on the asyncio executor.
 
     Returns (status_code, headers_dict, body_bytes). Raises
@@ -130,13 +127,10 @@ class TestHandoffEndpoint:
             status, _headers, body = await _http_get(
                 f"http://127.0.0.1:{port}/handoff", origin=origin
             )
-            assert status == 200, (
-                f"First GET /handoff must return 200; got {status}."
-            )
+            assert status == 200, f"First GET /handoff must return 200; got {status}."
             data = json.loads(body)
             assert "token" in data, (
-                f"GET /handoff response must include a 'token' key in JSON; "
-                f"got body={body!r}"
+                f"GET /handoff response must include a 'token' key in JSON; got body={body!r}"
             )
             assert data["token"] == server.token, (
                 f"GET /handoff token must equal server.token; "
@@ -144,18 +138,14 @@ class TestHandoffEndpoint:
             )
             # Second call: must be 410 Gone.
             with pytest.raises(urllib.error.HTTPError) as excinfo:
-                await _http_get(
-                    f"http://127.0.0.1:{port}/handoff", origin=origin
-                )
+                await _http_get(f"http://127.0.0.1:{port}/handoff", origin=origin)
             assert excinfo.value.code == 410, (
-                f"Second GET /handoff must return 410 Gone (single-use); "
-                f"got {excinfo.value.code}"
+                f"Second GET /handoff must return 410 Gone (single-use); got {excinfo.value.code}"
             )
             # And critically: the 410 body must NOT leak the token.
             second_body = excinfo.value.read()
             assert server.token not in second_body.decode("utf-8", errors="replace"), (
-                f"410 Gone response must NOT include the token in the body; "
-                f"got {second_body!r}"
+                f"410 Gone response must NOT include the token in the body; got {second_body!r}"
             )
         finally:
             await server.stop()
@@ -177,8 +167,7 @@ class TestHandoffEndpoint:
                     origin="http://evil.example",
                 )
             assert excinfo.value.code == 403, (
-                f"GET /handoff with disallowed Origin must return 403; "
-                f"got {excinfo.value.code}"
+                f"GET /handoff with disallowed Origin must return 403; got {excinfo.value.code}"
             )
             err_body = excinfo.value.read().decode("utf-8", errors="replace")
             assert server.token is not None
@@ -226,9 +215,7 @@ class TestHandoffEndpoint:
             monkeypatch.setattr(time, "monotonic", fake_monotonic)
 
             with pytest.raises(urllib.error.HTTPError) as excinfo:
-                await _http_get(
-                    f"http://127.0.0.1:{port}/handoff", origin=origin
-                )
+                await _http_get(f"http://127.0.0.1:{port}/handoff", origin=origin)
             assert excinfo.value.code == 410, (
                 f"GET /handoff after the 30s deadline must return 410 Gone "
                 f"even on the first call; got {excinfo.value.code}"
@@ -266,12 +253,10 @@ class TestHandoffEndpoint:
             )
             cache_control = lower.get("cache-control", "")
             assert "no-store" in cache_control, (
-                f"GET /handoff Cache-Control must include 'no-store'; "
-                f"got {cache_control!r}"
+                f"GET /handoff Cache-Control must include 'no-store'; got {cache_control!r}"
             )
             assert "no-cache" in cache_control, (
-                f"GET /handoff Cache-Control must include 'no-cache'; "
-                f"got {cache_control!r}"
+                f"GET /handoff Cache-Control must include 'no-cache'; got {cache_control!r}"
             )
         finally:
             await server.stop()
@@ -307,9 +292,7 @@ class TestHandoffEndpoint:
 
             # Now the attacker re-calls /handoff and must be denied.
             with pytest.raises(urllib.error.HTTPError) as excinfo:
-                await _http_get(
-                    f"http://127.0.0.1:{port}/handoff", origin=origin
-                )
+                await _http_get(f"http://127.0.0.1:{port}/handoff", origin=origin)
             assert excinfo.value.code == 410, (
                 f"Re-call of /handoff after consumption must return 410 Gone "
                 f"so a racing attacker can't get a fresh token; "
@@ -367,16 +350,12 @@ class TestHandoffEndpoint:
         origin = f"http://127.0.0.1:{port}"
         try:
             # Adversary call wins.
-            status_adv, _h, _b = await _http_get(
-                f"http://127.0.0.1:{port}/handoff", origin=origin
-            )
+            status_adv, _h, _b = await _http_get(f"http://127.0.0.1:{port}/handoff", origin=origin)
             assert status_adv == 200, "setup: adversary's first /handoff must succeed"
 
             with caplog.at_level(logging.WARNING, logger="bonfire.onboard.server"):
                 with pytest.raises(urllib.error.HTTPError) as excinfo:
-                    await _http_get(
-                        f"http://127.0.0.1:{port}/handoff", origin=origin
-                    )
+                    await _http_get(f"http://127.0.0.1:{port}/handoff", origin=origin)
                 assert excinfo.value.code == 410, (
                     f"Legit browser's /handoff after adversary wins must return "
                     f"410 Gone (not hang); got {excinfo.value.code}"
@@ -385,9 +364,9 @@ class TestHandoffEndpoint:
             # The server should surface a warning on the second-call path so
             # operators have an audit trail when the race fires in the wild.
             handoff_warnings = [
-                rec for rec in caplog.records
-                if rec.levelno >= logging.WARNING
-                and "handoff" in rec.getMessage().lower()
+                rec
+                for rec in caplog.records
+                if rec.levelno >= logging.WARNING and "handoff" in rec.getMessage().lower()
             ]
             assert handoff_warnings, (
                 f"Server must log a WARNING-level message naming 'handoff' on "
@@ -499,9 +478,7 @@ class TestArgvLeakAudit:
             req.add_header("Origin", origin)
             try:
                 loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None, urllib.request.urlopen, req
-                )
+                response = await loop.run_in_executor(None, urllib.request.urlopen, req)
                 status = response.status
             except urllib.error.HTTPError as e:
                 status = e.code
@@ -682,14 +659,14 @@ class TestUiHtmlWire:
         html = ref.read_text(encoding="utf-8")
 
         assert "localStorage" not in html, (
-            f"ui.html must NOT use localStorage — the WS token is a "
-            f"per-launch secret that dies with the tab. Persisting it to "
-            f"localStorage would re-open the page-reload attack window. "
-            f"Defense-in-depth pin. Found in HTML."
+            "ui.html must NOT use localStorage — the WS token is a "
+            "per-launch secret that dies with the tab. Persisting it to "
+            "localStorage would re-open the page-reload attack window. "
+            "Defense-in-depth pin. Found in HTML."
         )
         # Forward-drift bonus: also pin sessionStorage absence (same
         # rationale as localStorage).
         assert "sessionStorage" not in html, (
-            f"ui.html must NOT use sessionStorage either — same rationale "
-            f"as localStorage. Found in HTML."
+            "ui.html must NOT use sessionStorage either — same rationale "
+            "as localStorage. Found in HTML."
         )

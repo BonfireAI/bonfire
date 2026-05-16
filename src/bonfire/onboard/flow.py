@@ -40,6 +40,7 @@ __all__ = [
     "DEFAULT_CONVERSATION_TIMEOUT",
     "BrowserDisconnectedError",
     "ConversationTimeoutError",
+    "MessageTooLargeError",
     "dispatch_user_message",
     "run_front_door",
 ]
@@ -68,6 +69,24 @@ class ConversationTimeoutError(TimeoutError):
 
     Subclasses :class:`TimeoutError` so existing handlers that already
     catch built-in timeouts continue to work.
+    """
+
+
+class MessageTooLargeError(BrowserDisconnectedError):
+    """Raised when a client sent a WebSocket frame larger than the server cap.
+
+    The WS server pins ``max_size`` to ``_WS_MAX_FRAME_BYTES`` (8 KiB).
+    A larger frame triggers close-code 1009 (message-too-big) on the
+    wire; the server flips ``oversize_disconnect`` and the flow surfaces
+    this exception with a tailored remediation message ("max 8 KiB")
+    instead of the generic "browser closed" message — the latter
+    misdiagnoses a long-paste error as a connection drop and sends the
+    user down the wrong recovery path.
+
+    Subclasses :class:`BrowserDisconnectedError` so existing CLI handlers
+    that already catch the parent (and treat oversize as a special case
+    of "connection ended unexpectedly") continue to work; new CLI code
+    discriminates on the subclass before the parent.
     """
 
 
@@ -225,6 +244,23 @@ async def run_front_door(
         # Happy path: all three answers in, advance to Act III.
         pass
     elif shutdown_task in finished:
+        # W9 Lane B (H3): discriminate oversize-close from generic browser
+        # disconnect. ``FrontDoorServer._ws_handler`` flips
+        # ``oversize_disconnect`` when a client connection closes with
+        # WS code 1009 (message-too-big), enforced by ``max_size``. Without
+        # this branch, a long-paste (≥ 8 KiB) gets surfaced to the user as
+        # "browser closed before onboarding completed" — wrong diagnosis,
+        # wrong recovery path. ``MessageTooLargeError`` carries the actionable
+        # remediation ("max 8 KiB").
+        if getattr(server, "oversize_disconnect", False):
+            _log.warning(
+                "Front Door client sent oversize WS frame (close code 1009); "
+                "aborting Act III. The user's answer exceeded the 8 KiB cap."
+            )
+            raise MessageTooLargeError(
+                "Your answer is too long (max 8 KiB per message). "
+                "Re-run `bonfire scan` and try a shorter response."
+            )
         _log.warning(
             "Front Door browser disconnected before conversation completed; "
             "aborting Act III. Re-run `bonfire scan` to retry."

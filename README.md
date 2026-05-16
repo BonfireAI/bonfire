@@ -54,7 +54,12 @@ The PyPI package is `bonfire-ai`; the installed console script is
 `bonfire`. Python 3.12+ is required.
 
 ```bash
-# Initialize a project (creates bonfire.toml and .bonfire/)
+# Initialize a project. Creates four artefacts under the target directory:
+#   - bonfire.toml (project config; minimal stub `[bonfire]`)
+#   - .bonfire/ (per-project state directory)
+#   - agents/ (role-local prompt + identity-block overrides; see Extension Points)
+#   - .gitignore entry: `.bonfire/tools.local.toml` (appended if missing;
+#     idempotent — re-running `bonfire init` does not duplicate the line)
 bonfire init .
 
 # Launch the browser-based onboarding scan
@@ -258,10 +263,12 @@ bonfire persona list
 
 # Switch the default for this project (writes to bonfire.toml)
 bonfire persona set default
-
-# Override per command without changing config
-bonfire --persona minimal scan
 ```
+
+The persona is configured per project via `bonfire persona set <name>`;
+there is no per-command override flag in `v0.1.0a2`. A per-command
+override lands when the narration/output layer grows persona awareness in
+a later 0.1.x release.
 
 Custom personas live in `~/.bonfire/personas/`. The persona slot is
 user-extensible: name your own assistant, write a phrase bank, drop

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from bonfire._safe_write import safe_write_text
+from bonfire._safe_write import safe_append_text, safe_write_text
 
 # ``.bonfire/`` carries a MIX of operator-local state (the per-machine
 # ``tools.local.toml`` written by ``bonfire scan``) AND artefacts that
@@ -35,13 +35,12 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
     requested entry; existing comments and blank lines are preserved.
     Creates ``.gitignore`` if absent.
 
-    Uses :func:`safe_write_text` (W7.M) when creating the file fresh;
-    when appending we use Python's regular text I/O because we must
-    preserve any existing user content (``safe_write_text`` is a
-    create-or-overwrite primitive, not an append primitive). The
-    append path checks ``is_symlink`` first so a planted symlink at
-    ``.gitignore`` does not become an arbitrary-write primitive via
-    the append.
+    Uses :func:`safe_write_text` (W7.M) when creating the file fresh
+    and :func:`safe_append_text` (W7.M append helper) when extending
+    an existing ``.gitignore``. ``safe_append_text`` carries the
+    ``O_NOFOLLOW`` defense-in-depth guard that closes the TOCTOU
+    window a race-planted symlink could otherwise slip through
+    between the ``is_symlink()`` pre-check and the append.
     """
     gitignore_path = target / ".gitignore"
 
@@ -80,8 +79,19 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
     # one-shot operator command; the race window is small and the
     # failure mode is benign (a duplicate line). Not worth ``fcntl.flock``
     # complexity in v0.1.
+    #
+    # Route the append through ``safe_append_text`` (not raw
+    # ``Path.write_text``) so the W7.M ``O_NOFOLLOW`` defense closes
+    # the TOCTOU window between the ``is_symlink()`` pre-check above
+    # and the on-disk write — a race-planted symlink at ``.gitignore``
+    # is refused at ``open(2)`` time by the kernel rather than slipping
+    # through to an attacker-controlled target. The append helper
+    # creates the file on first call if absent, so even a benign race
+    # where the file disappears between the existence check and the
+    # append still produces correct on-disk state without leaking the
+    # write through a symlink.
     suffix = "" if existing.endswith("\n") else "\n"
-    gitignore_path.write_text(existing + suffix + f"{line}\n")
+    safe_append_text(gitignore_path, suffix + f"{line}\n")
 
 
 def init(

@@ -15,7 +15,7 @@ Adopted innovations (2 drift-guards over floor):
     Sage §D2 + v1 cli/app.py:54-63.
 
   * test_version_flag_format_stability — asserts the exact format
-    `bonfire 0.1.0a4` after strip(). Guards against capitalization/prefix drift
+    `bonfire 1.0.0` after strip(). Guards against capitalization/prefix drift
     that the substring floor test would miss. Cites Sage §D8 + v1 cli/app.py:20-23.
 
 Imports are RED — `bonfire.cli.app` does not exist as a package until Warriors
@@ -54,7 +54,7 @@ class TestAppEntry:
     def test_version_flag_contains_version_string(self) -> None:
         """--version output must contain the package version."""
         result = runner.invoke(app, ["--version"])
-        assert "0.1.0" in result.output
+        assert "1.0.0" in result.output
 
     def test_help_flag_exits_zero(self) -> None:
         """--help must exit with code 0."""
@@ -303,22 +303,22 @@ class TestRegistrationSurface:
             typer.echo(f"bonfire {__version__}")
 
         v1 source line 22 confirms: `typer.echo(f"bonfire {__version__}")`.
-        Current `__version__` resolves to "0.1.0a2" per
+        Current `__version__` resolves to "1.0.0" per
         `src/bonfire/__init__.py` and `pyproject.toml`.
 
         Floor test `test_version_flag_contains_version_string` only checks
-        `"0.1.0" in result.output` — would still pass if format drifted to
-        e.g. "Bonfire-AI v0.1.0a2" or "bonfire (version: 0.1.0a2)".
+        `"1.0.0" in result.output` — would still pass if format drifted to
+        e.g. "Bonfire-AI v1.0.0" or "bonfire (version: 1.0.0)".
 
         This test asserts the EXACT lower-case "bonfire" prefix + literal
-        " 0.1.0a2" — guards against:
+        " 1.0.0" — guards against:
           - capitalization drift (Bonfire vs bonfire);
-          - extra "v" prefix (bonfire v0.1.0a2);
+          - extra "v" prefix (bonfire v1.0.0);
           - any wrapper text around the version string.
         """
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
         # Strip trailing newline only — content must match verbatim
-        assert result.output.strip() == "bonfire 0.1.0a4", (
-            f"Expected exact format 'bonfire 0.1.0a4'; got {result.output.strip()!r}"
+        assert result.output.strip() == "bonfire 1.0.0", (
+            f"Expected exact format 'bonfire 1.0.0'; got {result.output.strip()!r}"
         )

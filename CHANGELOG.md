@@ -4,6 +4,120 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-05-17
+
+The first stable release of `bonfire-ai`. Bonfire pivots from "Python pipeline
+runtime with browser-tab onboard" to **the opinion package that opinions your
+Claude Code CLI for shipping software with a nine-role cadre**. Pip-install
+drops both the Python runtime AND a Claude Code skill that the user installs
+via a one-time `bonfire install-skill` command. From then on, `/bonfire scan`
+inside the user's Claude Code session opens the onboarding conversation in
+chat — no browser tab, no WebSocket, no context switch.
+
+### Added
+
+- **Claude Code skill bundle** (`src/bonfire/skill/SKILL.md`).
+  Instruction-based skill content delivered with the wheel. Describes the
+  `/bonfire scan` flow: greeting (asks what to call Bonfire), repo read,
+  cadre wiring, `bonfire.toml` write. Covers the nine-role cadre with both
+  Falcor (shipped default) and default persona display-name lineages.
+- **`bonfire install-skill` CLI verb.** One-time command that copies the
+  bundled skill content to `~/.claude/skills/bonfire/`. Idempotent. Refuses
+  to overwrite divergent content without `--force`. Uses `safe_write_text`
+  (symlink-rejection + O_NOFOLLOW) and `safe_read_capped_text` (1 MiB cap).
+- **README rewritten with a conversational tool stance.** Hero leads with
+  "Your Claude Code, opinionated." Body opens with the naming gesture.
+  Quick Start walks through pip-install → install-skill → `/bonfire scan`.
+  Dialog-scenario block depicts the in-chat conversation shape. Architecture
+  / extension surface / cadre glossary preserved for engineer-reviewer
+  second read.
+
+### Changed
+
+- **`/bonfire scan` is now the primary conversational surface.** The
+  browser-tab onboard (`onboard/server.py` + `onboard/ui.html`) stays as
+  the deprecated legacy path; not removed in this release. See
+  `docs/scan-front-door-protocol.md` if you need it.
+- **`ANTHROPIC_API_KEY` requirement documented in README Quick Start.**
+  Previous alpha docs implicitly required it; v1.0.0 names it explicitly.
+- **Stub-command caveat.** `bonfire status`, `bonfire resume`,
+  `bonfire handoff` are now explicitly labelled as v1.0 stubs in the README;
+  full implementation lands in v1.x.
+- **PyPI classifier advances from `Development Status :: 3 - Alpha` to
+  `Development Status :: 5 - Production/Stable`.**
+
+### Removed (BREAKING — alpha API)
+
+- **`StageExecutor.execute_single` deleted.** The class was unreachable
+  from `PipelineEngine` (engine uses its own `_execute_stage`); the public
+  re-exported API was a divergent dead path that dropped
+  `initial_envelope.metadata` and diverged on `model_override` semantics.
+  Deletion makes `PipelineEngine._execute_stage` the canonical execution
+  surface. Vault-advisor wire-up is deferred to a v1.x release; the
+  advisor class itself stays live and importable.
+- **`StageExecutor` class removed from `bonfire.engine` public API.** The
+  public-API surface shrank from 15 to 14 symbols. If you imported it
+  directly, your code will fail to import; use `PipelineEngine` instead.
+
+### Fixed
+
+- **Bus-vs-`PipelineResult` parity restored at the handler seam.**
+  Introduced shared `dispatch/handler_runner.py::run_handler_dispatch`
+  helper that emits synthetic `Dispatch*` events stamped with handler
+  cost. `sage_correction_bounce` now routes through it. Sage-correction
+  cycle costs are visible to every bus observer (`CostTracker`,
+  `CostLedgerConsumer`, the budget watchdog, `KnowledgeIngestConsumer`).
+- **`PipelineEngine.run` outer-exception path emits `PipelineFailed`.**
+  Previously the outer `try/except` silently returned a failure result
+  without notifying observers. Now emits `PipelineFailed` with
+  `failed_handler`, `duration_seconds`, `stages_completed`, and
+  `total_cost_usd` populated.
+- **Halt-branch event completeness on `PipelineFailed`.** New fields
+  (`failed_handler`, `duration_seconds`, `stages_completed`) added to
+  `PipelineFailed`; populated on all five halt branches (outer exception,
+  budget exceeded, parallel stage failed, single stage failed, gate
+  failure + bounce).
+- **Observer-registration completeness canary.** New parametrized test
+  asserts every concrete `BonfireEvent` subclass in `models/events.py`
+  has at least one registered consumer in the default wiring. Pre-empts
+  the regression class where a new event lands without an observer.
+- **Read-side TOCTOU and boundary-validation defense-in-depth.**
+  `safe_read_capped_text` migrated to `mcp_servers._read_servers_from_config`,
+  `session/persistence.py`, `config_generator.py`, and several CLI commands.
+  `SessionPersistence` validates session IDs at all public-method
+  boundaries. `git/scratch.ScratchWorktreeContext` validates the prefix
+  kwarg. 83 new adversarial tests.
+- **Scan front-door protocol citations re-anchored.** 67 docstring +
+  comment citations in `docs/scan-front-door-protocol.md` drifted +6 to
+  +307 lines per source file after prior hardening waves; all corrected.
+  New AST-based drift checker wired into CI between Lint and Test.
+
+### Security
+
+- **`_HOME_PREFIX_RE` regex bypass fixed.** Greedy `[^/]+` username slot
+  used to match the literal `..` segment, letting `/home/../etc/sudoers`
+  bypass `WRITE_EDIT_SENSITIVE_PATH_DENY`. Now uses negative lookaheads
+  to refuse `./` and `../` username slots. 58 new adversarial tests.
+
+### Audit
+
+A full audit at the post-Wave-11 baseline (three independent scouts:
+security, pipeline, onboard) returned **zero CRITICAL findings across
+all three axes**. The two HIGHs surfaced by the onboard scout
+(stub-command caveat, `ANTHROPIC_API_KEY` in Quick Start) folded into
+this release's README rewrite.
+
+### Notes
+
+- The full opinion mechanism (UserPromptSubmit + Stop hooks, subagent
+  registrations, browser-tab rip, plugin marketplace publish) is
+  intentionally deferred to v1.x. v1.0.0 delivers the framing, the
+  install path, and the in-chat `/bonfire scan` surface — the seed.
+- Migration from `0.1.0aN`: change install command to
+  `pip install bonfire-ai` (drop `--pre`). After install, run
+  `bonfire install-skill` once to register the Claude Code skill, then
+  `/bonfire scan` from inside Claude Code.
+
 ## [0.1.0a4] — 2026-05-16
 
 The fourth alpha release of `bonfire-ai`. A coordinated hardening pass against

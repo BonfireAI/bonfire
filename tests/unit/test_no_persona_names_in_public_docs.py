@@ -140,24 +140,31 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # --- README.md — predecessor-persona breadcrumb -----------------
         # Two-line breadcrumb pointing readers at docs/_lore/passelewe.md
         # per history-is-sacred. Names the retired persona explicitly
-        # (line 353) and the lore-page path (line 354) so the lineage
-        # is discoverable. W9 Lane B (H2): line numbers shifted from
-        # 271/272 → 278/279 when the dead ``--persona`` example was
-        # removed and replaced by a multi-line explanatory note.
+        # and the lore-page path so the lineage is discoverable.
+        # W9 Lane B (H2): line numbers shifted from 271/272 → 278/279
+        # when the dead ``--persona`` example was removed and replaced
+        # by a multi-line explanatory note.
         # W11 Lane C: shifted 278/279 → 280/281 when the quickstart
         # inline comment grew from "browser-based" to the longer
         # Front Door / WS-driven framing.
         # BON-1097 (v1.0.0 README rewrite): shifted 280/281 → 356/357
         # when the hero, Quick Start, and "Your First Scan" dialog
         # block were added for the conversational-tool v1.0.0 stance.
+        # BON-1111 (v1.0.1 README marketing redesign): shifted
+        # 356/357 → 362/363 when the centered hero stack, new
+        # "Install (60 seconds)" section, and "What's in v1.0.0"
+        # callout were added above the existing prose. Per memory
+        # `feedback_line_anchored_allowlists_fragile_2026_05_16`,
+        # any README hero/section addition above this breadcrumb
+        # shifts these anchors and the test fires.
         (
             "README.md",
-            356,
+            362,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            357,
+            363,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -171,24 +178,28 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # v1.0.0 release-prep (BON-1101). Per memory
         # `feedback_line_anchored_allowlists_fragile_2026_05_16`, any
         # CHANGELOG addition shifts these anchors and the test fires.
+        # BON-1111 (v1.0.1 docs-only release): shifted
+        # 536/538/539/556 → 558/560/561/578 when the [1.0.1] section
+        # was added at the top of CHANGELOG for the README marketing
+        # redesign.
         (
             "CHANGELOG.md",
-            536,
+            558,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            538,
+            560,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            539,
+            561,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            556,
+            578,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

@@ -4,6 +4,28 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-05-17
+
+Docs-only release. README repositioned for marketing impact on the
+GitHub repo page: centered hero stack, 3-beat sub-tagline, naming-gesture
+excerpt above the fold, v1.0.0 banner relocated to a "What's in v1.0.0"
+callout. No code changes; the v1.0.0 surface is unchanged.
+
+### Changed
+
+- README hero now uses a centered stack with upgraded badges + nav row
+  (matches the OSS spine used by astro / prisma / bun / vercel-ai).
+- Three-beat sub-tagline under the hero packs install + in-chat +
+  naming claims into one italicized line.
+- New "Install (60 seconds)" section above the fold pairs the three-line
+  install with a four-line naming-gesture dialog excerpt (cross-links
+  to the full "Your First Scan" section below).
+- v1.0.0 banner blockquote demoted to a "What's in v1.0.0" callout
+  further down the README.
+- Stub-command caveat and legacy onboarding warnings consolidated into
+  the "What's Not There Yet" section so honest-list discipline lives
+  in one place.
+
 ## [1.0.0] — 2026-05-17
 
 The first stable release of `bonfire-ai`. Bonfire pivots from "Python pipeline

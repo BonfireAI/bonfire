@@ -1,29 +1,40 @@
-# Bonfire
+<div align="center">
+
+# 🔥 Bonfire
 
 **Your Claude Code, opinionated.**
 
-Pip-install Bonfire and your CLI becomes a build partner that knows
-you, shaped by every conversation. The first time you run `/bonfire
-scan`, it asks what you want to call it.
+*Pip-install a runtime and a Claude Code skill. Run `/bonfire scan` in chat.
+Name your assistant — your cadre wires itself around the name.*
 
-[![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
-[![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
-[![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://pypi.org/project/bonfire-ai/)
+[![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://pypi.org/project/bonfire-ai/)
+[![License](https://img.shields.io/pypi/l/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
 
-> ### v1.0.0 — the opinion package for Claude Code
->
-> Bonfire ships as a `pip install` that drops two things into your
-> environment: a Python runtime, and a Claude Code skill. After a
-> one-time `bonfire install-skill`, your Claude Code session learns
-> `/bonfire scan` and the rest of the conversational surface. No
-> separate window, no extra process — the conversation happens inside
-> the editor you're already in. Bring your own provider key.
->
-> If something bites, file it at
-> [github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues).
-> The vocabulary, the protocols, and the config schema are stable.
+**[Quickstart](#install-60-seconds)** · **[The Cadre](#the-cadre)** · **[Docs](docs/architecture.md)** · **[Issues](https://github.com/BonfireAI/bonfire/issues)**
 
----
+</div>
+
+## Install (60 seconds)
+
+```bash
+pip install bonfire-ai          # PyPI distribution; Python 3.12+
+bonfire install-skill           # registers ~/.claude/skills/bonfire/SKILL.md
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then in Claude Code, in any project:
+
+```
+> /bonfire scan
+> what do you want to call me?
+you: Cinder
+
+> what do you want to ship next?
+you: a tested refactor of the checkout endpoint
+```
+
+That naming gesture is the inception of your Lexicon — every decision after this becomes part of how Cinder understands you. See [Your First Scan](#your-first-scan) for the full conversation.
 
 ## What Bonfire Is
 
@@ -47,6 +58,15 @@ The discipline is structural, not advisory. The role that writes
 failing tests cannot edit implementation. The role that writes
 implementation cannot edit tests. The reviewer is read-only. Source
 code is the deliverable.
+
+## What's in v1.0.0
+
+`pip install bonfire-ai` drops a Python runtime plus a Claude Code
+skill. A one-time `bonfire install-skill` registers the skill so your
+Claude Code session learns `/bonfire scan` and the rest of the
+conversational surface. Bring your own provider key
+(`ANTHROPIC_API_KEY`). File issues at
+[github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues).
 
 ## Quick Start
 
@@ -111,20 +131,6 @@ Available subcommands in v1.0.0: `init`, `scan`, `install-skill`,
 `status`, `resume`, `handoff`, `persona`, `cost`. Run `bonfire --help`
 for the full surface or `bonfire <command> --help` for any single
 command.
-
-**Stub caveat.** `bonfire status`, `bonfire resume`, and
-`bonfire handoff` ship as one-line stubs in v1.0.0; the full
-implementations land in a later 0.1.x release. Use them as
-placeholders only — they print a marker and exit.
-
-**Legacy onboarding path.** `bonfire scan` from a shell still launches
-the alpha-era Front Door (a local browser auto-opens by default; pass
-`--no-browser` for headless). That path is the deprecated alpha
-onboarding surface and is preserved for users who have not yet
-installed the Claude Code skill. The opinionated v1.0.0 front door is
-`/bonfire scan` from inside Claude Code; see
-[`docs/scan-front-door-protocol.md`](docs/scan-front-door-protocol.md)
-for the legacy protocol if you need it.
 
 ## Your First Scan
 
@@ -446,6 +452,18 @@ Honest list:
   `status`, `resume`, `handoff`, `persona`, `cost`) cover onboarding,
   skill install, persona, and cost; `status` / `resume` / `handoff`
   print one-line stubs for now.
+- **`bonfire status`, `bonfire resume`, and `bonfire handoff` are
+  one-line stubs in v1.0.0.** The full implementations land in a
+  later 0.1.x release. Use them as placeholders only — they print a
+  marker and exit.
+- **Legacy onboarding path.** `bonfire scan` from a shell still
+  launches the alpha-era Front Door (a local browser auto-opens by
+  default; pass `--no-browser` for headless). That path is the
+  deprecated alpha onboarding surface and is preserved for users who
+  have not yet installed the Claude Code skill. The opinionated
+  v1.0.0 front door is `/bonfire scan` from inside Claude Code; see
+  [`docs/scan-front-door-protocol.md`](docs/scan-front-door-protocol.md)
+  for the legacy protocol if you need it.
 - **The bundled prompt-template directory ships a `.gitkeep` and
   nothing else.** The cadre's prompt-layer identity is
   contributor-supplied today. Default identity blocks for the

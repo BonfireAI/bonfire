@@ -166,24 +166,29 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # path, and the quoted persona-name literal that the rename-
         # sweep test bans in src/. All are historical-state descriptions,
         # not active references.
+        # Anchors shifted from 422/424/425/442 → 536/538/539/556 when the
+        # [1.0.0] section was added at the top of CHANGELOG during the
+        # v1.0.0 release-prep (BON-1101). Per memory
+        # `feedback_line_anchored_allowlists_fragile_2026_05_16`, any
+        # CHANGELOG addition shifts these anchors and the test fires.
         (
             "CHANGELOG.md",
-            422,
+            536,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            424,
+            538,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            425,
+            539,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            442,
+            556,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bonfire-ai"
-version = "0.1.0a4"
+version = "1.0.0"
 description = "An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [{ name = "BonfireAI", email = "antawari@gmail.com" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",

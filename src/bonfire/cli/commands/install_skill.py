@@ -109,7 +109,38 @@ def install_skill(
     # Resolve ``~`` so the rest of the command operates on an absolute path.
     # Resolve symlinks in the PARENT chain (not the target file itself —
     # the per-file symlink refusal lives in ``safe_write_text``).
-    target_dir = Path(target).expanduser().resolve()
+    pre_resolve = Path(target).expanduser()
+    target_dir = pre_resolve.resolve()
+
+    # Home-anchor floor — defense-in-depth on top of the per-file
+    # symlink refusal in ``safe_write_text``. ``Path.resolve()``
+    # collapses parent-chain symlinks AND ``..`` traversal BEFORE the
+    # leaf-file symlink check fires. If ``~/.claude/skills/`` is itself
+    # a symlink to ``/tmp/attacker_owned/``, or the operator-supplied
+    # target uses ``..`` segments to climb above $HOME, the resolved
+    # path lands in an attacker-controlled tree while every leaf write
+    # still passes its per-file symlink check. Anchor the resolved
+    # path to ``Path.home()`` when the operator's INTENT (the pre-resolve
+    # path) was home-rooted — this mirrors the deny-floor scope in
+    # ``dispatch/security_hooks.py`` (only home-prefixed paths are
+    # protected, so a deliberate target outside ``~/`` remains an
+    # opt-in trust expansion). An operator who explicitly passes
+    # ``--target /tmp/x`` pre-resolve is already outside $HOME, so the
+    # floor does not apply and the existing per-file symlink refusal
+    # remains the only defense.
+    home = Path.home().resolve()
+    pre_resolve_abs = pre_resolve if pre_resolve.is_absolute() else pre_resolve.absolute()
+    intent_home_rooted = pre_resolve_abs.is_relative_to(home)
+    if intent_home_rooted and not target_dir.is_relative_to(home):
+        typer.echo(
+            f"Error: target {target_dir} resolves outside $HOME ({home}) "
+            f"even though the input ({pre_resolve}) is home-rooted. This "
+            "indicates a parent-chain symlink or `..`-traversal escape — "
+            "refusing to write outside the home anchor. Remove the symlink "
+            "(or correct the path) and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     # Inventory the bundled skill content up-front. If the wheel is
     # missing the skill (broken install, bad packaging), fail loudly

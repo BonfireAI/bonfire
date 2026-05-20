@@ -472,9 +472,7 @@ class TestDispatchFailedPersistence:
         record = DispatchRecord.model_validate_json(line)
         assert record.status == "completed"
 
-    async def test_legacy_rows_without_status_parse_as_completed(
-        self, ledger_path: Path
-    ) -> None:
+    async def test_legacy_rows_without_status_parse_as_completed(self, ledger_path: Path) -> None:
         """Pre-Scout-2 ledger rows on disk lack the ``status`` field.
         DispatchRecord must default to ``status="completed"`` so legacy
         rows continue to parse cleanly (history-is-sacred).

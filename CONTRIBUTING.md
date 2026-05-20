@@ -8,15 +8,16 @@ to the project.
 
 ## Release Status
 
-`bonfire-ai` is in alpha at `v0.1.0aN`. The PyPI classifier is
-`Development Status :: 3 - Alpha`; it advances to
-`Development Status :: 4 - Beta` when the stable `v0.1.0` tag cuts.
-Pipeline primitives, BYOK model routing, and the browser-based
-onboarding scan are wired and exercised by the test suite.
+`bonfire-ai` is at stable `1.0.1` (per `pyproject.toml`). The PyPI
+classifier is `Development Status :: 5 - Production/Stable`. Release
+history: `0.1.0` (2026-04-28) → reverted to `0.1.0a1` alpha series
+(2026-05-03) → advanced through `0.1.0a4` (2026-05-16) → cut stable
+`1.0.0` (2026-05-17) → patch `1.0.1` (2026-05-17, README marketing
+redesign). Pipeline primitives, BYOK model routing, and the browser-
+based onboarding scan are wired and exercised by the test suite.
 Knowledge-graph storage ("the Vault") and the end-to-end `bonfire run`
-verb remain in progress and ship in subsequent 0.1.x releases. The
-vocabulary, the protocols, and the config schema are stable for
-0.1.x. See
+verb continue to evolve in 1.x releases. The vocabulary, the protocols,
+and the config schema are stable on the 1.x line. See
 [`docs/release-policy.md`](docs/release-policy.md) for the full
 versioning policy and what counts as a breaking change, and
 [`CHANGELOG.md`](CHANGELOG.md) for per-release notes.

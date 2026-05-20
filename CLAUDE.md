@@ -198,8 +198,11 @@ Why NOT cherry-pick:
 - `git checkout branch -- files` is deterministic: each file comes from exactly
   one source
 
-The integration branch for v0.1 development is `v0.1`. Once v0.1.0 ships and the
-release flips public, the integration branch for v0.2 is cut from `main`.
+The integration branch for v0.1 development WAS `v0.1`; v0.1.0 was bypassed by
+the opinion-package pivot of 2026-05-17 (see Release Policy and Gates below),
+and the current release line ships from `main` (v1.0.0 / v1.0.1). The worktree
+merge protocol above remains the canonical way to land parallel-agent waves on
+whichever branch is currently integrating.
 
 ## Worktree Rules
 
@@ -233,13 +236,15 @@ release flips public, the integration branch for v0.2 is cut from `main`.
 
 ## Release Policy and Gates
 
-`bonfire-ai` is at stable `1.0.1` (per `pyproject.toml`). The release history —
-`0.1.0` (2026-04-28) → `0.1.0aN` alpha series → `1.0.0` stable (2026-05-17) →
-`1.0.1` (2026-05-17) — is captured in [`CHANGELOG.md`](CHANGELOG.md). The
-historical pre-release rules (retained for reference) live in
-[`docs/release-policy.md`](docs/release-policy.md); release-gate discipline lives
-in [`docs/release-gates.md`](docs/release-gates.md). Read both before tagging
-anything.
+**ARCHIVED FRAMING — `bonfire-ai` left pre-release on 2026-05-17 when the
+opinion-package pivot shipped `1.0.0` stable, followed by `1.0.1` (commit
+`3bbfbe5`). The original `0.1.0` tag shipped on 2026-04-28; the alpha series
+(`0.1.0a1` through `0.1.0aN`) ran until the pivot, at which point the v0.1.0
+release ladder was bypassed wholesale (BON-610 closed Done). The numbered
+gate ladder below is preserved per `feedback_history_is_sacred` so the
+reasoning that governed the alpha series stays legible.** The full
+pre-release rules live in [`docs/release-policy.md`](docs/release-policy.md);
+release-gate discipline lives in [`docs/release-gates.md`](docs/release-gates.md).
 
 ### Tier ladder (per [`docs/release-gates.md`](docs/release-gates.md) lines 14–21)
 
@@ -248,11 +253,15 @@ anything.
 | Infra | early waves (transfers, no runnable pipeline) | Unit tests + reviewer |
 | Integration | scaffolding waves | Infra + integration tests |
 | E2E | runnable `bonfire run` | Integration + box E2E PASS |
-| Release | v0.1.0 tag + re-publish | E2E + every README example executable |
+| Release | v0.1.0 tag + re-publish (BYPASSED — see opinion-package pivot 2026-05-17) | E2E + every README example executable |
 
 ### What BLOCKS a v0.1.0 tag
 
-A `v0.1.0` tag is BLOCKED until ALL of:
+**ARCHIVED — the v0.1.0 gate ladder was bypassed by the opinion-package pivot
+on 2026-05-17 (BON-610 closed Done). The ten items below are preserved per
+`feedback_history_is_sacred`; reading order intact for historical reference.**
+
+A `v0.1.0` tag WAS BLOCKED until ALL of:
 
 1. Wave 9.1 E2E smoke tests pass in CI on `main`
    ([`docs/release-policy.md`](docs/release-policy.md) line 39).
@@ -279,10 +288,13 @@ A `v0.1.0` tag is BLOCKED until ALL of:
 10. `pip install bonfire-ai==0.1.0` succeeds in a fresh venv
     ([`docs/release-gates.md`](docs/release-gates.md) line 112).
 
-Until all ten clear, the version stays alpha (`0.1.0aN`). When all ten cleared, the
-classifier in `pyproject.toml` advances from `Development Status :: 3 - Alpha`
-to `Development Status :: 4 - Beta` and the GitHub release tag `v0.1.0` is
-published.
+Until all ten cleared, the version WAS to stay alpha (`0.1.0aN`); had all ten
+cleared, the classifier in `pyproject.toml` was to advance from
+`Development Status :: 3 - Alpha` to `Development Status :: 4 - Beta` and the
+GitHub release tag `v0.1.0` was to be published. In practice the pivot of
+2026-05-17 cut a `1.0.0` stable tag directly off `main` (followed by `1.0.1`
+at commit `3bbfbe5`), the package's Development Status now reflects stable,
+and the ten-item ladder closed unmet by design — preserved above for history.
 
 ### Box E2E
 
@@ -307,21 +319,28 @@ branch. Both are protected. Rules:
    checks include all three.
 4. **No force-pushes** to `v0.1` or `main`. If a history rewrite is needed,
    file an issue and coordinate.
-5. **No deletion** of `v0.1` until `v0.1.0` is cut on `main` and verified by
-   Box E2E. Deletion is the final step of the release-train lifecycle
-   ([`docs/release-gates.md`](docs/release-gates.md) lines 122–128).
-6. **Annotated tags are sufficient** for v1.x release tags (interim
-   policy; GPG signing is not required). Release tags must still be
-   annotated (`git tag -a`), never lightweight.
+5. **No deletion** of `v0.1` until `v0.1.0` was cut on `main` and verified by
+   Box E2E. (Superseded by the opinion-package pivot 2026-05-17: v0.1.0 was
+   bypassed; `v0.1` remains preserved as the alpha-era integration branch
+   per `feedback_history_is_sacred`. Deletion was originally the final step
+   of the release-train lifecycle —
+   [`docs/release-gates.md`](docs/release-gates.md) lines 122–128.)
+6. **Signed commits** were required for `v0.1.0` and later release tags
+   ([`docs/release-policy.md`](docs/release-policy.md) lines 60–62). This
+   rule was relaxed in PR #141 for the v1.0.0 / v1.0.1 ship — those tags
+   are annotated-but-unsigned. New signing policy travels with the active
+   release line on `main`.
 7. **Branch naming** for feature work: `your-name/short-description`
    ([`CONTRIBUTING.md`](CONTRIBUTING.md) line 124).
 
 Branch-protection settings live in GitHub admin:
 <https://github.com/BonfireAI/bonfire/settings/branches>
 
-The repo is private until v0.1.0 ships clean
-([`docs/release-gates.md`](docs/release-gates.md) line 9); the flip to public is
-reversible ([`docs/release-gates.md`](docs/release-gates.md) line 120).
+The repo WAS private until v0.1.0 shipped clean
+([`docs/release-gates.md`](docs/release-gates.md) line 9); the public flip
+landed on 2026-05-03 ahead of the alpha series stabilizing, and the
+opinion-package pivot of 2026-05-17 made it the steady state. The flip
+remains reversible ([`docs/release-gates.md`](docs/release-gates.md) line 120).
 
 ## For External Contributors
 

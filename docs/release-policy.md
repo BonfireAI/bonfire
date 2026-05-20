@@ -7,21 +7,27 @@ to PyPI during the pre-release and v0.1 development periods.
 
 ## Current Status
 
-`bonfire-ai` is at stable `1.0.1` (per `pyproject.toml`). The PyPI
-classifier is `Development Status :: 5 - Production/Stable`. History:
-`0.1.0` (2026-04-28) → reverted to `0.1.0a1` alpha series (2026-05-03)
-→ advanced through `0.1.0a4` (2026-05-16) → cut stable `1.0.0`
-(2026-05-17) → patch `1.0.1` (2026-05-17, README marketing redesign).
-See [`CHANGELOG.md`](../CHANGELOG.md) for the per-release record. The
-two sections below ("Pre-release Period" and "Release Candidate Period")
-describe historical phases retained for reference.
+`bonfire-ai` is at stable `1.0.1` (per `pyproject.toml`), PyPI classifier `Development Status :: 5 - Production/Stable`. See [`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.
+
+**ARCHIVED — v0.1.0 gate bypassed by the opinion-package pivot 2026-05-17 (BON-610 closed Done). Preserved per `history-is-sacred`; the subsequent release line is on `main` with `v1.0.0` and `v1.0.1` (commit `3bbfbe5`) already shipped.**
+
+Historically: `bonfire-ai` WAS in alpha at version `0.1.0a4` (per
+`pyproject.toml` at the time). The original `0.1.0` tag shipped on
+2026-04-28; on 2026-05-03 the version label was reverted to `0.1.0a1`
+to honestly reflect that the release-gate items in
+[`docs/release-gates.md`](release-gates.md) remained open, and the
+alpha series advanced to `0.1.0a4`. Stable `v0.1.0` was the planned
+future tag once the release-gate items cleared. The opinion-package
+pivot of 2026-05-17 cut a `1.0.0` stable tag directly off `main`
+(followed by `1.0.1` at commit `3bbfbe5`), bypassing the v0.1.0
+release ladder wholesale.
 
 The two sections below ("Pre-release Period" and "Release Candidate
 Period") describe earlier alpha-numbering phases (`0.0.0a1`, `0.0.0a2`,
 …) that ran during v0.1 development. They are retained as historical
-reference. The current alpha series uses the `0.1.0aN` form. The
-"v0.1.0 Release" section captures the gates that govern cutting the
-stable tag.
+reference. The "v0.1.0 Release" section captures the gates that would
+have governed cutting the stable tag had the pivot not bypassed it;
+preserved per `history-is-sacred`.
 
 ## Pre-release Period
 
@@ -60,7 +66,9 @@ is in flight:
 
 ## v0.1.0 Release
 
-The first functional release is cut when:
+**ARCHIVED — the v0.1.0 release gate was bypassed by the opinion-package pivot on 2026-05-17 (BON-610 closed Done). The gate items below are preserved per `history-is-sacred`; the active release line ships from `main` with `v1.0.0` and `v1.0.1` (commit `3bbfbe5`) already published.**
+
+The first functional release WAS to be cut when:
 
 - Wave 9.1 end-to-end smoke tests pass in CI on `main`.
 - Wave 9.2 release preparation is merged.
@@ -73,11 +81,17 @@ The first functional release is cut when:
 
 At that point:
 
-- Version becomes `0.1.0`.
-- GitHub release tag `v0.1.0` is published.
-- The PyPI classifier advances from `Development Status :: 3 - Alpha`
+- Version was to become `0.1.0`.
+- GitHub release tag `v0.1.0` was to be published.
+- The PyPI classifier was to advance from `Development Status :: 3 - Alpha`
   to `Development Status :: 4 - Beta`.
-- README pre-release banner is removed.
+- README pre-release banner was to be removed.
+
+In practice the pivot of 2026-05-17 cut a `1.0.0` stable tag directly
+off `main` (followed by `1.0.1` at commit `3bbfbe5`); the package's
+Development Status now reflects stable, the README pre-release banner
+was retired with the v1 ship, and the gate items above closed unmet by
+design — preserved here for history.
 
 ## Yank Policy
 
@@ -87,5 +101,8 @@ Users receive a `pip install` warning pointing to the fixed release.
 
 ## Signing
 
-Release artifacts are signed with a maintainer GPG key once v0.1.0 is
-cut. Pre-release artifacts are unsigned.
+Release artifacts were originally to be signed with a maintainer GPG
+key once v0.1.0 was cut; pre-release artifacts were unsigned. This
+rule was relaxed in PR #141 for the v1.0.0 / v1.0.1 ship under the
+opinion-package pivot — those tags are annotated-but-unsigned. New
+signing policy travels with the active release line on `main`.

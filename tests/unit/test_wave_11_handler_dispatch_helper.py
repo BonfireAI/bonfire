@@ -485,3 +485,158 @@ class TestHelperReturnsCostStampedResult:
         # Whatever the helper returns, its cost_usd attribute must equal
         # the backend's charge.
         assert result.cost_usd == pytest.approx(0.21)
+
+
+# ===========================================================================
+# 7. Mirror N+7 Scout-2 — cost-event family on the handler_runner path
+#
+# HIGH-2: When ``backend.execute`` raises, ``run_handler_dispatch`` emits
+# ``DispatchFailed(cost_usd=0.0)`` regardless of any partial spend that
+# landed. The retry runner threads ``cumulative_cost`` correctly; this
+# path does not.
+#
+# Fix: helper reads ``getattr(exc, "cost_usd", 0.0)`` so a backend that
+# stamps partial cost on the raised exception before re-raising lands
+# that cost on the bus event AND on the persisted ledger row (via
+# Scout-2 HIGH-1 fix).
+#
+# HIGH-3: ``DispatchCompleted.duration_seconds`` is hard-coded to ``0.0``.
+# Fix: ``time.monotonic()`` delta across the ``backend.execute`` call.
+# ===========================================================================
+
+
+class _PartialCostExplodingBackend:
+    """Backend whose ``execute`` raises an exception carrying a partial
+    ``cost_usd`` attribute — mirrors the SDK-backend stamp-then-raise
+    contract for the HIGH-2 cost-threading path.
+    """
+
+    def __init__(self, *, partial_cost: float) -> None:
+        self._partial_cost = partial_cost
+
+    async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+        exc = RuntimeError("partial spend then boom")
+        # Stamp partial cost on the exception before re-raising. The
+        # handler_runner must read it off ``exc.cost_usd``.
+        exc.cost_usd = self._partial_cost  # type: ignore[attr-defined]
+        raise exc
+
+    async def health_check(self) -> bool:
+        return True
+
+
+class _SlowCostBearingBackend:
+    """Backend whose ``execute`` sleeps before returning so the helper's
+    monotonic-delta duration measurement has something non-zero to
+    observe.
+    """
+
+    def __init__(self, *, sleep_seconds: float = 0.02, cost: float = 0.1) -> None:
+        self._sleep_seconds = sleep_seconds
+        self._cost = cost
+
+    async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+        import asyncio as _asyncio
+
+        await _asyncio.sleep(self._sleep_seconds)
+        return envelope.with_result("ok", cost_usd=self._cost)
+
+    async def health_check(self) -> bool:
+        return True
+
+
+class TestHelperThreadsCostOnException:
+    """RED — when the backend raises with a ``cost_usd`` attribute, the
+    emitted ``DispatchFailed`` must carry that partial cost. Closes
+    Scout-2 HIGH-2.
+    """
+
+    async def test_failed_event_carries_partial_cost_from_exception(self) -> None:
+        from bonfire.dispatch.handler_runner import run_handler_dispatch
+
+        bus = EventBus()
+        collector = _EventCollector()
+        bus.subscribe_all(collector)
+        backend = _PartialCostExplodingBackend(partial_cost=0.42)
+
+        with pytest.raises(RuntimeError, match="partial spend"):
+            await run_handler_dispatch(
+                backend=backend,
+                envelope=_make_envelope(),
+                options=_make_options(),
+                event_bus=bus,
+            )
+
+        failed = collector.of_type(DispatchFailed)
+        assert len(failed) == 1
+        emitted: DispatchFailed = failed[0]  # type: ignore[assignment]
+        assert emitted.cost_usd == pytest.approx(0.42), (
+            "DispatchFailed.cost_usd must mirror the exception's stamped "
+            f"cost_usd attribute: got {emitted.cost_usd}, expected 0.42"
+        )
+
+    async def test_failed_event_defaults_to_zero_when_exception_unstamped(self) -> None:
+        """Backwards-compat: exceptions WITHOUT a ``cost_usd`` attribute
+        still emit ``DispatchFailed(cost_usd=0.0)``. The lookup is a
+        ``getattr`` with a ``0.0`` fallback — not a hard requirement.
+        """
+        from bonfire.dispatch.handler_runner import run_handler_dispatch
+
+        bus = EventBus()
+        collector = _EventCollector()
+        bus.subscribe_all(collector)
+        backend = _ExplodingBackend()  # plain RuntimeError, no cost_usd attr
+
+        with pytest.raises(RuntimeError, match="backend exploded"):
+            await run_handler_dispatch(
+                backend=backend,
+                envelope=_make_envelope(),
+                options=_make_options(),
+                event_bus=bus,
+            )
+
+        failed = collector.of_type(DispatchFailed)
+        assert len(failed) == 1
+        emitted: DispatchFailed = failed[0]  # type: ignore[assignment]
+        assert emitted.cost_usd == pytest.approx(0.0)
+
+
+class TestHelperMeasuresDuration:
+    """RED — ``DispatchCompleted.duration_seconds`` must reflect the
+    wall-clock time spent inside ``backend.execute`` (monotonic delta).
+    Today the helper hard-codes ``0.0``. Closes Scout-2 HIGH-3.
+    """
+
+    async def test_completed_event_carries_nonzero_duration(self) -> None:
+        from bonfire.dispatch.handler_runner import run_handler_dispatch
+
+        bus = EventBus()
+        collector = _EventCollector()
+        bus.subscribe_all(collector)
+        # Sleep long enough that the monotonic delta is reliably > 0.
+        # 20ms is generous on any modern host without making the suite
+        # noticeably slower.
+        backend = _SlowCostBearingBackend(sleep_seconds=0.02)
+
+        await run_handler_dispatch(
+            backend=backend,
+            envelope=_make_envelope(),
+            options=_make_options(),
+            event_bus=bus,
+        )
+
+        completed = collector.of_type(DispatchCompleted)
+        assert len(completed) == 1
+        emitted: DispatchCompleted = completed[0]  # type: ignore[assignment]
+        # Wall-clock delta MUST be greater than zero. The lower bound is
+        # generous (>= half the sleep) to absorb timer jitter on busy CI;
+        # the load-bearing assertion is "not 0.0".
+        assert emitted.duration_seconds > 0.0, (
+            "DispatchCompleted.duration_seconds must be a real monotonic "
+            f"delta, not hard-coded zero: got {emitted.duration_seconds}"
+        )
+        assert emitted.duration_seconds >= 0.01, (
+            "DispatchCompleted.duration_seconds should approximate the "
+            "wall-clock time spent in backend.execute (>= 10ms for a "
+            f"20ms sleep): got {emitted.duration_seconds}"
+        )

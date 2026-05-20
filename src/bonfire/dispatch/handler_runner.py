@@ -58,6 +58,7 @@ attribute).
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 from bonfire.models.events import (
@@ -132,9 +133,24 @@ async def run_handler_dispatch(
         ),
     )
 
+    # Monotonic delta across ``backend.execute`` — Scout-2 HIGH-3.
+    # Closes the parity gap with ``dispatch.runner.execute_with_retry``
+    # so handler-driven ``DispatchCompleted`` rows finally carry real
+    # wall-clock duration (instead of the hard-coded zero that made
+    # every handler-driven row look instant in per-model latency
+    # reports).
+    start = time.monotonic()
+
     try:
         result_env = await backend.execute(envelope, options=options)
     except Exception as exc:
+        # Scout-2 HIGH-2: thread partial cost from the exception. A
+        # backend that stamped ``exc.cost_usd`` before re-raising lands
+        # that dollar amount on the emitted ``DispatchFailed`` (and via
+        # the Scout-2 HIGH-1 ledger fix, onto the persisted failed-row).
+        # ``getattr`` with a ``0.0`` fallback keeps the contract honest
+        # for backends that don't stamp — they emit zero, same as before.
+        exc_cost = float(getattr(exc, "cost_usd", 0.0) or 0.0)
         await _emit(
             event_bus,
             DispatchFailed(
@@ -142,7 +158,7 @@ async def run_handler_dispatch(
                 sequence=0,
                 agent_name=agent_name,
                 error_message=str(exc),
-                cost_usd=0.0,
+                cost_usd=exc_cost,
             ),
         )
         raise
@@ -152,6 +168,7 @@ async def run_handler_dispatch(
     # ``getattr`` with a ``0.0`` fallback tolerates mocks that return a
     # plain ``MagicMock`` without ``.cost_usd`` set.
     result_cost = float(getattr(result_env, "cost_usd", 0.0) or 0.0)
+    duration_seconds = time.monotonic() - start
 
     await _emit(
         event_bus,
@@ -160,7 +177,7 @@ async def run_handler_dispatch(
             sequence=0,
             agent_name=agent_name,
             cost_usd=result_cost,
-            duration_seconds=0.0,
+            duration_seconds=duration_seconds,
             model=model_name,
         ),
     )

@@ -15,7 +15,18 @@ DEFAULT_LEDGER_PATH: Path = Path.home() / ".bonfire" / "cost" / "cost_ledger.jso
 
 
 class DispatchRecord(BaseModel):
-    """One agent dispatch with its cost."""
+    """One agent dispatch with its cost.
+
+    ``status`` discriminates success (``"completed"``) from failure
+    (``"failed"``) rows. Defaults to ``"completed"`` so pre-Scout-2
+    ledger rows on disk (written before the failure-path consumer was
+    wired) parse cleanly under the new schema — history-is-sacred.
+
+    Mirror N+7 Scout-2 (HIGH-1): ``CostLedgerConsumer`` now persists
+    ``DispatchFailed`` rows alongside ``DispatchCompleted``, so
+    downstream ``CostAnalyzer.agent_costs()`` / ``model_costs()``
+    no longer undercount failure-path spend.
+    """
 
     type: Literal["dispatch"] = "dispatch"
     timestamp: float
@@ -24,6 +35,7 @@ class DispatchRecord(BaseModel):
     cost_usd: float
     duration_seconds: float
     model: str = ""
+    status: Literal["completed", "failed"] = "completed"
 
 
 class PipelineRecord(BaseModel):

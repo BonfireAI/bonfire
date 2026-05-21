@@ -113,16 +113,36 @@ class TestProtocolExportDiscipline:
         assert not hasattr(proto_mod, "ToolPolicy")
 
     def test_protocols_all_unchanged(self) -> None:
-        """Sage D8 — ``bonfire.protocols.__all__`` remains exactly the v0.1 set."""
+        """Sage D8 — ``bonfire.protocols.__all__`` carries the v0.1 plugin
+        surface plus the Verdict envelope family (BON-1240 vendor-port).
+
+        The original Sage D8 guard pinned the set to the six v0.1 plugin
+        entries to defend against silent ToolPolicy / DefaultToolPolicy
+        leakage. BON-1240 (C-2 vendor-port of the Inquisitor's Verdict
+        envelope from forge-side) is the FIRST sanctioned extension of
+        this set since v0.1.0a2; the additions are Verdict + the four
+        supporting classes + the SCHEMA_VERSION pin.
+
+        Future extensions require the same sanction (named ticket,
+        Wizard-gate review) plus a paired update here.
+        """
         import bonfire.protocols as proto_mod
 
         assert set(proto_mod.__all__) == {
+            # v0.1 plugin surface
             "AgentBackend",
             "DispatchOptions",
             "QualityGate",
             "StageHandler",
             "VaultBackend",
             "VaultEntry",
+            # Verdict envelope family vendor-port (BON-1240)
+            "Finding",
+            "MuscleWriteReceipt",
+            "SCHEMA_VERSION",
+            "Severity",
+            "Verdict",
+            "VerdictStatus",
         }
 
 

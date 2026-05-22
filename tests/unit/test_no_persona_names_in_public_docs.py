@@ -40,9 +40,15 @@ entry and forces a re-confirmation. That's the durability we want:
 every person-name reference in the gate-7 docs surface costs an explicit
 allowlist entry, and that entry stays honest against drift.
 
-The allowlist is keyed by ``(relative_path_from_repo_root, line_number,
-expected_full_line_stripped)``. Mismatch on any field causes the test
-to fail.
+The allowlist is keyed by ``(relative_path_from_repo_root,
+expected_full_line_stripped)``. **No line numbers.** Earlier versions
+of this allowlist carried a third ``line_number`` field; that desynced
+every time an unrelated section was added above an allowlisted line
+(broke 3× in the v1.0.0/v1.0.1 ship window — see memory
+``feedback_line_anchored_allowlists_fragile_2026_05_16``). Content-
+keyed matching is immune to line shifts: scan the file for the exact
+stripped line; if it's there, the entry is honored. The full-line-
+equality guarantee against phrasing drift is preserved.
 
 Reads files on disk only — no subprocess.
 """
@@ -78,9 +84,19 @@ _PERSON_NAME = re.compile(r"\b(Anta|Ishtar|Passelewe)\b", re.IGNORECASE)
 # ---------------------------------------------------------------------------
 # Allowlist
 # ---------------------------------------------------------------------------
-# Each entry = (relative_path_from_repo_root, line_number, expected_full_line).
-# ``expected_full_line`` is matched with ``line.strip() == expected_full_line``
-# (full-line equality after stripping leading/trailing whitespace).
+# Each entry = (relative_path_from_repo_root, expected_full_line_stripped).
+# Matched with ``line.strip() == expected_full_line`` (full-line equality
+# after stripping leading/trailing whitespace) ANYWHERE in the file.
+#
+# **Content-keyed, not line-anchored.** The old shape carried a third
+# ``line_number`` field; that broke 3× during the v1.0.0/v1.0.1 ship
+# window when README/CHANGELOG additions shifted anchors (BON-1097
+# README rewrite; BON-1101 and BON-1111 CHANGELOG section adds). Memory
+# entry: ``feedback_line_anchored_allowlists_fragile_2026_05_16``.
+# Content-keyed matching is immune to line shifts: we scan the file for
+# the exact stripped line and honor the entry if found. The full-line-
+# equality guarantee against phrasing drift is preserved — adding a
+# word or changing punctuation still invalidates the entry.
 #
 # Rationale categories:
 # - ``docs/_lore/`` is the canonical archived-breadcrumb space per
@@ -103,68 +119,45 @@ _PERSON_NAME = re.compile(r"\b(Anta|Ishtar|Passelewe)\b", re.IGNORECASE)
 #   release-train lifecycle diagram. The regex's word boundaries do not
 #   match ``antawari`` (no boundary after ``Anta``), so this entry is
 #   defensive documentation rather than load-bearing.
-_ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
+_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         # --- docs/_lore/passelewe.md — predecessor-persona lore page ----
         # The whole file is the archived breadcrumb for the retired
         # Passelewe persona. Every line referring to her by name is
         # in-universe lore, not operator identification.
-        ("docs/_lore/passelewe.md", 6, "# Passelewe — Lore"),
+        ("docs/_lore/passelewe.md", "# Passelewe — Lore"),
         (
             "docs/_lore/passelewe.md",
-            8,
             "Passelewe was the first persona to ship in this source tree. She is now",
         ),
         (
             "docs/_lore/passelewe.md",
-            16,
             "Passelewe was the Chamberlain of a forge that never finished its own walls.",
         ),
         (
             "docs/_lore/passelewe.md",
-            29,
             "Inspired by John Le Mesurier as Passelewe in *Jabberwocky* (1977, Terry",
         ),
-        ("docs/_lore/passelewe.md", 32, "## The Seven Laws of Passelewe's Voice"),
-        ("docs/_lore/passelewe.md", 58, "## What Passelewe Is NOT"),
+        ("docs/_lore/passelewe.md", "## The Seven Laws of Passelewe's Voice"),
+        ("docs/_lore/passelewe.md", "## What Passelewe Is NOT"),
         (
             "docs/_lore/passelewe.md",
-            69,
             "Falcor's persona slot in this tree is a refactor of Passelewe's mechanics —",
         ),
         (
             "docs/_lore/passelewe.md",
-            71,
             "Where Passelewe is duty-loyal and deadpan, Falcor is luck-loyal and gentle.",
         ),
         # --- README.md — predecessor-persona breadcrumb -----------------
         # Two-line breadcrumb pointing readers at docs/_lore/passelewe.md
         # per history-is-sacred. Names the retired persona explicitly
         # and the lore-page path so the lineage is discoverable.
-        # W9 Lane B (H2): line numbers shifted from 271/272 → 278/279
-        # when the dead ``--persona`` example was removed and replaced
-        # by a multi-line explanatory note.
-        # W11 Lane C: shifted 278/279 → 280/281 when the quickstart
-        # inline comment grew from "browser-based" to the longer
-        # Front Door / WS-driven framing.
-        # BON-1097 (v1.0.0 README rewrite): shifted 280/281 → 356/357
-        # when the hero, Quick Start, and "Your First Scan" dialog
-        # block were added for the conversational-tool v1.0.0 stance.
-        # BON-1111 (v1.0.1 README marketing redesign): shifted
-        # 356/357 → 362/363 when the centered hero stack, new
-        # "Install (60 seconds)" section, and "What's in v1.0.0"
-        # callout were added above the existing prose. Per memory
-        # `feedback_line_anchored_allowlists_fragile_2026_05_16`,
-        # any README hero/section addition above this breadcrumb
-        # shifts these anchors and the test fires.
         (
             "README.md",
-            362,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            363,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -173,33 +166,20 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # path, and the quoted persona-name literal that the rename-
         # sweep test bans in src/. All are historical-state descriptions,
         # not active references.
-        # Anchors shifted from 422/424/425/442 → 536/538/539/556 when the
-        # [1.0.0] section was added at the top of CHANGELOG during the
-        # v1.0.0 release-prep (BON-1101). Per memory
-        # `feedback_line_anchored_allowlists_fragile_2026_05_16`, any
-        # CHANGELOG addition shifts these anchors and the test fires.
-        # BON-1111 (v1.0.1 docs-only release): shifted
-        # 536/538/539/556 → 558/560/561/578 when the [1.0.1] section
-        # was added at the top of CHANGELOG for the README marketing
-        # redesign.
         (
             "CHANGELOG.md",
-            558,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            560,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            561,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            578,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------
@@ -215,7 +195,6 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # explicitly rather than silently flag it.
         (
             "docs/release-gates.md",
-            146,
             "└── antawari/bon-<n>-* feature branches → PR into v0.1",
         ),
     }
@@ -242,16 +221,18 @@ def _iter_doc_files(repo_root: Path) -> list[Path]:
     return files
 
 
-def _is_allowlisted(rel_path: str, lineno: int, line: str) -> bool:
+def _is_allowlisted(rel_path: str, line: str) -> bool:
     """True iff the offender matches an allowlist entry.
 
     Matching is full-line equality after ``.strip()`` — any edit to the
     line (added word, punctuation change, indentation shift) invalidates
-    the allowlist entry and forces a re-confirmation.
+    the allowlist entry and forces a re-confirmation. No line-number
+    pinning: the entry matches the line content wherever it appears in
+    the file, immune to shifts from unrelated section adds above it.
     """
     stripped = line.strip()
-    for allowed_path, allowed_line, allowed_full in _ALLOWLIST:
-        if allowed_path == rel_path and allowed_line == lineno and stripped == allowed_full:
+    for allowed_path, allowed_full in _ALLOWLIST:
+        if allowed_path == rel_path and stripped == allowed_full:
             return True
     return False
 
@@ -282,7 +263,7 @@ def test_no_person_name_in_public_docs_outside_allowlist() -> None:
             # Binary files (images, etc.) — skip.
             continue
         for i, line in enumerate(text.splitlines(), start=1):
-            if _PERSON_NAME.search(line) and not _is_allowlisted(rel, i, line):
+            if _PERSON_NAME.search(line) and not _is_allowlisted(rel, line):
                 offenders.append((rel, i, line.rstrip()))
 
     assert not offenders, (
@@ -297,25 +278,23 @@ def test_persona_allowlist_entries_still_resolve() -> None:
     """Every allowlist entry must still match a real line in the docs surface.
 
     Guards against the allowlist drifting out of sync with the lore.
-    If an edit moves, removes, or alters a breadcrumb line, the
-    allowlist entry becomes a lie — this test catches that. Full-line
-    equality (after ``.strip()``) is intentional: prefix-matching
-    silently tolerates trailing edits, full-line equality does not.
+    If an edit removes or alters a breadcrumb line, the allowlist
+    entry becomes a lie — this test catches that. Full-line equality
+    (after ``.strip()``) is intentional: prefix-matching silently
+    tolerates trailing edits, full-line equality does not. Line
+    position is intentionally NOT pinned — entries match anywhere in
+    the file (immune to unrelated section adds shifting anchors).
     """
-    stale: list[tuple[str, int, str]] = []
-    for rel_path, lineno, expected_full in _ALLOWLIST:
+    stale: list[tuple[str, str]] = []
+    for rel_path, expected_full in _ALLOWLIST:
         full = _REPO_ROOT / rel_path
         if not full.is_file():
-            stale.append((rel_path, lineno, f"<file missing: {full}>"))
+            stale.append((rel_path, f"<file missing: {full}>"))
             continue
         lines = full.read_text(encoding="utf-8").splitlines()
-        if lineno < 1 or lineno > len(lines):
-            stale.append((rel_path, lineno, f"<out-of-range: file has {len(lines)} lines>"))
-            continue
-        actual = lines[lineno - 1].strip()
-        if actual != expected_full:
-            stale.append((rel_path, lineno, f"<expected {expected_full!r}, got {actual!r}>"))
+        if not any(line.strip() == expected_full for line in lines):
+            stale.append((rel_path, f"<line not found: {expected_full!r}>"))
 
     assert not stale, "Allowlist entries no longer match docs — drift detected:\n" + "\n".join(
-        f"  {p}:{n}: {info}" for p, n, info in stale
+        f"  {p}: {info}" for p, info in stale
     )

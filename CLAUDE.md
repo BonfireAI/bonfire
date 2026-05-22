@@ -310,8 +310,9 @@ branch. Both are protected. Rules:
 5. **No deletion** of `v0.1` until `v0.1.0` is cut on `main` and verified by
    Box E2E. Deletion is the final step of the release-train lifecycle
    ([`docs/release-gates.md`](docs/release-gates.md) lines 122–128).
-6. **Signed commits** required for `v0.1.0` and later release tags
-   ([`docs/release-policy.md`](docs/release-policy.md) lines 60–62).
+6. **Annotated tags are sufficient** for v1.x release tags (interim
+   policy; GPG signing is not required). Release tags must still be
+   annotated (`git tag -a`), never lightweight.
 7. **Branch naming** for feature work: `your-name/short-description`
    ([`CONTRIBUTING.md`](CONTRIBUTING.md) line 124).
 

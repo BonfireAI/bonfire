@@ -13,6 +13,7 @@ from bonfire._safe_write import safe_append_text
 from bonfire.cost.models import DEFAULT_LEDGER_PATH, DispatchRecord, PipelineRecord
 from bonfire.models.events import (
     DispatchCompleted,
+    DispatchFailed,
     PipelineCompleted,
     PipelineFailed,
 )
@@ -31,6 +32,13 @@ class CostLedgerConsumer:
     success-only persistence drops crash sessions entirely and
     downstream analyzers overcount session success rate.
 
+    Mirror N+7 Scout-2 (HIGH-1): also subscribes to ``DispatchFailed``
+    so per-dispatch failure-path spend lands as a ``DispatchRecord``
+    row with ``status="failed"``. Without this, ``CostAnalyzer``'s
+    per-agent / per-model rollups (which iterate ``_raw_dispatches``)
+    systematically undercount which agents and models burn dollars on
+    failure.
+
     Writes route through ``bonfire._safe_write.safe_append_text`` so a
     planted symlink at the operator-controlled ledger path is refused
     at ``open(2)`` time (W7.M defense-in-depth parity).
@@ -42,6 +50,7 @@ class CostLedgerConsumer:
     def register(self, bus: EventBus) -> None:
         """Subscribe to cost-bearing events on the bus."""
         bus.subscribe(DispatchCompleted, self._on_dispatch_completed)
+        bus.subscribe(DispatchFailed, self._on_dispatch_failed)
         bus.subscribe(PipelineCompleted, self._on_pipeline_completed)
         bus.subscribe(PipelineFailed, self._on_pipeline_failed)
 
@@ -53,6 +62,34 @@ class CostLedgerConsumer:
             cost_usd=event.cost_usd,
             duration_seconds=event.duration_seconds,
             model=event.model,
+            status="completed",
+        )
+        self._append(record)
+
+    async def _on_dispatch_failed(self, event: DispatchFailed) -> None:
+        """Persist a ``DispatchRecord`` for failure-path dispatches.
+
+        Mirror N+7 Scout-2 (HIGH-1) closure. ``DispatchFailed`` carries
+        ``cost_usd`` (added in Probe N+6's cost-accounting-close wave) —
+        the per-attempt spend the runner accumulated through the halt
+        point. Persisting
+        it as a per-dispatch row (with ``status="failed"`` discriminator)
+        means ``CostAnalyzer.agent_costs()`` and ``model_costs()`` finally
+        see the failure-path dollars they always missed.
+
+        ``DispatchFailed`` does not carry ``duration_seconds`` or
+        ``model`` — those fields default to ``0.0`` and ``""`` on the
+        persisted row. The aggregator already groups unattributed-model
+        rows under the empty-string bucket; this slots in cleanly.
+        """
+        record = DispatchRecord(
+            timestamp=event.timestamp,
+            session_id=event.session_id,
+            agent_name=event.agent_name,
+            cost_usd=event.cost_usd,
+            duration_seconds=0.0,
+            model="",
+            status="failed",
         )
         self._append(record)
 

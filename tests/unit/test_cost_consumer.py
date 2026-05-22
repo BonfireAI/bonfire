@@ -29,7 +29,7 @@ import pytest
 
 from bonfire.cost.consumer import CostLedgerConsumer
 from bonfire.events.bus import EventBus
-from bonfire.models.events import DispatchCompleted, PipelineCompleted
+from bonfire.models.events import DispatchCompleted, DispatchFailed, PipelineCompleted
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -399,3 +399,163 @@ class TestModelFieldPassthrough:
         line = ledger_path.read_text().strip().splitlines()[0]
         record = DispatchRecord.model_validate_json(line)
         assert record.model == ""
+
+
+# ---------------------------------------------------------------------------
+# Mirror N+7 Scout-2 — cost-event family (HIGH-1, HIGH-3 persistence-side)
+#
+# HIGH-1: CostLedgerConsumer never persists DispatchFailed rows.
+# CostTracker subscribes to BOTH DispatchCompleted and DispatchFailed (the
+# in-memory budget tracker sees all spend) but CostLedgerConsumer only
+# subscribes to DispatchCompleted. Failure-path dispatch spend is captured
+# in the pipeline-level rollup (PipelineFailed.total_cost_usd) but never
+# written as a per-dispatch row. CostAnalyzer.agent_costs() iterates
+# _raw_dispatches only, so per-agent / per-model failure spend is invisible.
+#
+# Fix: subscribe ``_on_dispatch_failed`` and append a ``DispatchRecord``.
+# Extend ``DispatchRecord`` with a ``status: Literal["completed", "failed"]
+# = "completed"`` discriminator so analyzers can split.
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchFailedPersistence:
+    """RED tests for Scout-2 HIGH-1 — CostLedgerConsumer persists
+    DispatchFailed as a DispatchRecord row with ``status="failed"``.
+    """
+
+    async def test_dispatch_failed_writes_record_with_failed_status(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        """A DispatchFailed event must produce a DispatchRecord row on disk
+        with ``status="failed"`` and the event's cost_usd preserved.
+
+        Without this, ``CostAnalyzer.agent_costs()`` and ``model_costs()``
+        systematically undercount failure-path spend per agent / model.
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        event = DispatchFailed(
+            session_id="ses_fail",
+            sequence=0,
+            agent_name="warrior",
+            error_message="boom",
+            cost_usd=0.17,
+        )
+        await bus.emit(event)
+
+        line = ledger_path.read_text().strip().splitlines()[0]
+        record = DispatchRecord.model_validate_json(line)
+        assert record.status == "failed"
+        assert record.agent_name == "warrior"
+        assert record.cost_usd == pytest.approx(0.17)
+        assert record.session_id == "ses_fail"
+
+    async def test_dispatch_completed_writes_record_with_completed_status(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        """A DispatchCompleted event must produce a DispatchRecord row with
+        ``status="completed"`` (the default for the new discriminator).
+        Preserves the success-path contract while adding the discriminator.
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        event = DispatchCompleted(
+            session_id="ses_ok",
+            sequence=0,
+            agent_name="scout",
+            cost_usd=0.09,
+            duration_seconds=2.0,
+        )
+        await bus.emit(event)
+
+        line = ledger_path.read_text().strip().splitlines()[0]
+        record = DispatchRecord.model_validate_json(line)
+        assert record.status == "completed"
+
+    async def test_legacy_rows_without_status_parse_as_completed(self, ledger_path: Path) -> None:
+        """Pre-Scout-2 ledger rows on disk lack the ``status`` field.
+        DispatchRecord must default to ``status="completed"`` so legacy
+        rows continue to parse cleanly (history-is-sacred).
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        legacy_json = (
+            '{"type":"dispatch","timestamp":1.0,"session_id":"old",'
+            '"agent_name":"a","cost_usd":0.1,"duration_seconds":1.0}'
+        )
+        record = DispatchRecord.model_validate_json(legacy_json)
+        assert record.status == "completed"
+
+    async def test_mixed_success_and_failure_both_persist(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        """A session with one success + one failure must persist BOTH rows,
+        each with the correct status discriminator.
+        """
+        from bonfire.cost.models import DispatchRecord
+
+        await bus.emit(
+            DispatchCompleted(
+                session_id="s",
+                sequence=0,
+                agent_name="a",
+                cost_usd=0.10,
+                duration_seconds=1.0,
+            )
+        )
+        await bus.emit(
+            DispatchFailed(
+                session_id="s",
+                sequence=1,
+                agent_name="b",
+                error_message="x",
+                cost_usd=0.05,
+            )
+        )
+
+        lines = ledger_path.read_text().strip().splitlines()
+        assert len(lines) == 2
+        rec0 = DispatchRecord.model_validate_json(lines[0])
+        rec1 = DispatchRecord.model_validate_json(lines[1])
+        assert rec0.status == "completed"
+        assert rec1.status == "failed"
+        assert rec1.cost_usd == pytest.approx(0.05)
+
+
+class TestAnalyzerSeesFailedDispatches:
+    """RED test — once DispatchFailed rows persist, CostAnalyzer.agent_costs()
+    aggregates them alongside completed rows. Failure-path spend stops
+    being invisible to per-agent / per-model reports.
+    """
+
+    async def test_agent_costs_includes_failed_dispatches(
+        self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
+    ) -> None:
+        from bonfire.cost.analyzer import CostAnalyzer
+
+        await bus.emit(
+            DispatchCompleted(
+                session_id="s",
+                sequence=0,
+                agent_name="warrior",
+                cost_usd=0.10,
+                duration_seconds=1.0,
+            )
+        )
+        await bus.emit(
+            DispatchFailed(
+                session_id="s",
+                sequence=1,
+                agent_name="warrior",
+                error_message="oops",
+                cost_usd=0.05,
+            )
+        )
+
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+        costs = analyzer.agent_costs()
+        warrior_costs = [c for c in costs if c.agent_name == "warrior"]
+        assert len(warrior_costs) == 1
+        # Per-agent total must include the failed dispatch's cost.
+        assert warrior_costs[0].total_cost_usd == pytest.approx(0.15)
+        assert warrior_costs[0].dispatch_count == 2

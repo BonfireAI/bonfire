@@ -36,6 +36,7 @@ from __future__ import annotations
 import importlib.resources
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from bonfire.cli.app import app
@@ -296,3 +297,117 @@ def test_bundled_skill_md_body_load_bearing_strings(tmp_path: Path) -> None:
     assert "structural" in body.lower(), (
         "SKILL.md body must frame discipline as 'structural' (not 'advisory')"
     )
+
+
+# ---------------------------------------------------------------------------
+# Assertion 8 (home_anchor adversarial): symlinked parent chain pointing
+# outside $HOME must be refused before any write.
+# ---------------------------------------------------------------------------
+
+
+def test_install_skill_home_anchor_refuses_symlinked_parent_outside_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Symlinked ``~/.claude/skills/`` pointing outside $HOME → refuse.
+
+    Mirror Probe N+7 Scout-1 finding H1: ``Path.resolve()`` collapses
+    parent-chain symlinks BEFORE the per-file ``safe_write_text`` symlink
+    refusal fires. If an attacker plants ``~/.claude/skills/`` as a
+    symlink to ``/tmp/attacker_owned/``, the resolved ``target_dir``
+    lands inside the attacker-controlled tree; subsequent writes drop
+    bytes there even though the leaf file itself is not a symlink.
+
+    Defense: after ``.resolve()``, the resolved path MUST still be
+    inside ``Path.home()`` when the user-supplied target was inside
+    ``Path.home()`` pre-resolve. The deny-floor scope mirrors
+    ``security_hooks.py`` — only home-prefixed paths are protected.
+
+    Adversarial shape:
+      - Stage a fake ``$HOME`` at ``tmp_path / "home"``.
+      - Plant ``$HOME/.claude/skills`` as a symlink pointing at
+        ``tmp_path / "attacker"`` (outside the fake $HOME).
+      - Invoke ``install-skill`` with the DEFAULT target
+        (``~/.claude/skills/bonfire/``) — which expanduser-expands to
+        the booby-trapped path inside the fake $HOME.
+      - Expect: exit non-zero, NO bytes written under the attacker dir.
+    """
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    attacker_dir = tmp_path / "attacker"
+    attacker_dir.mkdir()
+
+    # Plant the symlink: ~/.claude/skills/ -> /tmp/attacker_owned/
+    claude_dir = fake_home / ".claude"
+    claude_dir.mkdir()
+    skills_link = claude_dir / "skills"
+    skills_link.symlink_to(attacker_dir)
+
+    # Point $HOME at the fake home so ``Path.home()`` and
+    # ``Path("~").expanduser()`` both resolve through the symlink trap.
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    result = runner.invoke(app, ["install-skill"])
+
+    assert result.exit_code != 0, (
+        "install-skill must refuse when parent-chain symlink redirects "
+        "the default target outside $HOME; "
+        f"got exit_code={result.exit_code}, output={result.output!r}"
+    )
+    # No bytes may land in the attacker-owned tree.
+    attacker_contents = list(attacker_dir.rglob("*"))
+    assert attacker_contents == [], (
+        "no bytes may be written under the attacker-controlled directory; "
+        f"found: {attacker_contents!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Assertion 9 (home_anchor adversarial): traversal-style target that
+# resolves outside $HOME must be refused.
+# ---------------------------------------------------------------------------
+
+
+def test_install_skill_home_anchor_refuses_parent_traversal_outside_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``~/../other-path/...`` style target → refused at home-anchor check.
+
+    Companion to the parent-chain symlink case: an operator-controlled
+    target string that uses ``..`` segments to climb above ``$HOME``
+    must be caught by the same home-anchor floor. ``Path.resolve()``
+    collapses the ``..`` segments before the floor check, so the
+    resolved path lands outside ``Path.home()`` — at which point we
+    refuse.
+
+    Adversarial shape:
+      - Stage a fake ``$HOME`` at ``tmp_path / "home"``.
+      - Invoke ``install-skill --target ~/../outside-home``. The
+        ``~`` expanduser-expands to the fake home; the ``..`` then
+        climbs out of it to ``tmp_path / "outside-home"`` (which is
+        NOT under the fake $HOME).
+      - Pre-resolve form starts with ``~`` so the operator's INTENT
+        was a home-rooted target; resolving out of $HOME via ``..``
+        is exactly the parent-chain attack class the floor catches.
+      - Expect: exit non-zero, no SKILL.md anywhere outside $HOME.
+    """
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    # Target uses ``~/..`` — pre-resolve looks home-rooted, post-resolve
+    # climbs out of $HOME.
+    traversal_target = "~/../outside-home/bonfire"
+
+    result = runner.invoke(app, ["install-skill", "--target", traversal_target])
+
+    assert result.exit_code != 0, (
+        "install-skill must refuse when ``..``-traversal climbs out of "
+        f"$HOME; got exit_code={result.exit_code}, output={result.output!r}"
+    )
+    # No SKILL.md may exist outside the fake $HOME.
+    outside_home = tmp_path / "outside-home"
+    if outside_home.exists():
+        leaked = list(outside_home.rglob("SKILL.md"))
+        assert leaked == [], (
+            f"no SKILL.md may be written outside $HOME via ``..`` traversal; found: {leaked!r}"
+        )

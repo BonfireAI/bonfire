@@ -237,7 +237,7 @@ published and an **in-memory default backend** ships (substring
 matching, no embeddings, no external dependencies — suitable for
 tests and small projects). A LanceDB-backed implementation is
 available behind the `bonfire-ai[knowledge]` extra; the persistent
-knowledge-graph storage layer lands in a later 0.1.x release.
+knowledge-graph storage layer lands in a later 1.x release.
 
 ## Config Reference
 
@@ -352,7 +352,7 @@ bonfire persona set default
 The persona is configured per project via `bonfire persona set <name>`;
 there is no per-command override flag in v1.0.0. A per-command
 override lands when the narration/output layer grows persona awareness
-in a later 0.1.x release.
+in a later 1.x release.
 
 Custom personas live in `~/.bonfire/personas/`. The persona slot is
 user-extensible: name your own assistant, write a phrase bank, drop
@@ -436,7 +436,7 @@ class StageHandler(Protocol):
 ```
 
 The full persistent Vault knowledge-graph implementation lands in a
-later 0.1.x release. The protocol is stable today; the in-memory
+later 1.x release. The protocol is stable today; the in-memory
 default backend ships today and a LanceDB-backed implementation is
 available behind the `bonfire-ai[knowledge]` extra.
 
@@ -447,14 +447,14 @@ Honest list:
 - **There is no `bonfire run` command.** The library works —
   `from bonfire.engine import PipelineEngine` and `await engine.run(plan)`
   drives a real pipeline against a real backend — but the CLI verb
-  that wires the engine end-to-end is deferred to a 0.1.x release.
+  that wires the engine end-to-end is deferred to a 1.x release.
   The shipped subcommands (`init`, `scan`, `install-skill`,
   `status`, `resume`, `handoff`, `persona`, `cost`) cover onboarding,
   skill install, persona, and cost; `status` / `resume` / `handoff`
   print one-line stubs for now.
 - **`bonfire status`, `bonfire resume`, and `bonfire handoff` are
   one-line stubs in v1.0.0.** The full implementations land in a
-  later 0.1.x release. Use them as placeholders only — they print a
+  later 1.x release. Use them as placeholders only — they print a
   marker and exit.
 - **Legacy onboarding path.** `bonfire scan` from a shell still
   launches the alpha-era Front Door (a local browser auto-opens by
@@ -468,7 +468,7 @@ Honest list:
   nothing else.** The cadre's prompt-layer identity is
   contributor-supplied today. Default identity blocks for the
   LLM-dispatching roles (Scout, Knight, Warrior, Wizard) come in a
-  later 0.1.x release.
+  later 1.x release.
 - **The persistent Vault knowledge-graph is not yet shipped.** The
   `VaultBackend` Protocol is stable and an in-memory default backend
   ships today (substring matching, no embeddings); the
@@ -479,7 +479,7 @@ Honest list:
   wired to it. The release-gate Box validates the artifact contract,
   not the orchestration capability.
 
-Later 0.1.x releases ship the verb, the bundled prompt templates, and
+Later 1.x releases ship the verb, the bundled prompt templates, and
 the persistent Vault knowledge-graph. The under-claim is the feature.
 
 ## Roadmap
@@ -489,7 +489,7 @@ What's coming next, in rough order:
 - **`bonfire run`** — the CLI verb that drives the engine end-to-end.
 - **In-chat parity for every CLI verb.** v1.0.0 ships `/bonfire scan`
   as the primary conversational surface; the other verbs gain
-  in-chat skill mappings in later 0.1.x releases.
+  in-chat skill mappings in later 1.x releases.
 - **Bundled prompt-template identity blocks** for the four
   LLM-dispatching cadre roles.
 - **Persistent Vault knowledge-graph** — the durable storage and

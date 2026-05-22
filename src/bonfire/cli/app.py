@@ -129,7 +129,7 @@ def main(
     override surface that did not exist. The persona is configured per
     project via ``bonfire persona set <name>`` (writes the value into
     ``bonfire.toml``). A per-command override flag will land when the
-    narration/output layer grows persona awareness in a later 0.1.x release.
+    narration/output layer grows persona awareness in a later 1.x release.
     """
     ctx.ensure_object(dict)
 
@@ -215,21 +215,21 @@ def scan(
     _lazy_run("bonfire.cli.commands.scan", "scan")(**scan_kwargs)
 
 
-@app.command("status", help="(stub -- implementation lands in 0.1.x)")
+@app.command("status", help="(stub -- implementation lands in 1.x)")
 def status() -> None:
-    """Show current Bonfire session status (stub -- implementation lands in 0.1.x)."""
+    """Show current Bonfire session status (stub -- implementation lands in 1.x)."""
     _lazy_run("bonfire.cli.commands.status", "status")()
 
 
-@app.command("resume", help="(stub -- implementation lands in 0.1.x)")
+@app.command("resume", help="(stub -- implementation lands in 1.x)")
 def resume() -> None:
-    """Resume a previous Bonfire session (stub -- implementation lands in 0.1.x)."""
+    """Resume a previous Bonfire session (stub -- implementation lands in 1.x)."""
     _lazy_run("bonfire.cli.commands.resume", "resume")()
 
 
-@app.command("handoff", help="(stub -- implementation lands in 0.1.x)")
+@app.command("handoff", help="(stub -- implementation lands in 1.x)")
 def handoff() -> None:
-    """Generate a session handoff document (stub -- implementation lands in 0.1.x)."""
+    """Generate a session handoff document (stub -- implementation lands in 1.x)."""
     _lazy_run("bonfire.cli.commands.handoff", "handoff")()
 
 

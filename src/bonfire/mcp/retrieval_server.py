@@ -27,7 +27,7 @@ async def handle_retrieve_context(
     *,
     query: str,
     token_budget: int = 4000,
-    provider: "RetrievalProvider | None" = None,
+    provider: RetrievalProvider | None = None,
 ) -> str:
     """Run retrieval and format the result as a tool response string.
 
@@ -108,14 +108,10 @@ def _main() -> int:
         ]
 
     @server.call_tool()
-    async def _call_tool(
-        name: str, arguments: dict[str, object]
-    ) -> list[mcp_types.TextContent]:
+    async def _call_tool(name: str, arguments: dict[str, object]) -> list[mcp_types.TextContent]:
         if name != "retrieve_context":
             return [
-                mcp_types.TextContent(
-                    type="text", text=f"retrieve_context: unknown tool {name!r}"
-                )
+                mcp_types.TextContent(type="text", text=f"retrieve_context: unknown tool {name!r}")
             ]
         query = str(arguments.get("query", ""))
         token_budget_raw = arguments.get("token_budget", 4000)
@@ -123,9 +119,7 @@ def _main() -> int:
             token_budget = int(token_budget_raw)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             token_budget = 4000
-        text = await handle_retrieve_context(
-            query=query, token_budget=token_budget
-        )
+        text = await handle_retrieve_context(query=query, token_budget=token_budget)
         return [mcp_types.TextContent(type="text", text=text)]
 
     async def _run() -> None:

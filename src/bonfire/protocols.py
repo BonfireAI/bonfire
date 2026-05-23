@@ -470,9 +470,12 @@ class RetrievalProvider(Protocol):
 
     Implementations must be keyword-only at the call boundary so future
     parameters land additively without breaking callers.
+
+    All implementations are async to support async VaultBackend delegation and
+    Pantheon-tier graph queries.
     """
 
-    def retrieve(
+    async def retrieve(
         self,
         *,
         query: str,

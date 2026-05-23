@@ -36,11 +36,11 @@ def test_context_atom_extra_ignore():
     assert not hasattr(atom, "unknown_future_field")
 
 
-def test_retrieval_provider_protocol_structural_match():
-    """A class with a matching .retrieve() signature satisfies the Protocol."""
+async def test_retrieval_provider_protocol_structural_match():
+    """A class with a matching async .retrieve() signature satisfies the Protocol."""
 
     class FakeProvider:
-        def retrieve(
+        async def retrieve(
             self,
             *,
             query: str,
@@ -50,13 +50,13 @@ def test_retrieval_provider_protocol_structural_match():
             return []
 
     provider: RetrievalProvider = FakeProvider()
-    result = provider.retrieve(query="anything")
+    result = await provider.retrieve(query="anything")
     assert result == []
 
 
-def test_retrieval_provider_protocol_accepts_seed_keys_and_budget():
+async def test_retrieval_provider_protocol_accepts_seed_keys_and_budget():
     class FakeProvider:
-        def retrieve(
+        async def retrieve(
             self,
             *,
             query: str,
@@ -69,7 +69,7 @@ def test_retrieval_provider_protocol_accepts_seed_keys_and_budget():
             ]
 
     provider: RetrievalProvider = FakeProvider()
-    out = provider.retrieve(query="q", seed_keys=["a", "b"], token_budget=500)
+    out = await provider.retrieve(query="q", seed_keys=["a", "b"], token_budget=500)
     assert len(out) == 2
     assert {a.key for a in out} == {"a", "b"}
 
@@ -78,7 +78,7 @@ def test_retrieval_provider_runtime_checkable():
     """Per protocols.py module invariant: all Protocols are runtime_checkable."""
 
     class FakeProvider:
-        def retrieve(
+        async def retrieve(
             self,
             *,
             query: str,

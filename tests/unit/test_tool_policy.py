@@ -114,14 +114,21 @@ class TestProtocolExportDiscipline:
 
     def test_protocols_all_unchanged(self) -> None:
         """Sage D8 — ``bonfire.protocols.__all__`` carries the v0.1 plugin
-        surface plus the Verdict envelope family (BON-1240 vendor-port).
+        surface plus the Verdict envelope family (BON-1240 vendor-port)
+        plus the retrieval seam (Pantheon Loop Wire-In Wave 1).
 
         The original Sage D8 guard pinned the set to the six v0.1 plugin
         entries to defend against silent ToolPolicy / DefaultToolPolicy
         leakage. BON-1240 (C-2 vendor-port of the Inquisitor's Verdict
-        envelope from forge-side) is the FIRST sanctioned extension of
-        this set since v0.1.0a2; the additions are Verdict + the four
+        envelope from forge-side) was the FIRST sanctioned extension of
+        this set since v0.1.0a2; the additions were Verdict + the four
         supporting classes + the SCHEMA_VERSION pin.
+
+        Pantheon Loop Wire-In Wave 1 is the SECOND sanctioned extension:
+        ``ContextAtom`` (tier-agnostic retrieval envelope) and
+        ``RetrievalProvider`` (the Tier 1 / Tier 2 structural Protocol
+        seam) land here so downstream consumers can read the seam without
+        ever importing the Tier 2 ``bonfire/arachne/*`` implementation.
 
         Future extensions require the same sanction (named ticket,
         Wizard-gate review) plus a paired update here.
@@ -143,6 +150,9 @@ class TestProtocolExportDiscipline:
             "Severity",
             "Verdict",
             "VerdictStatus",
+            # Retrieval seam (Pantheon Loop Wire-In Wave 1)
+            "ContextAtom",
+            "RetrievalProvider",
         }
 
 

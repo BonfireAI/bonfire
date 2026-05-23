@@ -72,3 +72,19 @@ def test_retrieval_provider_protocol_accepts_seed_keys_and_budget():
     out = provider.retrieve(query="q", seed_keys=["a", "b"], token_budget=500)
     assert len(out) == 2
     assert {a.key for a in out} == {"a", "b"}
+
+
+def test_retrieval_provider_runtime_checkable():
+    """Per protocols.py module invariant: all Protocols are runtime_checkable."""
+
+    class FakeProvider:
+        def retrieve(
+            self,
+            *,
+            query: str,
+            seed_keys: list[str] | None = None,
+            token_budget: int = 4000,
+        ) -> list[ContextAtom]:
+            return []
+
+    assert isinstance(FakeProvider(), RetrievalProvider)

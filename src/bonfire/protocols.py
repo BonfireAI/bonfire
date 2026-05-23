@@ -441,8 +441,8 @@ class StageHandler(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Retrieval seam (Wave 1 — Tier 1 retrieval; see
-# ishtar/grimoire/design/2026-05-22-pantheon-loop-wire-in-design.md)
+# Retrieval seam (Wave 1 — Tier 1 retrieval — RetrievalProvider Protocol +
+# ContextAtom envelope; see CHANGELOG / commit history for design notes)
 # ---------------------------------------------------------------------------
 
 
@@ -462,6 +462,7 @@ class ContextAtom(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+@runtime_checkable
 class RetrievalProvider(Protocol):
     """Pluggable retrieval — Tier 1 implementations live in bonfire-public;
     Tier 2 implementations (Pantheon) live in bonfire/ and register via the

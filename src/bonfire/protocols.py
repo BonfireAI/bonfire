@@ -43,10 +43,12 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AgentBackend",
+    "ContextAtom",
     "DispatchOptions",
     "Finding",
     "MuscleWriteReceipt",
     "QualityGate",
+    "RetrievalProvider",
     "SCHEMA_VERSION",
     "Severity",
     "StageHandler",
@@ -274,6 +276,7 @@ class Verdict(BaseModel):
         ),
     )
 
+
 # ---------------------------------------------------------------------------
 # Supporting value types
 # ---------------------------------------------------------------------------
@@ -435,3 +438,43 @@ class StageHandler(Protocol):
     ) -> Envelope:
         """Execute the stage and return the resulting envelope."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# Retrieval seam (Wave 1 — Tier 1 retrieval; see
+# ishtar/grimoire/design/2026-05-22-pantheon-loop-wire-in-design.md)
+# ---------------------------------------------------------------------------
+
+
+class ContextAtom(BaseModel):
+    """One retrieved atom delivered to a prompt or MCP tool consumer.
+
+    Slim by design — body is the markdown content the agent will read; score
+    is the provider's confidence (e.g. ripgrep rank or BFS edge-weight roll-up).
+    Tier 1 and Tier 2 providers both produce this shape so the consumer is
+    tier-agnostic.
+    """
+
+    key: str
+    body: str
+    source_path: str
+    score: float
+    model_config = ConfigDict(extra="ignore")
+
+
+class RetrievalProvider(Protocol):
+    """Pluggable retrieval — Tier 1 implementations live in bonfire-public;
+    Tier 2 implementations (Pantheon) live in bonfire/ and register via the
+    optional-import seam in bonfire._discovery.
+
+    Implementations must be keyword-only at the call boundary so future
+    parameters land additively without breaking callers.
+    """
+
+    def retrieve(
+        self,
+        *,
+        query: str,
+        seed_keys: list[str] | None = None,
+        token_budget: int = 4000,
+    ) -> list[ContextAtom]: ...

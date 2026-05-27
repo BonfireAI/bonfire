@@ -164,9 +164,7 @@ class StewardHandler:
             # the pipeline outcome. SKIPPED conveys "intentionally did not
             # run" — the closer evaluated its preconditions and declined.
             merge_actually_happened = verdict == "approve" and pr_number is not None
-            final_status = (
-                TaskStatus.COMPLETED if merge_actually_happened else TaskStatus.SKIPPED
-            )
+            final_status = TaskStatus.COMPLETED if merge_actually_happened else TaskStatus.SKIPPED
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,

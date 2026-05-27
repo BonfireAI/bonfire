@@ -23,20 +23,60 @@ logger = logging.getLogger(__name__)
 
 
 class CostAnalyzer:
-    """Reads the cost ledger and computes aggregations on demand."""
+    """Reads the cost ledger and computes aggregations on demand.
+
+    Memoizes the parsed-record tuple on the instance, invalidated by the
+    ledger file's mtime. Multiple aggregation methods called on the same
+    analyzer instance share one read — the default ``bonfire cost``
+    callback (``cumulative_cost`` + ``all_sessions``) previously paid the
+    parse cost twice per invocation; post-memoization it pays once.
+    """
+
+    # Sentinel mtime value for "ledger file does not exist." Distinct from
+    # any valid os.stat().st_mtime_ns (which is non-negative). When the file
+    # later appears, the cached -1 sentinel won't match the real mtime, so
+    # the next _read_records() call invalidates and re-reads.
+    _MTIME_MISSING = -1
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
         self._ledger_path = Path(ledger_path)
+        # Cached parsed records + the file mtime they were read at. Both are
+        # set together in _read_records(); a None cache means "never read."
+        self._cache: tuple[list[DispatchRecord], list[PipelineRecord]] | None = None
+        self._cache_mtime_ns: int = self._MTIME_MISSING
+
+    def _current_ledger_mtime_ns(self) -> int:
+        """Return the ledger file's mtime in ns, or ``_MTIME_MISSING`` if absent."""
+        try:
+            return self._ledger_path.stat().st_mtime_ns
+        except FileNotFoundError:
+            return self._MTIME_MISSING
 
     def _read_records(
         self,
     ) -> tuple[list[DispatchRecord], list[PipelineRecord]]:
-        """Read and parse all records from the ledger file."""
+        """Read and parse all records from the ledger file.
+
+        Memoized per instance with mtime-based invalidation: if the ledger
+        file's mtime matches the cached value, the cached tuple is returned
+        as-is (identity-equal to the prior call's result). Any mtime advance
+        — including the file appearing after a previous missing-file read —
+        triggers a fresh parse.
+        """
+        current_mtime_ns = self._current_ledger_mtime_ns()
+        if self._cache is not None and current_mtime_ns == self._cache_mtime_ns:
+            return self._cache
+
         dispatches: list[DispatchRecord] = []
         pipelines: list[PipelineRecord] = []
 
-        if not self._ledger_path.exists():
-            return dispatches, pipelines
+        if current_mtime_ns == self._MTIME_MISSING:
+            # File doesn't exist — cache the empty result keyed by the
+            # missing-sentinel so a follow-up call without file creation
+            # still hits cache.
+            self._cache = (dispatches, pipelines)
+            self._cache_mtime_ns = self._MTIME_MISSING
+            return self._cache
 
         with self._ledger_path.open("r", encoding="utf-8") as fh:
             for line_num, line in enumerate(fh, 1):
@@ -64,7 +104,12 @@ class CostAnalyzer:
                         self._ledger_path,
                     )
 
-        return dispatches, pipelines
+        # Cache populated tuple keyed by the mtime we observed at read time.
+        # If the file changes between this call and the next, the mtime
+        # check at the top of _read_records will invalidate.
+        self._cache = (dispatches, pipelines)
+        self._cache_mtime_ns = current_mtime_ns
+        return self._cache
 
     def cumulative_cost(self) -> float:
         """Grand total USD across all pipeline records."""

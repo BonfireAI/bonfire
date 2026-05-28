@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Hardcoded reference sets — read from forge-side at test-WRITE time
 # (ishtar/forge/core/verdict.py, BON-1240 prep merge, SCHEMA_VERSION="1.1")
@@ -140,8 +139,7 @@ def test_severity_variants() -> None:
 
     actual = {member.name for member in Severity}
     assert actual == EXPECTED_SEVERITY_VARIANTS, (
-        f"Severity drift: bonfire-public has {actual}, expected "
-        f"{EXPECTED_SEVERITY_VARIANTS}"
+        f"Severity drift: bonfire-public has {actual}, expected {EXPECTED_SEVERITY_VARIANTS}"
     )
 
 
@@ -162,8 +160,7 @@ def test_finding_fields() -> None:
 
     actual = set(Finding.model_fields.keys())
     assert actual == EXPECTED_FINDING_FIELDS, (
-        f"Finding field drift: bonfire-public has {actual}, expected "
-        f"{EXPECTED_FINDING_FIELDS}"
+        f"Finding field drift: bonfire-public has {actual}, expected {EXPECTED_FINDING_FIELDS}"
     )
 
 

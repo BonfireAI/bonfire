@@ -133,6 +133,66 @@ persona-emitted role names in CLI output.
 > roles above. The persona is what speaks for them at the CLI surface.
 > See [Personality](#personality-optional) below.
 
+### Cadre as Claude Code Subagents
+
+Bonfire ships the cadre as Claude Code subagent definitions so dispatches
+surface with named role discipline instead of the generic
+`subagent_type: "general-purpose"` label. Two install rails ship from the
+same `bonfire-public` repo:
+
+**Plugin (canonical · colon-namespaced `bonfire:<role>`).** Install via
+Claude Code:
+
+```bash
+/plugin install bonfire@<marketplace>
+```
+
+After install, dispatches surface as `bonfire:scout-innovative`,
+`bonfire:knight`, `bonfire:warrior`, etc. — the cadre's identity at the
+most visible API boundary. The v1 plugin ships six roles:
+`scout-innovative`, `scout-conservative`, `knight`, `warrior`, `sage`,
+`wizard`.
+
+**Raw-files CLI (fallback · flat-named `bonfire-<role>`).** For
+environments that can't enable Claude Code plugins (Cursor, Codex, raw
+SDK) — and as a user-customization "fork" lane (raw-file user-scope
+shadows the plugin copy):
+
+```bash
+# Drop the cadre into ~/.claude/agents/bonfire/
+bonfire install-agents --scope user
+
+# Or pin into a project repo (./.claude/agents/bonfire/)
+bonfire install-agents --scope project
+
+# Inspect what's installed
+bonfire list-agents
+
+# Paired removal — only touches files the install recorded
+bonfire uninstall-agents
+```
+
+The CLI rail also installs the **`bonfire-powered`** catch-all — a
+Bonfire-flavored general-purpose agent that sits next to `general-purpose`
+in the picker for users who want the cadre's discipline without picking a
+specific role. (The catch-all does NOT ship via the plugin; it's
+CLI-rail-only by design.)
+
+**Warrior Bash note.** The Warrior subagent ships with `Bash` in its
+`tools:` frontmatter, but background-dispatched subagents auto-deny
+Bash calls outside cached permission rules. See
+`.claude/settings.local.json.example` for the recommended allow-list
+pattern; copy to your `.claude/settings.local.json` (project scope) or
+merge into `~/.claude/settings.json` (user scope), tightened to whatever
+subset you actually run.
+
+**Versioning.** Three orthogonal pins: `bonfire-ai.__version__`
+(library, advances on releases), plugin `version` in `plugin.json`
+(advances on prompt-text changes), and `CADRE_CONTRACT_VERSION` in
+`bonfire.cadre` (advances ONLY on dispatch-boundary breaking changes;
+stamped into each subagent's `cadre_contract` frontmatter field for
+drift detection).
+
 ## The Vault
 
 Alongside the cadre, the **Vault** is the named knowledge store of

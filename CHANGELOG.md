@@ -4,6 +4,38 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Bonfire cadre as Claude Code subagents.** Ships the six v1 cadre roles
+  (`scout-innovative`, `scout-conservative`, `knight`, `warrior`, `sage`,
+  `wizard`) plus the `bonfire-powered` catch-all as Claude Code subagent
+  definitions. Two distribution rails:
+  - **Plugin (canonical).** `.claude-plugin/plugin.json` + pre-rendered
+    `agents/<role>.md` files. Installable via Claude Code's
+    `/plugin install bonfire@<marketplace>`. Subagent type surfaces as the
+    colon-namespaced `bonfire:<role>` form.
+  - **Raw-files CLI (fallback).** `bonfire install-agents [--scope user|project]`
+    drops flat-named `bonfire-<role>.md` files at the chosen scope, with
+    paired `bonfire uninstall-agents` and `bonfire list-agents`. Necessary
+    for environments that can't use the plugin (Cursor, Codex, raw SDK)
+    and as a user-customization "fork" lane (priority 4 shadows priority 5).
+- **New `bonfire.cadre` module.** `CADRE_CONTRACT_VERSION` constant +
+  `resolve_role_prompt(role)` adapter (skeleton; library-side
+  refusal-on-mismatch deferred to a follow-up to keep the scaffold PR
+  single-concern).
+- **New `bonfire build-agents` CLI.** Generates `agents/<role>.md` files
+  from canonical bodies at `src/bonfire/prompts/<role>.md` plus per-role
+  metadata at `src/bonfire/agent/role_metadata.py`. Use `--check` in CI
+  to fail on drift.
+- `.claude/settings.local.json.example` ships the Warrior Bash unblock
+  pattern as opt-in recommendation, never silent auto-install.
+- Per-role tool-scoping confirmed: Knight ships WITHOUT Bash for v1
+  (Knight writes RED, Warrior runs the cycle); Warrior is the only role
+  with Bash; Wizard is read-only (`Agent` tool is unavailable to subagents
+  regardless).
+
 ## [0.1.0a2] — 2026-05-04
 
 Maintenance alpha. No functional changes from `0.1.0a1` — this release lands

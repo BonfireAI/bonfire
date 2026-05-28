@@ -24,9 +24,9 @@ from pathlib import Path
 import typer
 
 from bonfire import __version__
-from bonfire.agent.role_metadata import ALL_PUBLISHABLE_ROLES
+from bonfire.agent.role_metadata import ALL_PUBLISHABLE_ROLES, RoleMetadata
 from bonfire.cadre import CADRE_CONTRACT_VERSION
-from bonfire.cli.commands.build_agents import _compose
+from bonfire.cli.commands.build_agents import _read_body
 
 _MANIFEST_NAME = ".installed.json"
 _AGENT_PREFIX = "bonfire-"
@@ -41,9 +41,45 @@ def _scope_dir(scope: str) -> Path:
     raise typer.BadParameter("scope must be 'user' or 'project'")
 
 
+def _flat_name(role_name: str) -> str:
+    """Produce the flat namespaced form of `role_name`.
+
+    Cadre roles (e.g. ``scout-innovative``) gain the ``bonfire-`` prefix
+    so the subagent type registers as ``bonfire-scout-innovative``. The
+    catch-all is already named ``bonfire-powered``; the prefix is not
+    re-applied (otherwise it would double-prefix to
+    ``bonfire-bonfire-powered``).
+    """
+    if role_name.startswith(_AGENT_PREFIX):
+        return role_name
+    return f"{_AGENT_PREFIX}{role_name}"
+
+
 def _target_path(target_dir: Path, role_name: str) -> Path:
     """Compose the flat-name file path for `role_name` in `target_dir`."""
-    return target_dir / f"{_AGENT_PREFIX}{role_name}.md"
+    return target_dir / f"{_flat_name(role_name)}.md"
+
+
+def _compose_flat(role: RoleMetadata) -> str:
+    """Compose the CLI-installed subagent file with the flat namespaced `name:`.
+
+    Unlike the plugin path (where Claude Code prepends the plugin name
+    to produce `bonfire:<role>`), the raw-files surface has no plugin
+    namespace to prepend — so the brand prefix is baked into the
+    `name:` field at install time. The body and other frontmatter
+    fields are otherwise identical to the plugin's output.
+    """
+    flat = _flat_name(role["name"])
+    frontmatter = (
+        "---\n"
+        f"name: {flat}\n"
+        f"description: {role['description']}\n"
+        f"tools: {role['tools']}\n"
+        f"model: {role['model']}\n"
+        f'cadre_contract: "{CADRE_CONTRACT_VERSION}"\n'
+        "---\n"
+    )
+    return frontmatter + "\n" + _read_body(role["name"])
 
 
 def _existing_manifest(target_dir: Path) -> dict | None:
@@ -106,7 +142,7 @@ def install_agents(
     installed: list[str] = []
     skipped: list[str] = []
     for role in ALL_PUBLISHABLE_ROLES:
-        composed = _compose(role)
+        composed = _compose_flat(role)
         path = _target_path(target, role["name"])
         if path.exists() and not force:
             current = path.read_text(encoding="utf-8")

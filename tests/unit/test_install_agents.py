@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from bonfire.agent.role_metadata import ALL_PUBLISHABLE_ROLES
 from bonfire.cli.app import app
-from bonfire.cli.commands.install_agents import _MANIFEST_NAME, _scope_dir
+from bonfire.cli.commands.install_agents import _MANIFEST_NAME, _flat_name, _scope_dir
 
 runner = CliRunner()
 
@@ -54,7 +54,7 @@ class TestInstallDryRun:
         assert not target.exists()
         # Output lists every file that WOULD be installed.
         for role in ALL_PUBLISHABLE_ROLES:
-            assert f"bonfire-{role['name']}.md" in result.stdout
+            assert f"{_flat_name(role['name'])}.md" in result.stdout
 
 
 class TestInstall:
@@ -64,7 +64,7 @@ class TestInstall:
         target = user_home / ".claude" / "agents" / "bonfire"
         assert target.is_dir()
         for role in ALL_PUBLISHABLE_ROLES:
-            assert (target / f"bonfire-{role['name']}.md").exists()
+            assert (target / f"{_flat_name(role['name'])}.md").exists()
         assert (target / _MANIFEST_NAME).exists()
 
     def test_install_manifest_contains_versions(self, user_home: Path) -> None:
@@ -84,15 +84,34 @@ class TestInstall:
         # Second run reports all unchanged.
         assert "unchanged" in second.stdout
 
-    def test_install_writes_flat_prefixed_names(self, user_home: Path) -> None:
-        """Raw-files use the flat `bonfire-<role>` form (no colon namespace)."""
+    def test_install_writes_flat_prefixed_names_for_cadre(self, user_home: Path) -> None:
+        """CLI-installed cadre files surface as `bonfire-<role>` subagent types.
+
+        The brand prefix is baked into both the filename AND the `name:`
+        frontmatter field so the raw-files surface registers the cadre
+        as `bonfire-scout-innovative`, `bonfire-knight`, etc. — flat
+        sister to the plugin's `bonfire:<role>` colon-namespaced form.
+        """
         runner.invoke(app, ["install-agents"])
         target = user_home / ".claude" / "agents" / "bonfire"
-        for role in ALL_PUBLISHABLE_ROLES:
-            path = target / f"bonfire-{role['name']}.md"
+        for role_name in ("scout-innovative", "knight", "warrior", "sage", "wizard"):
+            path = target / f"bonfire-{role_name}.md"
+            assert path.exists()
             content = path.read_text(encoding="utf-8")
-            # Frontmatter name field uses the bare role name, not the prefix.
-            assert f"name: {role['name']}\n" in content
+            assert f"name: bonfire-{role_name}\n" in content
+
+    def test_install_does_not_double_prefix_catchall(self, user_home: Path) -> None:
+        """The catch-all is already `bonfire-powered` — must not become `bonfire-bonfire-powered`."""
+        runner.invoke(app, ["install-agents"])
+        target = user_home / ".claude" / "agents" / "bonfire"
+        # Correct filename (single prefix)
+        assert (target / "bonfire-powered.md").exists()
+        # Incorrect double-prefixed filename
+        assert not (target / "bonfire-bonfire-powered.md").exists()
+        # `name:` field also single-prefixed
+        content = (target / "bonfire-powered.md").read_text(encoding="utf-8")
+        assert "name: bonfire-powered\n" in content
+        assert "name: bonfire-bonfire-powered\n" not in content
 
     def test_install_user_does_not_overwrite_modified_without_force(self, user_home: Path) -> None:
         runner.invoke(app, ["install-agents"])
@@ -127,7 +146,7 @@ class TestUninstall:
         result = runner.invoke(app, ["uninstall-agents"])
         assert result.exit_code == 0, result.stdout
         for role in ALL_PUBLISHABLE_ROLES:
-            assert not (target / f"bonfire-{role['name']}.md").exists()
+            assert not (target / f"{_flat_name(role['name'])}.md").exists()
         assert not (target / _MANIFEST_NAME).exists()
         # Stranger preserved, directory retained.
         assert stranger.exists()
@@ -170,4 +189,4 @@ class TestListAgents:
         result = runner.invoke(app, ["list-agents"])
         assert result.exit_code == 0
         for role in ALL_PUBLISHABLE_ROLES:
-            assert f"bonfire-{role['name']}.md" in result.stdout
+            assert f"{_flat_name(role['name'])}.md" in result.stdout

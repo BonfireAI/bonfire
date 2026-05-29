@@ -17,12 +17,26 @@ hot-paths can call it per-dispatch without warm-up cost.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from typing import Any
 
 from bonfire.protocols import RetrievalProvider
 
 _log = logging.getLogger(__name__)
+
+
+DEFAULT_RETRIEVE_TIMEOUT_S: float = 30.0
+
+
+def _retrieve_timeout() -> float:
+    """Resolve the per-call retrieval timeout (seconds).
+
+    Honors the BONFIRE_RETRIEVE_TIMEOUT_S env override; falls back to
+    DEFAULT_RETRIEVE_TIMEOUT_S.
+    """
+    return float(os.getenv("BONFIRE_RETRIEVE_TIMEOUT_S", DEFAULT_RETRIEVE_TIMEOUT_S))
 
 
 async def prebake_retrieval(
@@ -51,8 +65,18 @@ async def prebake_retrieval(
     if provider is None:
         return {}
 
+    timeout = _retrieve_timeout()
     try:
-        atoms = await provider.retrieve(query=task, token_budget=token_budget)
+        atoms = await asyncio.wait_for(
+            provider.retrieve(query=task, token_budget=token_budget),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        _log.warning(
+            "prebake_retrieval: provider timed out after %ss; returning empty",
+            timeout,
+        )
+        return {}
     except Exception as exc:  # noqa: BLE001 — containment by design
         _log.warning(
             "prebake_retrieval: provider raised %s; returning empty",

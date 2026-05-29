@@ -10,6 +10,7 @@ via ``model_copy(update=...)``.
 
 from __future__ import annotations
 
+import traceback
 from enum import StrEnum
 from pathlib import Path  # noqa: TC003 — Pydantic needs Path at runtime
 from typing import Any
@@ -44,6 +45,16 @@ class ErrorDetail(BaseModel, frozen=True):
     message: str
     traceback: str | None = None
     stage_name: str | None = None
+
+    @classmethod
+    def from_exception(cls, exc: BaseException, *, stage_name: str | None = None) -> ErrorDetail:
+        """Build a structured ErrorDetail from a caught exception. Call inside the except block."""
+        return cls(
+            error_type=type(exc).__name__,
+            message=str(exc),
+            traceback=traceback.format_exc(),
+            stage_name=stage_name,
+        )
 
 
 class Artifact(BaseModel, frozen=True):

@@ -26,6 +26,7 @@ import tomllib
 from pathlib import Path  # noqa: TC003 — runtime constructor type
 
 from bonfire.agent.roles import AgentRole
+from bonfire.errors import SchemaError
 from bonfire.persona.base import BasePersona
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ _CANONICAL_ROLE_VALUES = frozenset(r.value for r in AgentRole)
 _KNOWN_TOPLEVEL_TABLES = frozenset({"persona", "display_names"})
 
 
-class PersonaSchemaError(ValueError):
+class PersonaSchemaError(SchemaError, ValueError):
     """Raised by :meth:`PersonaLoader.validate` for a malformed persona TOML.
 
     Inherits from :class:`ValueError` so callers handling generic data-shape

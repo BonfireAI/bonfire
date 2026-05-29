@@ -1,6 +1,6 @@
 # ADR-002: Failure Architecture — Typed Errors as an Interop Substrate
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-05-29
 **Decision makers:** Anta (Blacksmith King), Ishtar (Prompt Architect)
 **Research:** Five-scout failure-surface inventory + dual-Sage synthesis (conservative "exceptions-first" vs innovative "typed-outcomes")

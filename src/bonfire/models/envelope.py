@@ -48,7 +48,13 @@ class ErrorDetail(BaseModel, frozen=True):
 
     @classmethod
     def from_exception(cls, exc: BaseException, *, stage_name: str | None = None) -> ErrorDetail:
-        """Build a structured ErrorDetail from a caught exception. Call inside the except block."""
+        """Build a structured ErrorDetail from a caught exception.
+
+        Call this inside the ``except`` block: the traceback is captured via
+        ``traceback.format_exc()``, which reads the *currently handled*
+        exception. Called outside an active ``except``, ``traceback`` is the
+        meaningless string ``"NoneType: None\\n"``.
+        """
         return cls(
             error_type=type(exc).__name__,
             message=str(exc),

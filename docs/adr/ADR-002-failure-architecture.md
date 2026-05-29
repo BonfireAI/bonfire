@@ -79,7 +79,7 @@ everywhere, and typed outcomes proven at one boundary first.
 | `BonfireError` | base (carries code, message, context, traceback bridge) | — |
 | `ConfigError` | terminal | no |
 | `AgentError` | terminal (agent run reported an error) | no |
-| `RateLimitError` | terminal/transient | yes |
+| `RateLimitError` | terminal (retrying won't help) | no |
 | `CLINotFoundError` | terminal | no |
 | `ExecutorError` | terminal | no |
 | `RetrievalError` | operational | no |

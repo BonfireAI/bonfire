@@ -34,10 +34,6 @@ if TYPE_CHECKING:
 
 # RED imports — bonfire.cli.commands.cost does not exist yet (cli.py is a single-file stub)
 from bonfire.cli.commands.cost import cost_app
-
-# Cross-module import-path rename per Sage §D3 row 4 (ADR-001 §Module Renames row 5):
-# v1: from bonfire.costs.models import DispatchRecord, PipelineRecord
-# v0.1: from bonfire.cost.models import DispatchRecord, PipelineRecord
 from bonfire.cost.models import DispatchRecord, PipelineRecord
 
 runner = CliRunner()

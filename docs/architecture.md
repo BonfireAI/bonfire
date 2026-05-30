@@ -65,7 +65,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 |---|---|
 | `bonfire.git` | Branch / commit / worktree-isolation helpers used by the workflow stages. |
 | `bonfire.github` | GitHub API client for PRs and issues (with a mock for tests). |
-| `bonfire.knowledge` | Vault-backend factory — in-memory by default, LanceDB when configured. |
+| `bonfire.knowledge` | Vault-backend factory — in-memory by default, LanceDB when configured. The `VaultBackend` protocol (in `bonfire.protocols`) is the stable public contract that any future memory implementation conforms to. |
 | `bonfire.scan` | Scanners that turn project state into `VaultEntry` records for ingest. |
 | `bonfire.cost` | Cost ledger consumer, analyzer, and per-dispatch / per-pipeline records. |
 | `bonfire.session` | Session state and JSONL persistence — the durable footprint of a run. |
@@ -176,7 +176,11 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
   `bonfire.dispatch.pydantic_ai_backend` for working references.
 - **Vault backends — `VaultBackend`** (`bonfire.protocols`): implement
   `store`, `query`, `exists`, and `get_by_source` to plug a different
-  knowledge store under `bonfire.knowledge.get_vault_backend`.
+  knowledge store under `bonfire.knowledge.get_vault_backend`. This
+  protocol is the stable public interface for Bonfire's memory layer:
+  future memory tiers — richer knowledge graphs, alternate stores — are
+  expected to conform to it rather than to any one backend, so depend on
+  `VaultBackend`, not on a concrete implementation.
 - **Personas — TOML in `src/bonfire/persona/builtins/`**: drop a new
   persona TOML with the required schema and `PersonaLoader.load` will
   pick it up. Personas are display-only — they cannot reach into

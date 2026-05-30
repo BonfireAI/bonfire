@@ -14,6 +14,8 @@ Tier 2 (Arachne) when present, Tier 1 (Ripgrep) otherwise.
 
 from __future__ import annotations
 
+import asyncio
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -21,6 +23,17 @@ from bonfire._discovery import discover_retrieval_provider
 
 if TYPE_CHECKING:
     from bonfire.protocols import RetrievalProvider
+
+DEFAULT_RETRIEVE_TIMEOUT_S: float = 30.0
+
+
+def _retrieve_timeout() -> float:
+    """Resolve the per-call retrieval timeout (seconds).
+
+    Honors the BONFIRE_RETRIEVE_TIMEOUT_S env override; falls back to
+    DEFAULT_RETRIEVE_TIMEOUT_S.
+    """
+    return float(os.getenv("BONFIRE_RETRIEVE_TIMEOUT_S", DEFAULT_RETRIEVE_TIMEOUT_S))
 
 
 async def handle_retrieve_context(
@@ -34,8 +47,14 @@ async def handle_retrieve_context(
     Public for unit tests; the stdio server entry point delegates here.
     """
     active = provider if provider is not None else discover_retrieval_provider()
+    timeout = _retrieve_timeout()
     try:
-        atoms = await active.retrieve(query=query, token_budget=token_budget)
+        atoms = await asyncio.wait_for(
+            active.retrieve(query=query, token_budget=token_budget),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        return f"retrieve_context: provider timed out after {timeout}s for query={query!r}"
     except Exception as exc:  # noqa: BLE001 — agent gets an error message
         return f"retrieve_context: provider raised {type(exc).__name__}: {exc}"
 

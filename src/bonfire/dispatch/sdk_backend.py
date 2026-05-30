@@ -14,7 +14,6 @@ everything.
 from __future__ import annotations
 
 import logging
-import traceback as tb_module
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
@@ -89,13 +88,7 @@ class ClaudeSDKBackend:
         try:
             return await self._do_execute(envelope, options=options, on_stream=on_stream)
         except Exception as exc:
-            return envelope.with_error(
-                ErrorDetail(
-                    error_type=type(exc).__name__,
-                    message=str(exc),
-                    traceback=tb_module.format_exc(),
-                )
-            )
+            return envelope.with_error(ErrorDetail.from_exception(exc))
 
     async def _do_execute(
         self,

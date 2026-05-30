@@ -54,18 +54,28 @@ except PackageNotFoundError:
 # ---------------------------------------------------------------------------
 from bonfire.protocols import (  # noqa: E402
     SCHEMA_VERSION,
+    ArtificerReport,
+    AxiomVariantReceipt,
+    BracketPassReport,
     Finding,
     MuscleWriteReceipt,
+    ProbeFinding,
     Severity,
+    ValidationOutcome,
     Verdict,
     VerdictStatus,
 )
 
 __all__ = [
     "SCHEMA_VERSION",
+    "ArtificerReport",
+    "AxiomVariantReceipt",
+    "BracketPassReport",
     "Finding",
     "MuscleWriteReceipt",
+    "ProbeFinding",
     "Severity",
+    "ValidationOutcome",
     "Verdict",
     "VerdictStatus",
     "__version__",

@@ -41,6 +41,11 @@ class RoleMetadata(TypedDict):
     description: str
     tools: str
     model: str
+    candy_name: str
+    candy_icon: str
+    parlor_color: str
+    parlor_hex: str
+    candy_variant: str
 
 
 # Order is the publication order in the plugin manifest's `agents:` list.
@@ -54,6 +59,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
         "model": "sonnet",
+        "candy_name": "LICORICE",
+        "candy_icon": "\U0001f441",
+        "parlor_color": "var(--brand-a)",
+        "parlor_hex": "#ff5fa2",
+        "candy_variant": "innovative",
     },
     {
         "name": "scout-conservative",
@@ -65,6 +75,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob, WebSearch, WebFetch",
         "model": "sonnet",
+        "candy_name": "LICORICE",
+        "candy_icon": "\U0001f441",
+        "parlor_color": "var(--brand-a)",
+        "parlor_hex": "#ff5fa2",
+        "candy_variant": "conservative",
     },
     {
         "name": "knight",
@@ -76,6 +91,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob, Write, Edit",
         "model": "sonnet",
+        "candy_name": "BRITTLE",
+        "candy_icon": "\U0001f6e1",
+        "parlor_color": "var(--brand-c)",
+        "parlor_hex": "#5fb8ff",
+        "candy_variant": "",
     },
     {
         "name": "warrior",
@@ -87,6 +107,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob, Write, Edit, Bash",
         "model": "sonnet",
+        "candy_name": "JAWBREAKER",
+        "candy_icon": "⚔",
+        "parlor_color": "var(--brand-pop)",
+        "parlor_hex": "#a96bff",
+        "candy_variant": "",
     },
     {
         "name": "sage",
@@ -98,6 +123,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob, Write, Edit",
         "model": "sonnet",
+        "candy_name": "TRUFFLE",
+        "candy_icon": "\U0001f52e",
+        "parlor_color": "var(--brand-pop)",
+        "parlor_hex": "#a96bff",
+        "candy_variant": "",
     },
     {
         "name": "wizard",
@@ -109,6 +139,11 @@ CADRE_ROLES: tuple[RoleMetadata, ...] = (
         ),
         "tools": "Read, Grep, Glob",
         "model": "sonnet",
+        "candy_name": "MARSHMALLOW",
+        "candy_icon": "✨",
+        "parlor_color": "var(--brand-hot)",
+        "parlor_hex": "#ff3b6b",
+        "candy_variant": "",
     },
 )
 
@@ -124,6 +159,11 @@ CATCHALL_ROLE: RoleMetadata = {
     ),
     "tools": "Read, Grep, Glob, WebSearch, WebFetch",
     "model": "sonnet",
+    "candy_name": "GUMBALL",
+    "candy_icon": "🍬",
+    "parlor_color": "var(--ink-soft)",
+    "parlor_hex": "#5a4a6a",
+    "candy_variant": "",
 }
 
 

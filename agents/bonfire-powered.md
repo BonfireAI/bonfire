@@ -4,6 +4,10 @@ description: Bonfire cadre · catch-all. A Bonfire-flavored general-purpose agen
 tools: Read, Grep, Glob, WebSearch, WebFetch
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: GUMBALL
+candy_icon: "🍬"
+parlor_color: "var(--ink-soft)"
+candy_variant: ""
 ---
 
 # Bonfire-Powered — Structural Prompt

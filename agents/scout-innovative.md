@@ -4,6 +4,10 @@ description: Bonfire cadre · Innovative Scout. Read-only investigator biased to
 tools: Read, Grep, Glob, WebSearch, WebFetch
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: LICORICE
+candy_icon: "👁"
+parlor_color: "var(--brand-a)"
+candy_variant: "innovative"
 ---
 
 # Innovative Scout — Structural Prompt

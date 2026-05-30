@@ -4,6 +4,10 @@ description: Bonfire cadre · Sage. Synthesizes across two Scout reports (Innova
 tools: Read, Grep, Glob, Write, Edit
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: TRUFFLE
+candy_icon: "🔮"
+parlor_color: "var(--brand-pop)"
+candy_variant: ""
 ---
 
 # The Sage — Structural Prompt

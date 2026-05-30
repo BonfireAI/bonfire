@@ -4,6 +4,10 @@ description: Bonfire cadre · Knight. Writes RED tests that pin a module's contr
 tools: Read, Grep, Glob, Write, Edit
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: BRITTLE
+candy_icon: "🛡"
+parlor_color: "var(--brand-c)"
+candy_variant: ""
 ---
 
 # The Knight — Structural Prompt

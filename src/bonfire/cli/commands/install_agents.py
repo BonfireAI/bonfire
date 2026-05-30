@@ -77,6 +77,10 @@ def _compose_flat(role: RoleMetadata) -> str:
         f"tools: {role['tools']}\n"
         f"model: {role['model']}\n"
         f'cadre_contract: "{CADRE_CONTRACT_VERSION}"\n'
+        f"candy_name: {role['candy_name']}\n"
+        f'candy_icon: "{role["candy_icon"]}"\n'
+        f'parlor_color: "{role["parlor_color"]}"\n'
+        f'candy_variant: "{role["candy_variant"]}"\n'
         "---\n"
     )
     return frontmatter + "\n" + _read_body(role["name"])

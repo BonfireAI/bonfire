@@ -4,6 +4,10 @@ description: Bonfire cadre · Warrior. Builds the implementation that turns the 
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: JAWBREAKER
+candy_icon: "⚔"
+parlor_color: "var(--brand-pop)"
+candy_variant: ""
 ---
 
 # The Warrior — Structural Prompt

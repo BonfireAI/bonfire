@@ -4,6 +4,10 @@ description: Bonfire cadre · Wizard. Workflow composer and gate-keeper. Reads t
 tools: Read, Grep, Glob
 model: sonnet
 cadre_contract: "0.1.0"
+candy_name: MARSHMALLOW
+candy_icon: "✨"
+parlor_color: "var(--brand-hot)"
+candy_variant: ""
 ---
 
 # The Wizard — Structural Prompt

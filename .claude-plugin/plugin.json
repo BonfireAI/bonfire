@@ -1,7 +1,7 @@
 {
   "name": "bonfire",
   "version": "0.1.0",
-  "description": "Bonfire cadre — orchestrate Claude Code dispatch with named role discipline (Scout, Knight, Warrior, Sage, Wizard). Adds bonfire:<role> subagent types.",
+  "description": "Bonfire cadre — orchestrate Claude Code dispatch with named role discipline. Roles scout, knight, warrior, sage, wizard each wear a Cotton Candy Parlor flavor (scout/LICORICE, knight/BRITTLE, warrior/JAWBREAKER, sage/TRUFFLE, wizard/MARSHMALLOW). Adds bonfire:<role> subagent types.",
   "author": {
     "name": "BonfireAI",
     "email": "antawari@gmail.com",
@@ -15,7 +15,9 @@
     "subagents",
     "cadre",
     "tdd",
-    "agent-orchestration"
+    "agent-orchestration",
+    "candy",
+    "cotton-candy-parlor"
   ],
   "agents": [
     "./agents/scout-innovative.md",

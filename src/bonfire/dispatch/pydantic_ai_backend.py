@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from bonfire.dispatch._cost import safe_cost_from_usage
+
 if TYPE_CHECKING:
     from bonfire.models.envelope import Envelope
     from bonfire.protocols import DispatchOptions
@@ -63,16 +65,9 @@ class PydanticAIBackend:
 
         output_text = str(result.output) if result.output else ""
 
-        # Cost metering: extract token usage if available.
-        cost_usd = 0.0
-        try:
-            usage = getattr(result, "usage", None)
-            if usage is not None:
-                total_tokens = getattr(usage, "total_tokens", 0) or 0
-                if isinstance(total_tokens, (int, float)):
-                    cost_usd = total_tokens * 0.00001
-        except (TypeError, AttributeError):
-            cost_usd = 0.0
+        # Cost metering: extract token usage if available (shared helper
+        # preserves the swallow-and-default-to-0.0 discipline verbatim).
+        cost_usd = safe_cost_from_usage(result)
 
         return envelope.with_result(output_text, cost_usd=cost_usd)
 

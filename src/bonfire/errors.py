@@ -14,7 +14,14 @@ cross-cutting contracts the runner depends on:
 
 from __future__ import annotations
 
-from typing import ClassVar
+import asyncio
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from bonfire.models.envelope import ErrorDetail
 
 
 class BonfireError(Exception):
@@ -129,3 +136,55 @@ class IsolationError(BonfireError):
 
     is_terminal = False
     code = "isolation"
+
+
+# ---------------------------------------------------------------------------
+# Containment helper — never-raise shells capture failure as ErrorDetail
+# ---------------------------------------------------------------------------
+
+
+class _ErrorBox:
+    """Mutable carrier for a captured :class:`ErrorDetail`.
+
+    The :func:`contain_as_error` context manager yields one of these so the
+    caller can read ``box.error`` *after* the ``with`` block and decide how
+    to surface the failure (build a FAILED envelope, log, etc.). The box is
+    ``None`` when the body completed without an ordinary exception.
+    """
+
+    __slots__ = ("error",)
+
+    def __init__(self) -> None:
+        self.error: ErrorDetail | None = None
+
+
+@contextmanager
+def contain_as_error(stage_name: str | None = None) -> Iterator[_ErrorBox]:
+    """Run a never-raise shell body, capturing failure as a structured detail.
+
+    Yields an :class:`_ErrorBox`. On an ordinary ``Exception`` the box's
+    ``error`` is set to an :class:`~bonfire.models.envelope.ErrorDetail`
+    built via ``ErrorDetail.from_exception`` *inside* the ``except`` block,
+    so the traceback is live (never the ``"NoneType: None"`` sentinel). The
+    exception is then contained (not re-raised) — the caller inspects
+    ``box.error`` and builds its own failure result, preserving any
+    verdict-before-side-effect ordering the caller owns.
+
+    ``asyncio.CancelledError`` is **re-raised**, never captured: cancellation
+    must surface so pipeline orchestration can act on it.
+
+    why: this is the single, shared containment construct named in the
+    Elegance Law — every CandyFactory never-raise shell speaks failure in
+    the one typed, self-describing vocabulary.
+    """
+    # Deferred import keeps this module import-cycle-free (it imports nothing
+    # from ``bonfire.*`` at module load; ``ErrorDetail`` is pulled in lazily).
+    from bonfire.models.envelope import ErrorDetail
+
+    box = _ErrorBox()
+    try:
+        yield box
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — containment shell by design
+        box.error = ErrorDetail.from_exception(exc, stage_name=stage_name)

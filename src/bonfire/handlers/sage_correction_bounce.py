@@ -174,6 +174,11 @@ class _CorrectionCycleOutcome:
     error_type: str = ""
     error_message: str = ""
     correction_branch: str = ""
+    # Structured detail captured via ErrorDetail.from_exception INSIDE the
+    # cycle's except blocks (live traceback). ``None`` on the non-exception
+    # paths (e.g. backend unavailable, re-verify red without a raise). The
+    # legacy ``error_type``/``error_message`` strings are kept for back-compat.
+    error: ErrorDetail | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +558,7 @@ class SageCorrectionBounceHandler:
                 escalated=True,
                 error_type=type(exc).__name__,
                 error_message=f"sage_correction dispatch failed: {exc}",
+                error=ErrorDetail.from_exception(exc),
             )
 
         # Step 2: cherry-pick the correction commit.
@@ -575,6 +581,7 @@ class SageCorrectionBounceHandler:
                     error_type=_ERROR_CHERRY_PICK_FAILED,
                     error_message=(f"cherry-pick of {commit_sha[:12]} failed: {exc}"),
                     correction_branch=commit_sha,
+                    error=ErrorDetail.from_exception(exc),
                 )
 
         # Step 3: re-verify pytest. why: pull pytest args from prior
@@ -603,6 +610,7 @@ class SageCorrectionBounceHandler:
                 error_type=type(exc).__name__,
                 error_message=f"re-verify pytest failed: {exc}",
                 correction_branch=commit_sha,
+                error=ErrorDetail.from_exception(exc),
             )
 
         returncode = self._extract_returncode(reverify_result)
@@ -818,17 +826,24 @@ class SageCorrectionBounceHandler:
             new_metadata[META_CORRECTION_BRANCH] = outcome.correction_branch
 
         if outcome.status == TaskStatus.FAILED:
+            # Prefer the detail captured inside the cycle's except block (it
+            # carries the live traceback); stamp the stage name onto it. Fall
+            # back to synthesizing from the legacy string fields when the
+            # failure path had no exception to capture.
+            if outcome.error is not None:
+                error_detail = outcome.error.model_copy(update={"stage_name": stage.name})
+            else:
+                error_detail = ErrorDetail(
+                    error_type=outcome.error_type or _ERROR_CORRECTION_EXHAUSTED,
+                    message=(
+                        outcome.error_message or "sage_correction_bounce: correction cycle failed"
+                    ),
+                    stage_name=stage.name,
+                )
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,
-                    "error": ErrorDetail(
-                        error_type=outcome.error_type or _ERROR_CORRECTION_EXHAUSTED,
-                        message=(
-                            outcome.error_message
-                            or "sage_correction_bounce: correction cycle failed"
-                        ),
-                        stage_name=stage.name,
-                    ),
+                    "error": error_detail,
                     "status": TaskStatus.FAILED,
                 },
             )

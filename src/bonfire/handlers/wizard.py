@@ -36,8 +36,8 @@ from bonfire.agent.roles import AgentRole
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.model_resolver import resolve_dispatch_model
+from bonfire.handlers._pr_number import extract_pr_number
 from bonfire.models.envelope import (
-    META_PR_NUMBER,
     META_REVIEW_SEVERITY,
     META_REVIEW_VERDICT,
     Envelope,
@@ -131,31 +131,6 @@ FAIL_SAFE_BODY_TEMPLATE = """## Code Review -- CHANGES REQUESTED (parse-failure 
 # ---------------------------------------------------------------------------
 # Module-scope helpers
 # ---------------------------------------------------------------------------
-
-
-def _extract_pr_number(prior_results: dict[str, Any], envelope: Any) -> int | None:
-    """Extract PR number from prior_results or envelope metadata."""
-    raw = prior_results.get(META_PR_NUMBER)
-    if raw is not None:
-        try:
-            return int(raw)
-        except (ValueError, TypeError):
-            pass
-
-    bard_val = prior_results.get("bard", "")
-    if bard_val:
-        m = re.search(r"/pull/(\d+)", str(bard_val))
-        if m:
-            return int(m.group(1))
-
-    meta_val = envelope.metadata.get(META_PR_NUMBER)
-    if meta_val is not None:
-        try:
-            return int(meta_val)
-        except (ValueError, TypeError):
-            pass
-
-    return None
 
 
 def _parse_verdict(text: str) -> tuple[str, str | None]:
@@ -278,7 +253,7 @@ class WizardHandler:
     ) -> Envelope:
         """Read diff, dispatch review agent, post verdict."""
         try:
-            pr_number = _extract_pr_number(prior_results, envelope)
+            pr_number = extract_pr_number(prior_results, envelope)
             if pr_number is None:
                 return envelope.with_error(
                     ErrorDetail(

@@ -47,8 +47,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
 from bonfire.agent.roles import AgentRole
+from bonfire.handlers._pr_number import extract_pr_number
 from bonfire.models.envelope import (
-    META_PR_NUMBER,
     META_PREFLIGHT_CLASSIFICATION,
     META_PREFLIGHT_TEST_DEBT_NOTED,
     META_REVIEW_VERDICT,
@@ -135,6 +135,11 @@ class PreflightClassification:
     pytest_returncode: int = 0
     pytest_duration_seconds: float = 0.0
     pytest_stdout_tail: str = ""
+    # Structured detail of the exception that produced a translated verdict
+    # (e.g. the RuntimeError behind a MERGE_CONFLICT). ``None`` for verdicts
+    # produced by the pure classifier. Captured via ErrorDetail.from_exception
+    # inside the except block so the traceback is live.
+    error: ErrorDetail | None = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +156,9 @@ class _PytestResult:
     duration_seconds: float
     stdout_tail: str
     junit_xml_path: Path
+    # Structured detail of a captured exception, when the invocation failed
+    # in a way the caller chooses to surface (additive; defaults to None).
+    error: ErrorDetail | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -192,44 +200,9 @@ _FAILED_LINE_RE = re.compile(r"^FAILED\s+(\S+?\.py)::(\S+?)(?:\s|$)", re.MULTILI
 
 
 # ---------------------------------------------------------------------------
-# PR-number extraction (Steward-mirror chain, Sage §D-CL.1 lines 820-821)
+# Verdict extraction (Steward-mirror; PR-number extraction now lives in the
+# shared ``bonfire.handlers._pr_number.extract_pr_number`` helper).
 # ---------------------------------------------------------------------------
-
-
-def _extract_pr_number(
-    prior_results: dict[str, Any],
-    envelope: Any,
-) -> int | None:
-    """Extract PR number from prior_results or envelope metadata.
-
-    Mirrors :py:func:`bonfire.handlers.wizard._extract_pr_number` exactly:
-        1. ``prior_results[META_PR_NUMBER]`` direct
-        2. ``prior_results["bard"]`` URL fallback (regex ``/pull/(\\d+)``)
-        3. ``envelope.metadata[META_PR_NUMBER]`` final fallback
-
-    Returns ``None`` if no PR number is recoverable.
-    """
-    raw = prior_results.get(META_PR_NUMBER)
-    if raw is not None:
-        try:
-            return int(raw)
-        except (ValueError, TypeError):
-            pass
-
-    bard_val = prior_results.get("bard", "")
-    if bard_val:
-        m = re.search(r"/pull/(\d+)", str(bard_val))
-        if m:
-            return int(m.group(1))
-
-    meta_val = envelope.metadata.get(META_PR_NUMBER)
-    if meta_val is not None:
-        try:
-            return int(meta_val)
-        except (ValueError, TypeError):
-            pass
-
-    return None
 
 
 def _extract_verdict(prior_results: dict[str, Any]) -> str:
@@ -563,7 +536,7 @@ class MergePreflightHandler:
         """
         try:
             # Step 1: PR-number extraction (Steward-mirror chain).
-            pr_number = _extract_pr_number(prior_results, envelope)
+            pr_number = extract_pr_number(prior_results, envelope)
             if pr_number is None:
                 return envelope.with_error(
                     ErrorDetail(
@@ -679,6 +652,8 @@ class MergePreflightHandler:
         try:
             await self._apply_diff_to_worktree(diff_text, info.path)
         except RuntimeError as exc:
+            # Stop discarding the exception: capture it (live traceback)
+            # inside the except. The verdict is unchanged (MERGE_CONFLICT).
             return PreflightClassification(
                 verdict=PreflightVerdict.MERGE_CONFLICT,
                 failing_tests=(),
@@ -689,6 +664,7 @@ class MergePreflightHandler:
                 pytest_stdout_tail=(f"git apply --3way failed for PR #{pr_number}: {exc}")[
                     :_PYTEST_STDOUT_TAIL_BYTES
                 ],
+                error=ErrorDetail.from_exception(exc),
             )
 
         # Step 6: apply each sibling's diff in ascending PR-number order
@@ -712,6 +688,7 @@ class MergePreflightHandler:
             try:
                 await self._apply_diff_to_worktree(sibling_diff, info.path)
             except RuntimeError as exc:
+                # Capture the exception (live traceback); verdict unchanged.
                 return PreflightClassification(
                     verdict=PreflightVerdict.MERGE_CONFLICT,
                     failing_tests=(),
@@ -722,6 +699,7 @@ class MergePreflightHandler:
                     pytest_stdout_tail=(
                         f"git apply --3way failed for sibling PR #{sibling_pr_n}: {exc}"
                     )[:_PYTEST_STDOUT_TAIL_BYTES],
+                    error=ErrorDetail.from_exception(exc),
                 )
 
         # Step 7: run pytest in scratch worktree.
@@ -1003,14 +981,22 @@ class MergePreflightHandler:
         }
         message = message_map.get(verdict, f"preflight: {verdict.value}")
 
+        # When the classifier captured the originating exception (the
+        # RuntimeError behind a MERGE_CONFLICT), preserve its live traceback
+        # by carrying that detail forward; only the verdict-level error_type
+        # + stage_name are normalised. Otherwise synthesize a fresh detail.
+        captured = classification.error
+        error_detail = ErrorDetail(
+            error_type=verdict.value,
+            message=message,
+            traceback=captured.traceback if captured is not None else None,
+            stage_name=stage.name,
+        )
+
         return envelope.model_copy(
             update={
                 "metadata": new_metadata,
-                "error": ErrorDetail(
-                    error_type=verdict.value,
-                    message=message,
-                    stage_name=stage.name,
-                ),
+                "error": error_detail,
                 "status": TaskStatus.FAILED,
             },
         )

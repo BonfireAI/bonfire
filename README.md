@@ -59,6 +59,11 @@ failing tests cannot edit implementation. The role that writes
 implementation cannot edit tests. The reviewer is read-only. Source
 code is the deliverable.
 
+Bonfire is the free, Apache-2.0 open-core base of a broader
+CandyFactory product suite; the framework here is and stays free, with
+commercial tiers layered on top (see the commercial model in canon
+v1.7 / ADR-005).
+
 ## What's in v1.0.0
 
 `pip install bonfire-ai` drops a Python runtime plus a Claude Code
@@ -253,7 +258,7 @@ defaults:
 # bonfire.toml
 
 [bonfire]
-tier = "free"                       # commercial tier
+tier = "free"                       # open-core tier; "free" is the public base (see open-core note above)
 model = "claude-sonnet-4-6"         # default model when no role match
 max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)

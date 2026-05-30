@@ -21,6 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
+from bonfire.timeouts import resolve_timeout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -28,6 +29,12 @@ if TYPE_CHECKING:
 __all__ = ["sanitize_remote_url", "scan"]
 
 PANEL = "git_state"
+
+# Default per-command git timeout, resolved through the shared resolver
+# (``DEFAULT_TIMEOUTS["git"] == 5.0``). Value is identical to the prior
+# literal 5.0 — routing it through the resolver standardizes the source of
+# truth without changing behavior.
+_GIT_TIMEOUT: float = resolve_timeout("git")
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +45,7 @@ PANEL = "git_state"
 async def _run_cmd(
     cmd: list[str],
     cwd: Path | str | None = None,
-    timeout: float = 5.0,
+    timeout: float = _GIT_TIMEOUT,
 ) -> tuple[int, str]:
     """Run a subprocess, return (returncode, stdout_text).
 

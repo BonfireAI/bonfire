@@ -130,6 +130,13 @@ class TestProtocolExportDiscipline:
         seam) land here so downstream consumers can read the seam without
         ever importing the Tier 2 ``bonfire/arachne/*`` implementation.
 
+        The BracketPassReport vendor-port is the THIRD sanctioned
+        extension: the orchestrator's bracket-pass summary envelope
+        (``BracketPassReport``) plus the co-ported domain-adaptation report
+        family it embeds by typed reference (``ArtificerReport``,
+        ``ProbeFinding``, ``AxiomVariantReceipt``, ``ValidationOutcome``).
+        They share the existing module-level ``SCHEMA_VERSION`` pin.
+
         Future extensions require the same sanction (named ticket,
         Wizard-gate review) plus a paired update here.
         """
@@ -153,6 +160,12 @@ class TestProtocolExportDiscipline:
             # Retrieval seam (Pantheon Loop Wire-In Wave 1)
             "ContextAtom",
             "RetrievalProvider",
+            # BracketPassReport + ArtificerReport family vendor-port
+            "BracketPassReport",
+            "ArtificerReport",
+            "ProbeFinding",
+            "AxiomVariantReceipt",
+            "ValidationOutcome",
         }
 
 

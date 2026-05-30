@@ -17,6 +17,7 @@ import logging
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
+from bonfire.dispatch._cost import safe_cost_from_attr
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
@@ -144,7 +145,7 @@ class ClaudeSDKBackend:
                                 on_stream(block_text)
 
                 elif ResultMessage is not None and isinstance(msg, ResultMessage):
-                    cost_usd = getattr(msg, "total_cost_usd", None) or 0.0
+                    cost_usd = safe_cost_from_attr(msg, "total_cost_usd")
                     duration_ms = getattr(msg, "duration_ms", 0) or 0
                     duration_seconds = duration_ms / 1000.0
                     session_id = getattr(msg, "session_id", None)

@@ -33,3 +33,23 @@ def resolve_timeout(
         if raw is not None:
             return float(raw)
     return DEFAULT_TIMEOUTS[kind]
+
+
+#: Env var honored by the per-call retrieval timeout resolver.
+RETRIEVE_TIMEOUT_ENV = "BONFIRE_RETRIEVE_TIMEOUT_S"
+
+#: Default per-call retrieval timeout (seconds). Behavior-preserving alias of
+#: ``DEFAULT_TIMEOUTS["retrieve"]`` re-exported by the two retrieval call sites
+#: (``bonfire.mcp.retrieval_server`` and ``bonfire.prompt.precompose``).
+DEFAULT_RETRIEVE_TIMEOUT_S: float = DEFAULT_TIMEOUTS["retrieve"]
+
+
+def retrieve_timeout() -> float:
+    """Resolve the per-call retrieval timeout (seconds).
+
+    The single source of truth for both retrieval call sites
+    (``bonfire.mcp.retrieval_server`` and ``bonfire.prompt.precompose``).
+    Honors the ``BONFIRE_RETRIEVE_TIMEOUT_S`` env override; falls back to
+    ``DEFAULT_RETRIEVE_TIMEOUT_S``.
+    """
+    return resolve_timeout("retrieve", env_var=RETRIEVE_TIMEOUT_ENV)

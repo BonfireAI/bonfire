@@ -15,12 +15,17 @@ each test fails (or skips) cleanly rather than erroring at import time.
 import pytest
 
 try:
-    from bonfire.timeouts import DEFAULT_TIMEOUTS, resolve_timeout
+    from bonfire.timeouts import (
+        DEFAULT_TIMEOUTS,
+        resolve_timeout,
+        retrieve_timeout,
+    )
 
     _IMPORT_ERROR: ImportError | None = None
 except ImportError as exc:  # pragma: no cover - RED phase only
     DEFAULT_TIMEOUTS = None  # type: ignore[assignment]
     resolve_timeout = None  # type: ignore[assignment]
+    retrieve_timeout = None  # type: ignore[assignment]
     _IMPORT_ERROR = exc
 
 # Skip-on-missing so collection succeeds while the module is absent, but the
@@ -143,3 +148,31 @@ def test_precompose_delegates_to_shared_resolver(monkeypatch):
     monkeypatch.delenv(_RETRIEVE_ENV, raising=False)
     assert precompose.DEFAULT_RETRIEVE_TIMEOUT_S == DEFAULT_TIMEOUTS["retrieve"]
     assert precompose._retrieve_timeout() == resolve_timeout("retrieve")
+
+
+# --- unified per-call retrieve-timeout helper (BON-1410) ------------------
+
+
+@_requires_timeouts
+def test_retrieve_timeout_default(monkeypatch):
+    monkeypatch.delenv(_RETRIEVE_ENV, raising=False)
+    assert retrieve_timeout() == DEFAULT_TIMEOUTS["retrieve"]
+
+
+@_requires_timeouts
+def test_retrieve_timeout_env_override(monkeypatch):
+    monkeypatch.setenv(_RETRIEVE_ENV, "5")
+    result = retrieve_timeout()
+    assert result == 5.0
+    assert isinstance(result, float)
+
+
+@_requires_timeouts
+def test_both_call_sites_share_one_helper():
+    """The two call sites must import the SAME shared helper object,
+    not carry their own private copies (BON-1410 dedup)."""
+    from bonfire.mcp import retrieval_server
+    from bonfire.prompt import precompose
+
+    assert retrieval_server._retrieve_timeout is retrieve_timeout
+    assert precompose._retrieve_timeout is retrieve_timeout

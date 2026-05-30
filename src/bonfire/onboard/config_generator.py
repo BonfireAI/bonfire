@@ -25,6 +25,24 @@ __all__ = ["generate_config", "write_config"]
 # ---------------------------------------------------------------------------
 
 
+def _toml_escape(value: str) -> str:
+    """Escape a string for safe interpolation as a TOML basic-string value.
+
+    Per the TOML spec, basic strings (``"..."``) require ``\\`` and ``"``
+    to be escaped via backslash. We don't escape control chars or
+    multiline-only characters because the call sites use single-line basic
+    strings and pass through scanner-derived values (project name, persona
+    keys, git branch, tool names, etc.) that are mostly printable ASCII.
+    If a wider escape surface becomes load-bearing, swap this for
+    ``tomli_w`` — added as a runtime dep then.
+
+    Caller wraps the result in ``"..."`` quotes. Order matters: backslash
+    first (it's the escape introducer), then double-quote (which uses a
+    backslash in its escape sequence).
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _collect_by_panel(
     scan_results: list[ScanUpdate],
 ) -> dict[str, list[ScanUpdate]]:
@@ -48,7 +66,7 @@ def _find_scan_value(
 
 def _format_toml_list(items: list[str]) -> str:
     """Format a Python list as a TOML inline array of quoted strings."""
-    quoted = ", ".join(f'"{item}"' for item in items)
+    quoted = ", ".join(f'"{_toml_escape(item)}"' for item in items)
     return f"[{quoted}]"
 
 
@@ -62,7 +80,7 @@ def _build_header(project_name: str) -> tuple[str, dict[str, str]]:
     lines = [
         "[bonfire]",
         "# Project identity",
-        f'name = "{project_name}"',
+        f'name = "{_toml_escape(project_name)}"',
     ]
     return "\n".join(lines), {}
 
@@ -80,7 +98,7 @@ def _build_persona(
         "# Derived from conversation",
     ]
     for key, value in profile.items():
-        lines.append(f'{key} = "{value}"')
+        lines.append(f'{key} = "{_toml_escape(value)}"')
         annotations[f"persona.{key}"] = "Conversation"
     return "\n".join(lines), annotations
 
@@ -101,17 +119,17 @@ def _build_project(
 
     lang = _find_scan_value(scans, "language")
     if lang:
-        lines.append(f'primary_language = "{lang}"')
+        lines.append(f'primary_language = "{_toml_escape(lang)}"')
         annotations["project.primary_language"] = "Scan: project_structure"
 
     framework = _find_scan_value(scans, "framework")
     if framework:
-        lines.append(f'framework = "{framework}"')
+        lines.append(f'framework = "{_toml_escape(framework)}"')
         annotations["project.framework"] = "Scan: project_structure"
 
     test_fw = _find_scan_value(scans, "test_framework")
     if test_fw:
-        lines.append(f'test_framework = "{test_fw}"')
+        lines.append(f'test_framework = "{_toml_escape(test_fw)}"')
         annotations["project.test_framework"] = "Scan: project_structure"
 
     return "\n".join(lines), annotations
@@ -152,12 +170,12 @@ def _build_git(
 
     remote = _find_scan_value(scans, "remote")
     if remote:
-        lines.append(f'remote = "{remote}"')
+        lines.append(f'remote = "{_toml_escape(remote)}"')
         annotations["git.remote"] = "Scan: git_state"
 
     branch = _find_scan_value(scans, "branch")
     if branch:
-        lines.append(f'branch = "{branch}"')
+        lines.append(f'branch = "{_toml_escape(branch)}"')
         annotations["git.branch"] = "Scan: git_state"
 
     return "\n".join(lines), annotations
@@ -198,17 +216,17 @@ def _build_claude_memory(
 
     model = _find_scan_value(scans, "model")
     if model:
-        lines.append(f'model = "{model}"')
+        lines.append(f'model = "{_toml_escape(model)}"')
         annotations["claude_memory.model"] = "Scan: claude_memory"
 
     permissions = _find_scan_value(scans, "permissions")
     if permissions:
-        lines.append(f'permissions = "{permissions}"')
+        lines.append(f'permissions = "{_toml_escape(permissions)}"')
         annotations["claude_memory.permissions"] = "Scan: claude_memory"
 
     extensions = _find_scan_value(scans, "extensions")
     if extensions:
-        lines.append(f'extensions = "{extensions}"')
+        lines.append(f'extensions = "{_toml_escape(extensions)}"')
         annotations["claude_memory.extensions"] = "Scan: claude_memory"
 
     # Memory counts by type
@@ -322,8 +340,32 @@ def generate_config(
     )
 
 
-def write_config(config_toml: str, project_path: Path) -> Path:
-    """Write bonfire.toml to project root. Returns the written path."""
+def write_config(
+    config_toml: str,
+    project_path: Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Write bonfire.toml to project root. Returns the written path.
+
+    By default (``overwrite=False``), raises ``FileExistsError`` if
+    ``bonfire.toml`` already exists at the target path — preventing
+    silent clobber of operator hand-edits when a returning user re-runs
+    ``bonfire scan`` to refresh detected tools. ``bonfire init`` is
+    correctly defensive on the same path; this brings ``write_config``
+    in line.
+
+    Pass ``overwrite=True`` to opt back into the legacy clobber-behavior.
+    The front-door scan flow (``onboard/flow.py``) currently does so
+    explicitly to preserve its UX pending a separate CLI ``--force``
+    flag wire-up.
+    """
     target = project_path / "bonfire.toml"
+    if target.exists() and not overwrite:
+        msg = (
+            f"Refusing to overwrite existing {target} — pass overwrite=True "
+            "to force, or remove the file first."
+        )
+        raise FileExistsError(msg)
     target.write_text(config_toml)
     return target

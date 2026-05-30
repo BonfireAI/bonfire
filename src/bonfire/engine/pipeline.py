@@ -15,7 +15,9 @@ Sage decisions enforced:
     D6: ``budget_remaining_usd`` clamped at zero.
     D7: Single bounce -- target runs, original re-runs, gates re-evaluate
         ONCE, then halt regardless of second outcome.
-    D8: PipelineResult has exactly 8 fields (frozen).
+    D8: PipelineResult is frozen. The historical ``error: str`` field is
+        retained for back-compat; ``error_detail: ErrorDetail | None`` carries
+        the structured, traceback-bearing failure (Elegance Law).
     D11: ``PipelineConfig`` has no ``dispatch_timeout_seconds``; pass
          ``timeout_seconds=None`` to ``execute_with_retry``.
 """
@@ -77,6 +79,9 @@ class PipelineResult(BaseModel):
     total_cost_usd: float = 0.0
     duration_seconds: float = 0.0
     error: str = ""
+    # Structured, traceback-bearing failure (Elegance Law). Populated on the
+    # never-raise shell's catch-all path; ``error`` (str) stays for back-compat.
+    error_detail: ErrorDetail | None = None
     failed_stage: str = ""
     gate_failure: GateResult | None = None
 
@@ -138,11 +143,16 @@ class PipelineEngine:
         try:
             return await self._run_inner(plan, sid, completed or {}, start, initial_envelope)
         except Exception as exc:  # noqa: BLE001
+            # CancelledError is a BaseException (not Exception) on 3.12+, so it
+            # propagates past this catch-all -- cancellation must surface.
             duration = time.monotonic() - start
+            # Capture the structured detail INSIDE the except so the traceback
+            # is live (Elegance Law); keep ``error`` (str) for back-compat.
             return PipelineResult(
                 success=False,
                 session_id=sid,
                 error=str(exc),
+                error_detail=ErrorDetail.from_exception(exc),
                 duration_seconds=duration,
             )
 

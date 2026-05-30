@@ -15,10 +15,11 @@ Public surface:
   the handler, evaluate gates, emit events.
 - :class:`ContextBuilder` — assembles per-stage prompt context from
   prior stage results and project state.
-- The six shipped quality gates (:class:`CompletionGate`,
+- The shipped quality gates (:class:`CompletionGate`,
   :class:`TestPassGate`, :class:`RedPhaseGate`,
   :class:`VerificationGate`, :class:`ReviewApprovalGate`,
-  :class:`CostLimitGate`) plus :class:`GateChain` for sequential
+  :class:`CostLimitGate`, :class:`SageCorrectionResolvedGate`,
+  :class:`MergePreflightGate`) plus :class:`GateChain` for sequential
   evaluation with short-circuit on error severity.
 - The checkpoint trio (:class:`CheckpointManager`,
   :class:`CheckpointData`, :class:`CheckpointSummary`) — durable
@@ -32,6 +33,7 @@ from bonfire.engine.gates import (
     CompletionGate,
     CostLimitGate,
     GateChain,
+    MergePreflightGate,
     RedPhaseGate,
     ReviewApprovalGate,
     SageCorrectionResolvedGate,
@@ -40,11 +42,9 @@ from bonfire.engine.gates import (
 )
 from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 
-# ``MergePreflightGate`` is intentionally NOT in ``__all__`` here; the
-# canonical 15-symbol surface is locked by ``tests/unit/test_engine_init.py``.
-# It IS importable both from the package and from the submodule
-# (``from bonfire.engine.gates import MergePreflightGate``). Promoting it
-# to ``__all__`` is a follow-up decision.
+# Every shipped quality gate now surfaces in ``__all__``; no gate is
+# intentionally excluded. The canonical 16-symbol surface is locked by
+# ``tests/unit/test_engine_init.py``.
 
 __all__ = [
     "CheckpointData",
@@ -54,6 +54,7 @@ __all__ = [
     "ContextBuilder",
     "CostLimitGate",
     "GateChain",
+    "MergePreflightGate",
     "PipelineEngine",
     "PipelineResult",
     "RedPhaseGate",

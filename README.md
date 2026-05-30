@@ -183,6 +183,9 @@ the agent backend. To use a different provider, swap the strings to
 that provider's model identifiers and plug in a matching
 `AgentBackend` (see Extension Points below).
 
+See [`docs/adr/ADR-005-open-core.md`](docs/adr/ADR-005-open-core.md) for the
+open-core commercial model and what the `tier` key means.
+
 ## Per-Role Model Routing
 
 `resolve_model_for_role(role, settings) -> str` is the public

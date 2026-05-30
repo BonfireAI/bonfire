@@ -55,6 +55,7 @@ from bonfire.models.envelope import (
     ErrorDetail,
     TaskStatus,
 )
+from bonfire.timeouts import resolve_timeout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -72,6 +73,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 ROLE: AgentRole = AgentRole.VERIFIER
+
+
+# ---------------------------------------------------------------------------
+# Default pytest timeout for the preflight subprocess. Routed through the
+# shared resolver for source-of-truth consistency, but the historical 600s
+# default is PRESERVED via ``override`` — the shared
+# ``DEFAULT_TIMEOUTS["pytest"]`` is 300, and switching to it would CHANGE
+# behavior. Behavior-preservation wins here: 600 stays 600. A caller-supplied
+# ``pytest_timeout_seconds`` (including ``None`` for an unbounded await) still
+# wins over this default.
+# ---------------------------------------------------------------------------
+_DEFAULT_PYTEST_TIMEOUT_SECONDS: int = int(resolve_timeout("pytest", override=600))
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +523,7 @@ class MergePreflightHandler:
         repo_path: Path,
         base_branch: str = "main",
         pytest_command: tuple[str, ...] = ("pytest", "tests/"),
-        pytest_timeout_seconds: int | None = 600,
+        pytest_timeout_seconds: int | None = _DEFAULT_PYTEST_TIMEOUT_SECONDS,
         sibling_detection: bool = True,
         baseline_cache: dict[str, frozenset[str]] | None = None,
     ) -> None:

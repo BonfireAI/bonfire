@@ -32,7 +32,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Pydantic requires the runtime type for validation — keep this import
 # outside of TYPE_CHECKING.
@@ -44,15 +44,20 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AgentBackend",
+    "ArtificerReport",
+    "AxiomVariantReceipt",
+    "BracketPassReport",
     "ContextAtom",
     "DispatchOptions",
     "Finding",
     "MuscleWriteReceipt",
+    "ProbeFinding",
     "QualityGate",
     "RetrievalProvider",
     "SCHEMA_VERSION",
     "Severity",
     "StageHandler",
+    "ValidationOutcome",
     "VaultBackend",
     "VaultEntry",
     "Verdict",
@@ -274,6 +279,278 @@ class Verdict(BaseModel):
             "gating the output. The canonical first entry is "
             "'budget_exceeded': parsed-response + cost ceiling crossed "
             "= audited-overrun PASS, not default-CONCERNS."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# ArtificerReport envelope family (vendor-port from forge-side)
+# ---------------------------------------------------------------------------
+#
+# The Artificer report is the domain-adaptation stage's wire-level output:
+# it captures one domain-adaptation run — the probe findings from the
+# three-orthogonal-probes characterization, the per-role axiom variants the
+# run forged, the validation run that gated ratification, and the
+# ratification verdict. It is carried by typed reference inside
+# :class:`BracketPassReport` (``artificer_report``), so the public package
+# co-ports it alongside that envelope rather than relaxing the embedded
+# type. The four classes (ProbeFinding, AxiomVariantReceipt,
+# ValidationOutcome, ArtificerReport) share the module-level
+# :data:`SCHEMA_VERSION` pin with the Verdict family.
+
+
+class ProbeFinding(BaseModel):
+    """A single probe's output from the three-orthogonal-probes characterization.
+
+    Three probes run in parallel against a new domain: ``domain-shape``
+    (what the domain looks like structurally), ``failure-mode`` (where it
+    tends to break), and ``success-pattern`` (what good output looks like).
+    Each probe emits one ``ProbeFinding``; they collate into per-role axiom
+    variants.
+
+    The ``truncated`` flag mirrors the Verdict's ``chain_truncated``
+    pattern: the probe shipped a finding, but the parallel harness clipped
+    its runtime against the budget ceiling.
+    """
+
+    model_config = ConfigDict(use_enum_values=False)
+
+    probe_kind: Literal["domain-shape", "failure-mode", "success-pattern"] = Field(
+        description="Which of the three probes produced this finding"
+    )
+    summary: str = Field(description="One-paragraph characterization of the probe result")
+    evidence: list[str] = Field(description="Artifact paths or snippet IDs supporting the summary")
+    cost_usd: float = Field(description="What this probe cost")
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "True iff the parallel harness clipped this probe's runtime "
+            "against the budget ceiling (mirrors Verdict.chain_truncated)"
+        ),
+    )
+    truncation_diagnostic: str | None = Field(
+        default=None,
+        description="One-sentence reason populated when ``truncated=True``",
+    )
+
+
+class AxiomVariantReceipt(BaseModel):
+    """Provenance for a single per-role axiom variant the adaptation run forged.
+
+    One variant is written per role slot per domain. The ``supersedes``
+    list captures the knowledge keys this variant replaces (supersession,
+    not deletion).
+    """
+
+    model_config = ConfigDict(use_enum_values=False)
+
+    cadre_slot: str = Field(description="One of the role slot names (scout, knight, ...)")
+    axiom_path: str = Field(description="Knowledge key the variant was written under")
+    domain_scope: str = Field(description="The domain identifier this variant adapts to")
+    forged_at: str = Field(description="ISO-8601 UTC timestamp of the forge")
+    supersedes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Knowledge keys this variant supersedes; empty when the variant "
+            "is the first for its (cadre_slot, domain) pair"
+        ),
+    )
+
+
+class ValidationOutcome(BaseModel):
+    """The validation run that gates ratification.
+
+    ``threshold`` defaults to 0.8. ``pass_rate`` and ``threshold`` are
+    clamped to ``[0.0, 1.0]`` at the envelope layer (cost has no upper
+    bound; pass-rate does).
+
+    ``inquisitor_run_ids`` carries the judgment-stage run IDs that
+    contributed to this rate; empty when validation rides on an eyeball
+    rubric.
+    """
+
+    model_config = ConfigDict(use_enum_values=False)
+
+    pass_rate: float = Field(
+        description="Fraction of validation samples that passed (clamped to [0.0, 1.0])"
+    )
+    sample_count: int = Field(
+        ge=0,
+        description="Number of validation samples evaluated",
+    )
+    threshold: float = Field(
+        default=0.8,
+        description=("Pass-rate threshold for ratification (default 0.8; clamped to [0.0, 1.0])"),
+    )
+    iterations: int = Field(
+        ge=1,
+        description="How many validation passes ran (must be >= 1)",
+    )
+    inquisitor_run_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Judgment-stage run IDs that contributed to this pass-rate; "
+            "empty when validation rides on an eyeball rubric"
+        ),
+    )
+
+    @field_validator("pass_rate", "threshold")
+    @classmethod
+    def _clamp_unit_interval(cls, v: float) -> float:
+        """Clamp pass_rate / threshold to ``[0.0, 1.0]``."""
+        if v < 0.0:
+            return 0.0
+        if v > 1.0:
+            return 1.0
+        return v
+
+
+class ArtificerReport(BaseModel):
+    """The complete output of one domain-adaptation run.
+
+    Wire-level object. Persisted as part of the run record. Read by
+    cross-domain calibration analytics and the Deck (ratification surface).
+
+    ``ratified`` is the canonical discriminator for downstream consumers
+    that ask "did this domain ratify". The handler is responsible for
+    enforcing ``ratified == (pass_rate >= threshold and not
+    default_unratified)``; the envelope stores both so calibration can
+    detect handler-side drift.
+    """
+
+    model_config = ConfigDict(use_enum_values=False)
+
+    domain_name: str = Field(description="The domain this adaptation run targets")
+    probes: list[ProbeFinding] = Field(
+        description=(
+            "Probe findings from the three-orthogonal-probes characterization; "
+            "expected length 3 but the envelope tolerates any length"
+        )
+    )
+    variants_forged: list[AxiomVariantReceipt] = Field(
+        description="Per-role-slot axiom variants this run forged"
+    )
+    validation: ValidationOutcome = Field(description="The validation run that gated ratification")
+    ratified: bool = Field(description="Whether the domain ratified this pass")
+
+    # Provenance
+    run_id: str = Field(description="Unique identifier for this adaptation run")
+    started_at: str = Field(description="ISO-8601 UTC timestamp the run began")
+    completed_at: str = Field(description="ISO-8601 UTC timestamp the run ended")
+    cost_usd: float = Field(description="What this adaptation run cost")
+
+    # Failure-mode
+    default_unratified: bool = Field(
+        default=False,
+        description=(
+            "True iff unratified via fallback path (crash / timeout / etc.); "
+            "mirrors Verdict.default_concerns"
+        ),
+    )
+    diagnostic: str | None = Field(
+        default=None,
+        description=(
+            "One-sentence reason; populated when ``default_unratified=True`` "
+            "(the envelope does not require this — the handler enforces it)"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# BracketPassReport envelope (vendor-port from forge-side)
+# ---------------------------------------------------------------------------
+
+
+class BracketPassReport(BaseModel):
+    """The orchestrator's bracket-pass summary.
+
+    The single return shape for one bracket pass. Carries:
+
+    - The judgment-stage typed :class:`Verdict` (always present when the
+      bracket fires).
+    - The optional domain-adaptation :class:`ArtificerReport` (None when
+      adaptation did not fire — a clean PASS without a new domain set).
+    - The branch the orchestrator took (PASS / CONCERNS / FAIL) on
+      ``branched_status``.
+    - Advisory flag mirrors of the embedded Verdict's failure-mode fields
+      (``default_concerns`` / ``loremaster_dispatched`` /
+      ``loremaster_dispatch_failed``) so calibration can disaggregate
+      bracket-pass-level failure modes without re-walking the embedded
+      envelopes.
+
+    ``use_enum_values=False`` keeps ``branched_status`` a typed
+    :class:`VerdictStatus` on the wire. ``schema_version`` is pinned via
+    ``Literal['1.1']`` so a mismatched version raises ``ValidationError``
+    synchronously at the envelope edge.
+    """
+
+    model_config = ConfigDict(
+        use_enum_values=False,
+        extra="ignore",
+        frozen=True,
+    )
+
+    schema_version: Literal["1.1"] = Field(
+        default=SCHEMA_VERSION,
+        description=(
+            "Schema version pin. BracketPassReport locks at v1.1. Mismatched "
+            "versions raise ValidationError at the envelope edge."
+        ),
+    )
+    run_id: str = Field(
+        description=(
+            "Orchestrator-side run identifier for this bracket pass. Distinct "
+            "from the embedded ``Verdict.run_id``."
+        )
+    )
+    verdict: Verdict = Field(
+        description=(
+            "The judgment-stage verdict. Always present when the bracket "
+            "fires — a synthesized default-CONCERNS Verdict surfaces when the "
+            "judgment handler returns None or raises."
+        )
+    )
+    artificer_report: ArtificerReport | None = Field(
+        default=None,
+        description=(
+            "The domain-adaptation report if adaptation fired this pass; None "
+            "when it was not dispatched (clean PASS + no new domain)."
+        ),
+    )
+    branched_status: VerdictStatus = Field(
+        description=(
+            "The branch the orchestrator took on Verdict.status. Canonical "
+            "discriminator for downstream effectuate/hold/terminate consumers."
+        )
+    )
+
+    # ------------------------------------------------------------------
+    # Advisory flag mirrors of the embedded Verdict's failure-mode fields
+    # ------------------------------------------------------------------
+    # These ride along the BracketPassReport so calibration can
+    # disaggregate bracket-pass-level failure modes without re-walking the
+    # embedded Verdict. The embedded Verdict remains canonical; these are
+    # advisory mirrors set by the orchestrator at construction time.
+
+    default_concerns: bool = Field(
+        default=False,
+        description=(
+            "True iff the embedded Verdict came from the fallback synthesis "
+            "path. Advisory mirror of Verdict.default_concerns."
+        ),
+    )
+    loremaster_dispatched: bool = Field(
+        default=False,
+        description=(
+            "True iff the judgment handler attempted Loremaster dispatch. "
+            "Advisory mirror of Verdict.loremaster_dispatched."
+        ),
+    )
+    loremaster_dispatch_failed: bool = Field(
+        default=False,
+        description=(
+            "True iff the Loremaster dispatch raised an exception. "
+            "Advisory mirror of Verdict.loremaster_dispatch_failed."
         ),
     )
 

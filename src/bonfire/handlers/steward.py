@@ -156,10 +156,19 @@ class StewardHandler:
                 "steward_verdict": verdict,
                 "steward_pr": str(pr_number) if pr_number else "",
             }
+            # Reserve COMPLETED for the only path that actually performed
+            # a merge — verdict=="approve" AND pr_number was identifiable.
+            # All other paths (reject verdict, missing verdict, approve-
+            # without-pr) end here without merging anything; reporting them
+            # as COMPLETED makes downstream gates + CLI summaries lie about
+            # the pipeline outcome. SKIPPED conveys "intentionally did not
+            # run" — the closer evaluated its preconditions and declined.
+            merge_actually_happened = verdict == "approve" and pr_number is not None
+            final_status = TaskStatus.COMPLETED if merge_actually_happened else TaskStatus.SKIPPED
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,
-                    "status": TaskStatus.COMPLETED,
+                    "status": final_status,
                     "result": f"closer: verdict={verdict}, pr={pr_number}",
                 },
             )

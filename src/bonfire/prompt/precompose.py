@@ -19,15 +19,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any
 
 from bonfire.protocols import RetrievalProvider
+from bonfire.timeouts import DEFAULT_TIMEOUTS, resolve_timeout
 
 _log = logging.getLogger(__name__)
 
 
-DEFAULT_RETRIEVE_TIMEOUT_S: float = 30.0
+DEFAULT_RETRIEVE_TIMEOUT_S: float = DEFAULT_TIMEOUTS["retrieve"]
 
 
 def _retrieve_timeout() -> float:
@@ -36,7 +36,7 @@ def _retrieve_timeout() -> float:
     Honors the BONFIRE_RETRIEVE_TIMEOUT_S env override; falls back to
     DEFAULT_RETRIEVE_TIMEOUT_S.
     """
-    return float(os.getenv("BONFIRE_RETRIEVE_TIMEOUT_S", DEFAULT_RETRIEVE_TIMEOUT_S))
+    return resolve_timeout("retrieve", env_var="BONFIRE_RETRIEVE_TIMEOUT_S")
 
 
 async def prebake_retrieval(

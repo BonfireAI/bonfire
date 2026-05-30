@@ -15,16 +15,16 @@ Tier 2 (Arachne) when present, Tier 1 (Ripgrep) otherwise.
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from typing import TYPE_CHECKING
 
 from bonfire._discovery import discover_retrieval_provider
+from bonfire.timeouts import DEFAULT_TIMEOUTS, resolve_timeout
 
 if TYPE_CHECKING:
     from bonfire.protocols import RetrievalProvider
 
-DEFAULT_RETRIEVE_TIMEOUT_S: float = 30.0
+DEFAULT_RETRIEVE_TIMEOUT_S: float = DEFAULT_TIMEOUTS["retrieve"]
 
 
 def _retrieve_timeout() -> float:
@@ -33,7 +33,7 @@ def _retrieve_timeout() -> float:
     Honors the BONFIRE_RETRIEVE_TIMEOUT_S env override; falls back to
     DEFAULT_RETRIEVE_TIMEOUT_S.
     """
-    return float(os.getenv("BONFIRE_RETRIEVE_TIMEOUT_S", DEFAULT_RETRIEVE_TIMEOUT_S))
+    return resolve_timeout("retrieve", env_var="BONFIRE_RETRIEVE_TIMEOUT_S")
 
 
 async def handle_retrieve_context(

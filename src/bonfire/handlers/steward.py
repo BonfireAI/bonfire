@@ -20,12 +20,11 @@ prior to v0.1.0a1; the cadre display rename to "Steward" landed in the
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
+from bonfire.handlers._pr_number import extract_pr_number
 from bonfire.models.envelope import (
-    META_PR_NUMBER,
     META_REVIEW_VERDICT,
     ErrorDetail,
     TaskStatus,
@@ -45,24 +44,6 @@ ROLE: AgentRole = AgentRole.CLOSER
 # ---------------------------------------------------------------------------
 # Module-scope helpers
 # ---------------------------------------------------------------------------
-
-
-def _extract_pr_number(prior_results: dict[str, Any]) -> int | None:
-    """Extract PR number from prior results."""
-    raw = prior_results.get(META_PR_NUMBER)
-    if raw is not None:
-        try:
-            return int(raw)
-        except (ValueError, TypeError):
-            pass
-
-    bard_val = prior_results.get("bard", "")
-    if bard_val:
-        m = re.search(r"/pull/(\d+)", str(bard_val))
-        if m:
-            return int(m.group(1))
-
-    return None
 
 
 def _extract_verdict(prior_results: dict[str, Any]) -> str:
@@ -128,7 +109,7 @@ class StewardHandler:
     ) -> Envelope:
         """Merge PR if approved, close issue, add completion comment."""
         try:
-            pr_number = _extract_pr_number(prior_results)
+            pr_number = extract_pr_number(prior_results, envelope=None)
             verdict = _extract_verdict(prior_results)
 
             if verdict == "approve" and pr_number is not None:
@@ -156,10 +137,19 @@ class StewardHandler:
                 "steward_verdict": verdict,
                 "steward_pr": str(pr_number) if pr_number else "",
             }
+            # Reserve COMPLETED for the only path that actually performed
+            # a merge — verdict=="approve" AND pr_number was identifiable.
+            # All other paths (reject verdict, missing verdict, approve-
+            # without-pr) end here without merging anything; reporting them
+            # as COMPLETED makes downstream gates + CLI summaries lie about
+            # the pipeline outcome. SKIPPED conveys "intentionally did not
+            # run" — the closer evaluated its preconditions and declined.
+            merge_actually_happened = verdict == "approve" and pr_number is not None
+            final_status = TaskStatus.COMPLETED if merge_actually_happened else TaskStatus.SKIPPED
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,
-                    "status": TaskStatus.COMPLETED,
+                    "status": final_status,
                     "result": f"closer: verdict={verdict}, pr={pr_number}",
                 },
             )

@@ -183,6 +183,9 @@ the agent backend. To use a different provider, swap the strings to
 that provider's model identifiers and plug in a matching
 `AgentBackend` (see Extension Points below).
 
+See [`docs/adr/ADR-005-open-core.md`](docs/adr/ADR-005-open-core.md) for the
+open-core commercial model and what the `tier` key means.
+
 ## Per-Role Model Routing
 
 `resolve_model_for_role(role, settings) -> str` is the public
@@ -340,7 +343,9 @@ Honest list, because alpha means alpha:
   later 0.1.x release.
 - **The Vault default backend is not yet shipped.** The
   `VaultBackend` Protocol is stable; the knowledge-graph storage and
-  query implementation land once the schema is locked.
+  query implementation land once the schema is locked. It is the stable
+  interface future memory tiers will implement, so today's
+  in-memory/LanceDB backends are swappable without touching callers.
 - **No downstream surface imports the package today.** Wrappers and
   vertical surfaces are designed against the engine but not yet
   wired to it. The release-gate Box validates the artifact contract,

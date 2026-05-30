@@ -109,7 +109,16 @@ async def run_front_door(
     config_event = generate_config(scan_results, conversation.profile, project_name)
     await server.broadcast(config_event.model_dump())
 
-    config_path = write_config(config_event.config_toml, project_path)
+    # Pass overwrite=True explicitly to preserve the front-door scan UX:
+    # users re-running `bonfire scan` against an existing config expect a
+    # refresh, not an error. A future CLI `--force` flag will thread the
+    # opposite default down here (so the default front-door call gets the
+    # safer FileExistsError + users opt into clobber via --force).
+    config_path = write_config(
+        config_event.config_toml,
+        project_path,
+        overwrite=True,
+    )
 
     _log.info("Front Door flow complete. Config written to %s", config_path)
     return config_path

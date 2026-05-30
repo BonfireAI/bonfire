@@ -154,7 +154,29 @@ class FrontDoorServer:
             return Response(
                 200,
                 "OK",
-                Headers({"Content-Type": "text/html; charset=utf-8"}),
+                Headers(
+                    {
+                        "Content-Type": "text/html; charset=utf-8",
+                        # Forbid third-party subresources. The page is bound
+                        # to 127.0.0.1 and exposes scraped local state — any
+                        # outbound fetch is an exfiltration vector. WebSocket
+                        # to /ws is same-origin so `'self'` covers it.
+                        "Content-Security-Policy": (
+                            "default-src 'self'; "
+                            "connect-src 'self'; "
+                            "img-src 'self' data:; "
+                            "style-src 'self' 'unsafe-inline'; "
+                            "script-src 'self' 'unsafe-inline'"
+                        ),
+                        # Forbid iframe embedding — closes the drive-by
+                        # iframe-while-scan-runs attack surface.
+                        "X-Frame-Options": "DENY",
+                        # No Referer leak on outbound link clicks.
+                        "Referrer-Policy": "no-referrer",
+                        # No MIME confusion on the served HTML.
+                        "X-Content-Type-Options": "nosniff",
+                    }
+                ),
                 self._html,
             )
         if request.path != "/ws":

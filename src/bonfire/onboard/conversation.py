@@ -10,6 +10,7 @@ gracefully.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -23,7 +24,26 @@ from bonfire.onboard.protocol import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-__all__ = ["ConversationEngine"]
+__all__ = [
+    "ConversationAlreadyComplete",
+    "ConversationEngine",
+    "ConversationNotStarted",
+]
+
+
+# ---------------------------------------------------------------------------
+# Typed lifecycle exceptions (subclass RuntimeError for back-compat with
+# the pre-fix bare-RuntimeError catch sites — existing `except RuntimeError`
+# blocks continue to catch these unchanged).
+# ---------------------------------------------------------------------------
+
+
+class ConversationNotStarted(RuntimeError):
+    """Raised when ``handle_answer`` is called before ``start()``."""
+
+
+class ConversationAlreadyComplete(RuntimeError):
+    """Raised when ``handle_answer`` is called after all 3 questions are answered."""
 
 
 # ---------------------------------------------------------------------------
@@ -371,10 +391,20 @@ _ANALYZERS: list[Callable[[str], tuple[str, dict[str, str]]]] = [
 
 @dataclass
 class ConversationEngine:
-    """Scripted 3-question conversation for profiling."""
+    """Scripted 3-question conversation for profiling.
+
+    ``handle_answer`` acquires ``_lock`` (an ``asyncio.Lock``) for its full
+    body so back-to-back WS messages that arrive while a prior ``emit(...)``
+    is suspended in ``broadcast(...)`` cannot interleave reads of ``_turn``
+    and corrupt the question-emission sequence.
+    """
 
     _turn: int = 0  # 0=not started, 1-3=waiting for answer to Q1-Q3
     _profile: dict[str, str] = field(default_factory=dict)
+    # Per-instance asyncio.Lock — serializes handle_answer calls so the
+    # await on emit() inside the handler can't be raced by a second call
+    # that lands on the same WS connection while the first is suspended.
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
     def is_complete(self) -> bool:
@@ -400,54 +430,66 @@ class ConversationEngine:
         text: str,
         emit: Callable[[FrontDoorMessage], Awaitable[None]],
     ) -> None:
-        """Process answer: analyze, reflect, ask next or finish."""
-        if self._turn == 0:
-            msg = "Cannot handle answer before start() has been called."
-            raise RuntimeError(msg)
-        if self._turn > 3:
-            msg = "Conversation is already complete."
-            raise RuntimeError(msg)
+        """Process answer: analyze, reflect, ask next or finish.
 
-        question_index = self._turn - 1  # 0-based
+        Acquires ``self._lock`` for the full body — a second concurrent
+        call blocks until the first releases, so the ``await emit(...)``
+        suspension points inside the body can't be raced by a sibling call
+        that reads stale ``_turn`` and double-advances past the same question.
 
-        # Short answer detection
-        stripped = text.strip()
-        word_count = len(stripped.split()) if stripped else 0
+        Lifecycle violations raise typed exceptions (``ConversationNotStarted``,
+        ``ConversationAlreadyComplete``) that subclass ``RuntimeError`` so
+        existing bare-``RuntimeError`` catchers in the WS handler continue
+        to work while typed handlers can catch the specific lifecycle case.
+        """
+        async with self._lock:
+            if self._turn == 0:
+                msg = "Cannot handle answer before start() has been called."
+                raise ConversationNotStarted(msg)
+            if self._turn > 3:
+                msg = "Conversation is already complete."
+                raise ConversationAlreadyComplete(msg)
 
-        if word_count < _SHORT_THRESHOLD:
-            reflection_text = _BRIEF_REFLECTION
-            profile_update: dict[str, str] = {}
-        else:
-            analyzer = _ANALYZERS[question_index]
-            reflection_text, profile_update = analyzer(stripped)
+            question_index = self._turn - 1  # 0-based
 
-        # Emit reflection
-        await emit(
-            FalcorMessage(
-                text=reflection_text,
-                subtype="reflection",
-            )
-        )
+            # Short answer detection
+            stripped = text.strip()
+            word_count = len(stripped.split()) if stripped else 0
 
-        # Accumulate profile
-        for k, v in profile_update.items():
-            self._profile[k] = v
+            if word_count < _SHORT_THRESHOLD:
+                reflection_text = _BRIEF_REFLECTION
+                profile_update: dict[str, str] = {}
+            else:
+                analyzer = _ANALYZERS[question_index]
+                reflection_text, profile_update = analyzer(stripped)
 
-        # Advance turn
-        self._turn += 1
-
-        # Ask next question if not done
-        if self._turn <= 3:
+            # Emit reflection
             await emit(
                 FalcorMessage(
-                    text=_QUESTIONS[self._turn - 1],
-                    subtype="question",
+                    text=reflection_text,
+                    subtype="reflection",
                 )
             )
 
-        # If complete, ensure all expected keys have defaults
-        if self._turn > 3:
-            self._ensure_complete_profile()
+            # Accumulate profile
+            for k, v in profile_update.items():
+                self._profile[k] = v
+
+            # Advance turn
+            self._turn += 1
+
+            # Ask next question if not done
+            if self._turn <= 3:
+                await emit(
+                    FalcorMessage(
+                        text=_QUESTIONS[self._turn - 1],
+                        subtype="question",
+                    )
+                )
+
+            # If complete, ensure all expected keys have defaults
+            if self._turn > 3:
+                self._ensure_complete_profile()
 
     def _ensure_complete_profile(self) -> None:
         """Fill in any missing profile keys with sensible defaults."""

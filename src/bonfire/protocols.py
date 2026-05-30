@@ -13,8 +13,9 @@ boundaries.
 
 The Verdict envelope family (:class:`Verdict`, :class:`VerdictStatus`,
 :class:`Severity`, :class:`Finding`, :class:`MuscleWriteReceipt`) is the
-Inquisitor's wire-level output, vendor-mirrored from the canonical forge-side
-schema. The module-level constant :data:`SCHEMA_VERSION` MUST match the
+quality gate's wire-level output (the synthesis/judgment stage result),
+vendor-mirrored from the canonical schema. The module-level constant
+:data:`SCHEMA_VERSION` MUST match the
 forge-side string in lockstep; the parity test
 ``tests/test_verdict_parity.py`` enforces this.
 
@@ -84,7 +85,7 @@ class Severity(StrEnum):
 
 
 class VerdictStatus(StrEnum):
-    """Tiered output of the Inquisitor's judgment."""
+    """Tiered status of a quality verdict (PASS / CONCERNS / FAIL)."""
 
     PASS = "PASS"
     CONCERNS = "CONCERNS"
@@ -92,10 +93,10 @@ class VerdictStatus(StrEnum):
 
 
 class Finding(BaseModel):
-    """A single concern or defect surfaced by the Inquisitor.
+    """A single concern or defect surfaced by the quality gate.
 
-    Consumed by Linear ticket templating (the ``proposed_action`` field
-    drives the auto-file body) and the Deck dashboard's CONCERNS panels.
+    Consumed by ticket templating (the ``proposed_action`` field
+    drives the auto-file body) and downstream review surfaces.
     """
 
     model_config = ConfigDict(use_enum_values=False)
@@ -135,10 +136,10 @@ class MuscleWriteReceipt(BaseModel):
 
 
 class Verdict(BaseModel):
-    """The Inquisitor's complete output.
+    """The complete quality-verdict output.
 
     Wire-level object. Persisted as part of the run record. Read by the
-    runtime (effectuate / hold / terminate), the Deck (visualization), and
+    runtime (effectuate / hold / terminate), visualization consumers, and
     Mirror calibration (cross-run analytics).
     """
 
@@ -204,7 +205,7 @@ class Verdict(BaseModel):
         ),
     )
 
-    # Loremaster bracket-seam observability fields. The Inquisitor→
+    # Loremaster bracket-seam observability fields. The judgment-stage→
     # Loremaster dispatch wiring landed without report-back; Mirror
     # calibration was left blind to bracket-seam failures (e.g., a
     # Lexicon outage trips mid-cluster-walk, the Loremaster surfaces a
@@ -223,7 +224,7 @@ class Verdict(BaseModel):
     loremaster_dispatched: bool = Field(
         default=False,
         description=(
-            "True iff the Inquisitor attempted to dispatch the "
+            "True iff the verdict handler attempted to dispatch the "
             "Loremaster bracket handler this pass "
             "(set even when the dispatch raised an exception)"
         ),
@@ -242,7 +243,7 @@ class Verdict(BaseModel):
         description=(
             "True iff the Loremaster dispatch raised an exception. "
             "The Verdict shape is preserved (the exception is "
-            "swallowed by the Inquisitor handler) but the failure is "
+            "swallowed by the verdict handler) but the failure is "
             "surfaced here so Mirror calibration can see bracket-seam "
             "outages instead of going blind."
         ),

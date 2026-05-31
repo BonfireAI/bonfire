@@ -862,8 +862,8 @@ class TestWireConsumersContract:
             # Positional call MUST fail — keyword-only enforcement.
             wire_consumers(bus, mock_persistence, tracker, mock_callback, backend)  # type: ignore[misc]
 
-    def test_wire_consumers_accepts_all_five_kwargs(self, bus, mock_persistence, mock_callback):
-        """All five kwargs accepted; returns None; does not raise."""
+    def test_wire_consumers_accepts_all_kwargs(self, bus, mock_persistence, mock_callback):
+        """All kwargs accepted; returns None; does not raise."""
         tracker = CostTracker(budget_usd=10.0, bus=bus)
         backend = _StubVaultBackend()
 
@@ -873,6 +873,7 @@ class TestWireConsumersContract:
             cost_tracker=tracker,
             display_callback=mock_callback,
             vault_backend=backend,
+            project_name="acme-app",
         )
         assert result is None
 
@@ -887,6 +888,7 @@ class TestWireConsumersContract:
             cost_tracker=tracker,
             display_callback=mock_callback,
             vault_backend=backend,
+            project_name="acme-app",
         )
 
         await bus.emit(_stage_completed())
@@ -901,6 +903,7 @@ class TestWireConsumersContract:
             cost_tracker=tracker,
             display_callback=mock_callback,
             vault_backend=backend,
+            project_name="acme-app",
         )
 
         await bus.emit(_stage_completed())
@@ -916,6 +919,7 @@ class TestWireConsumersContract:
             cost_tracker=tracker,
             display_callback=mock_callback,
             vault_backend=backend,
+            project_name="acme-app",
         )
 
         await bus.emit(_dispatch_completed(cost_usd=0.75))
@@ -933,6 +937,7 @@ class TestWireConsumersContract:
             cost_tracker=tracker,
             display_callback=mock_callback,
             vault_backend=vault_backend,
+            project_name="acme-app",
         )
 
         subscribed = {k for k, v in bus._typed.items() if len(v) > 0}
@@ -940,3 +945,151 @@ class TestWireConsumersContract:
         # is the knowledge set. Every vault-expected type MUST be present.
         for t in (StageCompleted, StageFailed, DispatchFailed, SessionEnded):
             assert t in subscribed, f"{t.__name__} not subscribed after wire_consumers"
+
+
+# ===========================================================================
+# 8. wire_consumers project_name threading — BON-1010 regression
+# ===========================================================================
+
+
+class TestWireConsumersProjectName:
+    """Contract (BON-1010): wire_consumers threads a caller-supplied
+    ``project_name`` into the KnowledgeIngestConsumer instead of hardcoding
+    ``"bonfire"``. A missing/blank project_name is a typed, loud ConfigError —
+    never a silent default that poisons a multi-project vault.
+    """
+
+    def test_project_name_is_threaded_into_knowledge_consumer(
+        self, bus, mock_persistence, mock_callback, vault_backend
+    ):
+        """The KnowledgeIngestConsumer registered on the bus carries the
+        caller's project_name, not the hardcoded literal ``"bonfire"``."""
+        tracker = CostTracker(budget_usd=10.0, bus=bus)
+        wire_consumers(
+            bus=bus,
+            persistence=mock_persistence,
+            cost_tracker=tracker,
+            display_callback=mock_callback,
+            vault_backend=vault_backend,
+            project_name="customer-project-x",
+        )
+
+        # Find the KnowledgeIngestConsumer via its bound on_stage_completed
+        # handler registered for StageCompleted.
+        handlers = bus._typed[StageCompleted]
+        ki_consumers = [
+            h.__self__
+            for h in handlers
+            if getattr(h, "__self__", None).__class__ is KnowledgeIngestConsumer
+        ]
+        assert ki_consumers, "KnowledgeIngestConsumer not registered for StageCompleted"
+        assert ki_consumers[0].project_name == "customer-project-x"
+        assert ki_consumers[0].project_name != "bonfire"
+
+    async def test_two_projects_partition_vault_entries(self, mock_persistence, mock_callback):
+        """REGRESSION (AC#3): two wirings with different project_name values
+        produce vault entries partitioned by their own project name — no
+        cross-project poisoning under a single hardcoded ``"bonfire"`` tag."""
+        bus_a = EventBus()
+        backend_a = _StubVaultBackend()
+        tracker_a = CostTracker(budget_usd=10.0, bus=bus_a)
+        wire_consumers(
+            bus=bus_a,
+            persistence=mock_persistence,
+            cost_tracker=tracker_a,
+            display_callback=mock_callback,
+            vault_backend=backend_a,
+            project_name="project-alpha",
+        )
+
+        bus_b = EventBus()
+        backend_b = _StubVaultBackend()
+        tracker_b = CostTracker(budget_usd=10.0, bus=bus_b)
+        wire_consumers(
+            bus=bus_b,
+            persistence=mock_persistence,
+            cost_tracker=tracker_b,
+            display_callback=mock_callback,
+            vault_backend=backend_b,
+            project_name="project-beta",
+        )
+
+        await bus_a.emit(_stage_completed(stage_name="scout"))
+        await bus_b.emit(_stage_completed(stage_name="knight"))
+
+        assert backend_a.entries, "no vault entry stored for project-alpha"
+        assert backend_b.entries, "no vault entry stored for project-beta"
+        # Every entry is tagged with its own project — no cross-contamination.
+        assert all(e.project_name == "project-alpha" for e in backend_a.entries)
+        assert all(e.project_name == "project-beta" for e in backend_b.entries)
+        # Neither vault was poisoned with the old hardcoded literal.
+        assert all(e.project_name != "bonfire" for e in backend_a.entries)
+        assert all(e.project_name != "bonfire" for e in backend_b.entries)
+
+    def test_blank_project_name_raises_typed_config_error(
+        self, bus, mock_persistence, mock_callback, vault_backend
+    ):
+        """FAILURE PATH (Elegance Law): a blank/whitespace project_name is a
+        typed, loud ConfigError carrying structured context — NOT a silent
+        fall-back to the poison default."""
+        from bonfire.errors import BonfireError, ConfigError
+
+        tracker = CostTracker(budget_usd=10.0, bus=bus)
+
+        with pytest.raises(ConfigError) as exc_info:
+            wire_consumers(
+                bus=bus,
+                persistence=mock_persistence,
+                cost_tracker=tracker,
+                display_callback=mock_callback,
+                vault_backend=vault_backend,
+                project_name="   ",
+            )
+
+        err = exc_info.value
+        assert isinstance(err, BonfireError)
+        # Typed: terminal config failure, not retryable.
+        assert err.is_terminal is True
+        assert err.retryable is False
+        # Carries structured context naming the offending parameter.
+        assert "project_name" in err.context
+
+    def test_empty_project_name_raises_typed_config_error(
+        self, bus, mock_persistence, mock_callback, vault_backend
+    ):
+        """An empty-string project_name is rejected the same way as blank."""
+        from bonfire.errors import ConfigError
+
+        tracker = CostTracker(budget_usd=10.0, bus=bus)
+
+        with pytest.raises(ConfigError):
+            wire_consumers(
+                bus=bus,
+                persistence=mock_persistence,
+                cost_tracker=tracker,
+                display_callback=mock_callback,
+                vault_backend=vault_backend,
+                project_name="",
+            )
+
+    def test_failed_wiring_does_not_register_any_consumer(
+        self, bus, mock_persistence, mock_callback, vault_backend
+    ):
+        """The validation gate fires BEFORE any consumer touches the bus, so a
+        rejected wiring leaves the bus pristine (no half-wired partial state)."""
+        from bonfire.errors import ConfigError
+
+        tracker = CostTracker(budget_usd=10.0, bus=bus)
+
+        with pytest.raises(ConfigError):
+            wire_consumers(
+                bus=bus,
+                persistence=mock_persistence,
+                cost_tracker=tracker,
+                display_callback=mock_callback,
+                vault_backend=vault_backend,
+                project_name="",
+            )
+
+        assert len(bus._global) == 0
+        assert all(len(v) == 0 for v in bus._typed.values())

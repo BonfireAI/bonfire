@@ -112,9 +112,28 @@ class CostAnalyzer:
         return self._cache
 
     def cumulative_cost(self) -> float:
-        """Grand total USD across all pipeline records."""
-        _, pipelines = self._read_records()
-        return sum(p.total_cost_usd for p in pipelines)
+        """Grand total USD across the whole ledger.
+
+        Every completed pipeline contributes its summary total. On top of
+        that, any *orphan* session — one that emitted dispatches but never a
+        PipelineCompleted summary, because its pipeline crashed mid-run
+        (Ctrl-C, or a contributor driving the engine directly) — contributes
+        the sum of its dispatch costs. Without the orphan term this headline
+        figure (e.g. "Built by Bonfire for $X") would silently under-count
+        real spend, which is a trust number we must not under-report.
+
+        A session that has a pipeline summary is counted only once, via that
+        summary; its dispatch rows are not re-added, so this stays additive
+        and non-breaking for the common completed-pipeline case.
+        """
+        dispatches, pipelines = self._read_records()
+
+        sessions_with_pipeline = {p.session_id for p in pipelines}
+        pipeline_total = sum(p.total_cost_usd for p in pipelines)
+        orphan_total = sum(
+            d.cost_usd for d in dispatches if d.session_id not in sessions_with_pipeline
+        )
+        return pipeline_total + orphan_total
 
     def session_cost(self, session_id: str) -> SessionCost | None:
         """Cost breakdown for a single session."""

@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 # ---------------------------------------------------------------------------
-# Canonical 15-symbol public surface.
+# Canonical 16-symbol public surface.
 # ---------------------------------------------------------------------------
 
 _EXPECTED_PUBLIC: tuple[str, ...] = (
@@ -29,6 +29,7 @@ _EXPECTED_PUBLIC: tuple[str, ...] = (
     "ContextBuilder",
     "CostLimitGate",
     "GateChain",
+    "MergePreflightGate",
     "PipelineEngine",
     "PipelineResult",
     "RedPhaseGate",
@@ -56,23 +57,30 @@ class TestAllList:
         assert all(isinstance(name, str) for name in _e.__all__)
 
     def test_all_list_matches_expected_set(self) -> None:
-        """``__all__`` equals the 15-symbol canonical set (order-free)."""
+        """``__all__`` equals the 16-symbol canonical set (order-free)."""
         from bonfire import engine as _e
 
         assert set(_e.__all__) == set(_EXPECTED_PUBLIC)
 
-    def test_all_list_contains_exactly_15_symbols(self) -> None:
-        """The v0.1 engine exports exactly 15 names — no compiler symbols."""
+    def test_all_list_contains_exactly_16_symbols(self) -> None:
+        """The v0.1 engine exports exactly 16 names — no compiler symbols."""
         from bonfire import engine as _e
 
-        assert len(set(_e.__all__)) == 15
+        assert len(set(_e.__all__)) == 16
 
     def test_sage_correction_resolved_gate_in_all(self) -> None:
-        """``SageCorrectionResolvedGate`` is the 15th symbol — promoted into
-        ``__all__`` once the sage-correction-bounce stage is wired."""
+        """``SageCorrectionResolvedGate`` is promoted into ``__all__`` once the
+        sage-correction-bounce stage is wired."""
         from bonfire import engine as _e
 
         assert "SageCorrectionResolvedGate" in _e.__all__
+
+    def test_merge_preflight_gate_in_all(self) -> None:
+        """``MergePreflightGate`` is promoted into ``__all__`` for surface
+        consistency — no gate is intentionally excluded any longer."""
+        from bonfire import engine as _e
+
+        assert "MergePreflightGate" in _e.__all__
 
     def test_all_list_is_sorted(self) -> None:
         """``__all__`` is sorted — mirrors V1 style."""

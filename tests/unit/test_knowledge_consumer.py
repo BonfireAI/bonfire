@@ -258,16 +258,42 @@ class TestMetadata:
 # ---------------------------------------------------------------------------
 
 
+# Resilience matrix: (handler attribute name, event factory) for all four
+# locked event handlers. BON-528 expands the single-handler resilience test
+# into a forward-looking matrix across every handler that calls backend.store().
+_RESILIENCE_HANDLERS = [
+    ("on_stage_completed", _stage_completed),
+    ("on_stage_failed", _stage_failed),
+    ("on_dispatch_failed", _dispatch_failed),
+    ("on_session_ended", _session_ended),
+]
+
+
 class TestResilience:
+    @pytest.mark.parametrize(
+        ("handler_name", "event_factory"),
+        _RESILIENCE_HANDLERS,
+        ids=[name for name, _ in _RESILIENCE_HANDLERS],
+    )
     async def test_backend_store_exception_is_caught_and_logged(
-        self, caplog: pytest.LogCaptureFixture
+        self,
+        handler_name: str,
+        event_factory: Any,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
+        """Every handler catches backend.store() exceptions and logs WARNING.
+
+        Sage D8.2: ``_store`` catches exceptions, logs WARNING — never crashes
+        the consumer. All four handlers route through ``_store``; this matrix
+        asserts the resilience contract holds for each (BON-528).
+        """
         backend = _ExplodingStoreBackend()
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
+        handler = getattr(consumer, handler_name)
         with caplog.at_level(logging.WARNING):
-            # Must NOT raise.
-            await consumer.on_stage_completed(_stage_completed())
-        # A warning should be emitted.
+            # Must NOT raise — a storage failure never crashes the consumer.
+            await handler(event_factory())
+        # A warning should be emitted on the failure path.
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
 

@@ -545,12 +545,14 @@ class TestCostTrackerContract:
         assert tracker.total_cost_usd == 0.0
         assert isinstance(tracker.total_cost_usd, float)
 
-    def test_register_subscribes_only_to_dispatch_completed(self, bus):
+    def test_register_subscribes_to_dispatch_completed_and_pipeline_started(self, bus):
+        # BON-1008: the tracker also listens for PipelineStarted so it can
+        # re-base its latch + tally state at the start of each run.
         tracker = CostTracker(budget_usd=10.0, bus=bus)
         tracker.register(bus)
 
         subscribed_types = {k for k, v in bus._typed.items() if len(v) > 0}
-        assert subscribed_types == {DispatchCompleted}
+        assert subscribed_types == {DispatchCompleted, PipelineStarted}
 
 
 class TestCostTrackerAccumulation:

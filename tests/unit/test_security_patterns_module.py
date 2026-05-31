@@ -49,8 +49,16 @@ def _require_module():
 # category→action mapping applied.
 #
 # DENY (C1+C2+C3+C4+C7): 37 rules.
-# WARN (C5+C6): 15 rules.
-# Total: 52 rules.
+# WARN (C5+C6): 13 rules.
+# Total: 50 rules.
+#
+# Two C6 shell-escape rules (an $IFS space-substitution rule and a
+# Unicode-lookalike rule) were removed because they were structurally
+# unreachable: the pre-exec hook's _normalize stage runs NFKC + an explicit
+# $IFS -> space substitution before any pattern is evaluated, folding away the
+# exact tokens those rules matched. Their bypass attempts are still denied via
+# the surviving DENY rules acting on the normalized command — proven in
+# tests/unit/test_security_normalize_neutralizes_obfuscation.py.
 # ---------------------------------------------------------------------------
 
 
@@ -112,13 +120,11 @@ CANONICAL_WARN_RULE_IDS: frozenset[str] = frozenset(
         "C5.5-append-authorized-keys",
         "C5.6-write-passwd-shadow",
         "C5.7-usermod-priv-group",
-        # C6 shell-escape (8)
+        # C6 shell-escape (6)
         "C6.1-eval",
         "C6.2-base64-decode",
-        "C6.3-ifs-bypass",
         "C6.4-brace-expansion",
         "C6.5-wildcard-path",
-        "C6.6-unicode-lookalike",
         "C6.7-alias-function-redef",
         "C6.8-newline-escape",
     }
@@ -283,16 +289,16 @@ class TestCanonicalRuleIds:
         assert not extra, f"Unknown WARN rule_ids shipped: {extra}"
         assert not missing, f"Canonical WARN rule_ids not shipped: {missing}"
 
-    def test_total_count_is_52(self):
-        """37 DENY + 15 WARN = 52 rules."""
+    def test_total_count_is_50(self):
+        """37 DENY + 13 WARN = 50 rules."""
         total = len(DEFAULT_DENY_PATTERNS) + len(DEFAULT_WARN_PATTERNS)
-        assert total == 52, f"Canonical catalogue has 37 DENY + 15 WARN = 52 rules; got {total}"
+        assert total == 50, f"Canonical catalogue has 37 DENY + 13 WARN = 50 rules; got {total}"
 
     def test_deny_count_is_37(self):
         assert len(DEFAULT_DENY_PATTERNS) == 37
 
-    def test_warn_count_is_15(self):
-        assert len(DEFAULT_WARN_PATTERNS) == 15
+    def test_warn_count_is_13(self):
+        assert len(DEFAULT_WARN_PATTERNS) == 13
 
     def test_no_rule_outside_canonical(self):
         """Belt-and-suspenders — every rule_id anywhere must be in CANONICAL_RULE_IDS."""

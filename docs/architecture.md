@@ -243,6 +243,19 @@ Two short pieces orient the model:
    inside the hook turns into a DENY plus a `SecurityDenied` event
    tagged `_infra.error`.
 
+Two obfuscation classes — Unicode-lookalike characters (fullwidth,
+NBSP, zero-widths) and `$IFS` / `${IFS}` / `$IFS$9` space-substitution —
+are handled by the **normalization step, not by dedicated pattern
+rules**. NFKC folds lookalike codepoints to their plain equivalents and
+the `$IFS` substitution erases the IFS tokens *before* any pattern runs,
+so the de-obfuscated command is matched by the ordinary deny rules
+(for example, `cat${IFS}~/.ssh/id_rsa` normalizes to
+`cat ~/.ssh/id_rsa` and is denied by the SSH-private-key exfiltration
+rule; fullwidth `ｒｍ -rf /` normalizes to `rm -rf /` and is denied by
+the destructive-`rm` rule). The catalogue deliberately does **not**
+carry separate "IFS bypass" or "Unicode lookalike" rules, because a rule
+matching those byte-patterns could never fire after normalization.
+
 DENY emits a `SecurityDenied` event and blocks the tool call. WARN
 emits the same event with the reason prefixed `"WARN: "` and lets the
 call through — visibility without blocking.

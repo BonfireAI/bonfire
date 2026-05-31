@@ -89,7 +89,6 @@ def test_no_closed_tier_names_in_public_docs() -> None:
         for name in _FORBIDDEN_NAMES:
             if name in low:
                 offenders.append(f"{path.name}: '{name}'")
-    assert not offenders, (
-        "Closed-tier product names must not appear in public docs:\n"
-        + "\n".join(f"  - {o}" for o in offenders)
+    assert not offenders, "Closed-tier product names must not appear in public docs:\n" + "\n".join(
+        f"  - {o}" for o in offenders
     )

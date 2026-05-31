@@ -94,7 +94,8 @@ class LanceDBBackend:
                 .to_list()
             )
             return len(results) > 0
-        except Exception:
+        except Exception as exc:
+            logger.warning("Vault exists check failed: %s", exc)
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:

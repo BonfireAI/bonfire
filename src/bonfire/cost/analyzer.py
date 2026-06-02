@@ -25,57 +25,81 @@ logger = logging.getLogger(__name__)
 class CostAnalyzer:
     """Reads the cost ledger and computes aggregations on demand.
 
-    Memoizes the parsed-record tuple on the instance, invalidated by the
-    ledger file's mtime. Multiple aggregation methods called on the same
-    analyzer instance share one read — the default ``bonfire cost``
-    callback (``cumulative_cost`` + ``all_sessions``) previously paid the
-    parse cost twice per invocation; post-memoization it pays once.
+    Memoizes the parsed-record tuple on the instance, invalidated by a
+    *signature* of the ledger file: its mtime, inode, and size taken
+    together. Multiple aggregation methods called on the same analyzer
+    instance share one read — the default ``bonfire cost`` callback
+    (``cumulative_cost`` + ``all_sessions``) previously paid the parse cost
+    twice per invocation; post-memoization it pays once.
+
+    Why the signature is a triple, not just the mtime: atomic file
+    replacement (``mv``/``rename`` of a temp file over the ledger, restoring
+    a backup with ``cp -p``/``rsync --times``, extracting an archive) can
+    land the *same* mtime the cache last saw — either by writing within the
+    same filesystem-timestamp tick or by deliberately stamping the old mtime
+    back on. An mtime-only key would then serve stale cost data indefinitely,
+    silently mis-reporting spend. Pairing mtime with the inode number (which
+    a rename/replace changes) and the file size (which an in-place rewrite to
+    a different length changes) catches those cases that the mtime alone
+    misses.
     """
 
-    # Sentinel mtime value for "ledger file does not exist." Distinct from
-    # any valid os.stat().st_mtime_ns (which is non-negative). When the file
-    # later appears, the cached -1 sentinel won't match the real mtime, so
-    # the next _read_records() call invalidates and re-reads.
-    _MTIME_MISSING = -1
+    # Sentinel signature for "ledger file does not exist." Distinct from any
+    # real (st_mtime_ns, st_ino, st_size) triple — the -1 mtime component can
+    # never collide with a valid os.stat().st_mtime_ns (which is
+    # non-negative). When the file later appears, this sentinel won't match
+    # the real signature, so the next _read_records() call invalidates and
+    # re-reads.
+    _SIGNATURE_MISSING = (-1, -1, -1)
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
         self._ledger_path = Path(ledger_path)
-        # Cached parsed records + the file mtime they were read at. Both are
-        # set together in _read_records(); a None cache means "never read."
+        # Cached parsed records + the file signature they were read at. Both
+        # are set together in _read_records(); a None cache means "never read."
         self._cache: tuple[list[DispatchRecord], list[PipelineRecord]] | None = None
-        self._cache_mtime_ns: int = self._MTIME_MISSING
+        self._cache_signature: tuple[int, int, int] = self._SIGNATURE_MISSING
 
-    def _current_ledger_mtime_ns(self) -> int:
-        """Return the ledger file's mtime in ns, or ``_MTIME_MISSING`` if absent."""
+    def _current_ledger_signature(self) -> tuple[int, int, int]:
+        """Return the ledger's ``(mtime_ns, inode, size)`` signature.
+
+        Returns ``_SIGNATURE_MISSING`` if the file is absent. The three fields
+        together detect every change the cache must react to: an append or
+        edit advances ``st_mtime_ns``; an atomic rename/replace allocates a new
+        ``st_ino``; an in-place rewrite to a different length changes
+        ``st_size`` — covering the same-mtime hazards a bare mtime key misses.
+        """
         try:
-            return self._ledger_path.stat().st_mtime_ns
+            stat = self._ledger_path.stat()
         except FileNotFoundError:
-            return self._MTIME_MISSING
+            return self._SIGNATURE_MISSING
+        return (stat.st_mtime_ns, stat.st_ino, stat.st_size)
 
     def _read_records(
         self,
     ) -> tuple[list[DispatchRecord], list[PipelineRecord]]:
         """Read and parse all records from the ledger file.
 
-        Memoized per instance with mtime-based invalidation: if the ledger
-        file's mtime matches the cached value, the cached tuple is returned
-        as-is (identity-equal to the prior call's result). Any mtime advance
-        — including the file appearing after a previous missing-file read —
-        triggers a fresh parse.
+        Memoized per instance with signature-based invalidation: if the
+        ledger file's ``(mtime_ns, inode, size)`` signature matches the cached
+        value, the cached tuple is returned as-is (identity-equal to the prior
+        call's result). Any change to any component of the signature — an
+        mtime advance from an append, a new inode from an atomic replacement,
+        or a size change from an in-place rewrite, including the file
+        appearing after a previous missing-file read — triggers a fresh parse.
         """
-        current_mtime_ns = self._current_ledger_mtime_ns()
-        if self._cache is not None and current_mtime_ns == self._cache_mtime_ns:
+        current_signature = self._current_ledger_signature()
+        if self._cache is not None and current_signature == self._cache_signature:
             return self._cache
 
         dispatches: list[DispatchRecord] = []
         pipelines: list[PipelineRecord] = []
 
-        if current_mtime_ns == self._MTIME_MISSING:
+        if current_signature == self._SIGNATURE_MISSING:
             # File doesn't exist — cache the empty result keyed by the
             # missing-sentinel so a follow-up call without file creation
             # still hits cache.
             self._cache = (dispatches, pipelines)
-            self._cache_mtime_ns = self._MTIME_MISSING
+            self._cache_signature = self._SIGNATURE_MISSING
             return self._cache
 
         with self._ledger_path.open("r", encoding="utf-8") as fh:
@@ -104,17 +128,37 @@ class CostAnalyzer:
                         self._ledger_path,
                     )
 
-        # Cache populated tuple keyed by the mtime we observed at read time.
-        # If the file changes between this call and the next, the mtime
-        # check at the top of _read_records will invalidate.
+        # Cache populated tuple keyed by the signature we observed at read
+        # time. If any component (mtime, inode, or size) differs between this
+        # call and the next, the signature check at the top of _read_records
+        # will invalidate.
         self._cache = (dispatches, pipelines)
-        self._cache_mtime_ns = current_mtime_ns
+        self._cache_signature = current_signature
         return self._cache
 
     def cumulative_cost(self) -> float:
-        """Grand total USD across all pipeline records."""
-        _, pipelines = self._read_records()
-        return sum(p.total_cost_usd for p in pipelines)
+        """Grand total USD across the whole ledger.
+
+        Every completed pipeline contributes its summary total. On top of
+        that, any *orphan* session — one that emitted dispatches but never a
+        PipelineCompleted summary, because its pipeline crashed mid-run
+        (Ctrl-C, or a contributor driving the engine directly) — contributes
+        the sum of its dispatch costs. Without the orphan term this headline
+        figure (e.g. "Built by Bonfire for $X") would silently under-count
+        real spend, which is a trust number we must not under-report.
+
+        A session that has a pipeline summary is counted only once, via that
+        summary; its dispatch rows are not re-added, so this stays additive
+        and non-breaking for the common completed-pipeline case.
+        """
+        dispatches, pipelines = self._read_records()
+
+        sessions_with_pipeline = {p.session_id for p in pipelines}
+        pipeline_total = sum(p.total_cost_usd for p in pipelines)
+        orphan_total = sum(
+            d.cost_usd for d in dispatches if d.session_id not in sessions_with_pipeline
+        )
+        return pipeline_total + orphan_total
 
     def session_cost(self, session_id: str) -> SessionCost | None:
         """Cost breakdown for a single session."""

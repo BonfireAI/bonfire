@@ -7,7 +7,7 @@ Public surface — three symbols:
 - ``DenyRule`` — frozen slotted dataclass describing one pattern rule.
 - ``DEFAULT_DENY_PATTERNS`` — tuple of 37 rules that the hook hard-denies
   (categories C1, C2, C3, C4, C7).
-- ``DEFAULT_WARN_PATTERNS`` — tuple of 15 rules the hook warns on but does
+- ``DEFAULT_WARN_PATTERNS`` — tuple of 13 rules the hook warns on but does
   not deny (categories C5, C6). WARN emits a SecurityDenied event whose
   reason is prefixed ``"WARN: "``; the tool call still proceeds.
 
@@ -408,11 +408,19 @@ _C5_RULES: tuple[DenyRule, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# C6 shell-escape (8 WARN)
+# C6 shell-escape (6 WARN)
 #
-# Ambiguity #4 locked: C6.6 covers ONLY
-#   U+00A0, U+2000-U+200F, U+2028-U+202F, U+FF01-U+FF5E.
-# Cyrillic is a documented blind spot.
+# Two C6 rules that used to live here — an $IFS space-substitution rule and a
+# Unicode-lookalike rule — were removed because they were structurally
+# unreachable. The pre-exec hook normalizes every command BEFORE any pattern is
+# evaluated (security_hooks._normalize): it runs unicodedata.normalize("NFKC", ...)
+# and then an explicit $IFS -> space substitution. That folds away exactly the
+# byte-patterns those two rules matched — the $IFS / ${IFS} / $IFS$9 tokens, and
+# the fullwidth / NBSP / zero-width codepoints — so the patterns could never see
+# a live target. Removing them does NOT weaken coverage: after normalization the
+# obfuscated command reduces to its plain form and the surviving DENY rules
+# (e.g. reading an SSH key, rm -rf) fire on it instead. See
+# tests/unit/test_security_normalize_neutralizes_obfuscation.py for the proof.
 # ---------------------------------------------------------------------------
 
 
@@ -433,13 +441,6 @@ _C6_RULES: tuple[DenyRule, ...] = (
         message="base64 decode piped to shell/eval — encoded payload.",
     ),
     DenyRule(
-        rule_id="C6.3-ifs-bypass",
-        category="shell-escape",
-        # Covers $IFS, $IFS$9, ${IFS}.
-        pattern=re.compile(r"\$(?:IFS(?:\$[0-9])?|\{IFS\})"),
-        message="IFS bypass — space-substitution obfuscation.",
-    ),
-    DenyRule(
         rule_id="C6.4-brace-expansion",
         category="shell-escape",
         pattern=re.compile(r"\{[a-zA-Z]+,[/-]"),
@@ -450,12 +451,6 @@ _C6_RULES: tuple[DenyRule, ...] = (
         category="shell-escape",
         pattern=re.compile(r"/\?{2,}/|/\*/"),
         message="Wildcard in command path — evasion.",
-    ),
-    DenyRule(
-        rule_id="C6.6-unicode-lookalike",
-        category="shell-escape",
-        pattern=re.compile("[\u00a0\u2000-\u200f\u2028-\u202f\uff01-\uff5e]"),
-        message="Unicode lookalike character in command.",
     ),
     DenyRule(
         rule_id="C6.7-alias-function-redef",

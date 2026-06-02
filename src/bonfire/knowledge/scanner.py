@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,12 @@ from bonfire.knowledge.hasher import content_hash
 
 if TYPE_CHECKING:
     import pathlib
+
+# Module logger. The scanner skips files it cannot read or parse and keeps
+# going (one bad file must not sink a whole scan), but a silent skip makes a
+# missing manifest/signature entry impossible to diagnose. We narrate each
+# skip at DEBUG with the offending path and reason so the drop is observable.
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -143,7 +150,10 @@ class ProjectScanner:
 
             try:
                 text = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
+            except (UnicodeDecodeError, OSError) as exc:
+                # File could not be read (bad encoding / IO error): drop it from
+                # the manifest but say so, naming the path and the cause.
+                _log.debug("ProjectScanner skipping unreadable file %s: %s", path, exc)
                 continue
 
             file_hash = content_hash(text)
@@ -186,12 +196,23 @@ class ProjectScanner:
 
             try:
                 source = full_path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
+            except (UnicodeDecodeError, OSError) as exc:
+                # Python file could not be read: skip signature extraction for it
+                # but narrate the unreadable path and cause.
+                _log.debug("ProjectScanner skipping unreadable Python file %s: %s", full_path, exc)
                 continue
 
             try:
                 tree = ast.parse(source, filename=source_path)
-            except SyntaxError:
+            except SyntaxError as exc:
+                # Python file read fine but does not parse: skip it, and say the
+                # reason is a parse/syntax error (distinct from an unreadable file)
+                # so the log is self-describing.
+                _log.debug(
+                    "ProjectScanner skipping unparseable Python file %s (syntax error): %s",
+                    full_path,
+                    exc,
+                )
                 continue
 
             classes: list[str] = []

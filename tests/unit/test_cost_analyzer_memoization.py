@@ -260,6 +260,131 @@ class TestCacheAcrossPublicMethods:
         assert len(all_recs) == 3
 
 
+class TestCacheInvalidatesOnAtomicReplacement:
+    """A same-mtime, different-inode file replacement must bust the cache.
+
+    Atomic file swaps are common in practice: a ``mv``/``rename`` of a freshly
+    written temp file over the ledger, or restoring a backup with its original
+    timestamp preserved (``cp -p``, ``rsync --times``, archive extraction). In
+    all of these the *contents* change but the mtime can land on the exact same
+    value the cache last saw — either because the replacement file was written
+    in the same filesystem-timestamp tick, or because the writer deliberately
+    stamped the old mtime back on. A cache keyed on mtime alone would then serve
+    stale cost data forever, silently mis-reporting spend.
+
+    The fix widens the cache key to also carry the inode number (``st_ino``) and
+    file size (``st_size``). An atomic replacement allocates a new inode (and
+    usually a different size), so the key changes even when the mtime does not,
+    and the next read is correctly treated as a cache miss.
+    """
+
+    def test_same_mtime_inode_change_busts_cache(
+        self,
+        ledger_path: Path,
+        sample_records: list[DispatchRecord | PipelineRecord],
+    ) -> None:
+        """Replacing the ledger atomically while pinning the old mtime re-reads.
+
+        Simulates ``mv tmp ledger`` (a fresh inode) followed by stamping the
+        original mtime back on the new file — the exact shape of a restored
+        backup. The mtime is identical to what the cache recorded, so an
+        mtime-only key would wrongly hit the cache. The inode differs, so the
+        widened key must miss and pick up the new contents.
+        """
+        _write_records(ledger_path, sample_records)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+
+        first_dispatches, _ = analyzer._read_records()
+        assert len(first_dispatches) == 2
+
+        # Capture the mtime the cache just recorded so we can restore it onto
+        # the replacement file, recreating the "same mtime" hazard exactly.
+        original_stat = ledger_path.stat()
+        original_mtime_ns = original_stat.st_mtime_ns
+        original_ino = original_stat.st_ino
+
+        # Build the replacement on a sibling path, then rename it over the
+        # ledger. rename() within a directory is atomic and gives the target a
+        # new inode — modelling a real backup-restore / temp-swap writer.
+        replacement = ledger_path.with_name("cost_ledger.jsonl.new")
+        extra_record = DispatchRecord(
+            timestamp=3000.0,
+            session_id="ses_003",
+            agent_name="sage",
+            cost_usd=0.77,
+            duration_seconds=42.0,
+            model="claude-opus-4-7",
+        )
+        _write_records(replacement, [*sample_records, extra_record])
+        os.replace(replacement, ledger_path)
+
+        # Pin the OLD mtime back onto the new inode — the worst case where the
+        # mtime gives the cache no signal at all.
+        os.utime(ledger_path, ns=(original_mtime_ns, original_mtime_ns))
+
+        replaced_stat = ledger_path.stat()
+        assert replaced_stat.st_mtime_ns == original_mtime_ns, (
+            "test setup invariant: replacement must carry the original mtime"
+        )
+        assert replaced_stat.st_ino != original_ino, (
+            "test setup invariant: atomic replace must allocate a new inode "
+            "(if this fails the filesystem reused the inode and the scenario "
+            "cannot be exercised here)"
+        )
+
+        second_dispatches, _ = analyzer._read_records()
+
+        assert len(second_dispatches) == 3, (
+            "Same-mtime atomic replacement served stale cache: the cache key is "
+            "keyed on mtime alone and missed the inode change. Expected the new "
+            "3-dispatch ledger; got the stale 2-dispatch cache."
+        )
+
+    def test_same_mtime_size_change_busts_cache(
+        self,
+        ledger_path: Path,
+        sample_records: list[DispatchRecord | PipelineRecord],
+    ) -> None:
+        """An in-place truncate/rewrite to a different size with the old mtime re-reads.
+
+        Some writers rewrite a file in place (same inode) but change its length.
+        If a low-resolution filesystem or a deliberate ``utime`` leaves the mtime
+        unchanged, the size component of the key is the safety net that catches
+        the change.
+        """
+        _write_records(ledger_path, sample_records)
+        analyzer = CostAnalyzer(ledger_path=ledger_path)
+
+        first_dispatches, _ = analyzer._read_records()
+        assert len(first_dispatches) == 2
+
+        original_stat = ledger_path.stat()
+        original_mtime_ns = original_stat.st_mtime_ns
+        original_size = original_stat.st_size
+
+        # Rewrite in place with fewer records so the size shrinks, then restore
+        # the old mtime. Truncating to a single record changes st_size while
+        # leaving st_ino untouched (same path, opened "w").
+        _write_records(ledger_path, sample_records[:1])
+        os.utime(ledger_path, ns=(original_mtime_ns, original_mtime_ns))
+
+        rewritten_stat = ledger_path.stat()
+        assert rewritten_stat.st_mtime_ns == original_mtime_ns, (
+            "test setup invariant: rewrite must carry the original mtime"
+        )
+        assert rewritten_stat.st_size != original_size, (
+            "test setup invariant: rewrite must change the file size"
+        )
+
+        second_dispatches, _ = analyzer._read_records()
+
+        assert len(second_dispatches) == 1, (
+            "Same-mtime in-place rewrite served stale cache: the size component "
+            "of the cache key failed to catch the change. Expected the new "
+            "1-dispatch ledger; got the stale 2-dispatch cache."
+        )
+
+
 class TestCacheEmptyLedgerHandling:
     """Edge cases around file existence + initial-empty cache state."""
 

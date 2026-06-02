@@ -8,9 +8,15 @@ from __future__ import annotations
 import typer
 
 from bonfire import __version__
+from bonfire.cli.commands.build_agents import build_agents
 from bonfire.cli.commands.cost import cost_app
 from bonfire.cli.commands.handoff import handoff
 from bonfire.cli.commands.init import init
+from bonfire.cli.commands.install_agents import (
+    install_agents,
+    list_agents,
+    uninstall_agents,
+)
 from bonfire.cli.commands.persona import persona_app
 from bonfire.cli.commands.resume import resume
 from bonfire.cli.commands.scan import scan
@@ -61,5 +67,9 @@ app.command("scan")(scan)
 app.command("status")(status)
 app.command("resume")(resume)
 app.command("handoff")(handoff)
+app.command("install-agents")(install_agents)
+app.command("uninstall-agents")(uninstall_agents)
+app.command("list-agents")(list_agents)
+app.command("build-agents")(build_agents)
 app.add_typer(persona_app, name="persona")
 app.add_typer(cost_app, name="cost")

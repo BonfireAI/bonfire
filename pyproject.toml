@@ -52,6 +52,7 @@ Issues = "https://github.com/BonfireAI/bonfire/issues"
 packages = ["src/bonfire"]
 include = [
     "src/bonfire/onboard/ui.html",
+    "src/bonfire/prompts/*.md",
     "src/bonfire/py.typed",
 ]
 

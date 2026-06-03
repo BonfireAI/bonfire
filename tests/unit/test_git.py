@@ -41,6 +41,7 @@ import pytest
 # Each test re-imports the name it uses so RED output is per-test, not a
 # single collection error.
 try:
+    from bonfire.errors import SubprocessError
     from bonfire.git.path_guard import (
         IsolationViolation,
         PathGuard,
@@ -572,7 +573,7 @@ class TestWorktreeManager:
     async def test_remove_nonexistent_raises(
         self, worktree_mgr: WorktreeManager, tmp_git_repo: Path
     ) -> None:
-        with pytest.raises(RuntimeError):
+        with pytest.raises(SubprocessError):
             await worktree_mgr.remove(tmp_git_repo / "nonexistent")
 
     async def test_cleanup_by_branch(
@@ -584,7 +585,7 @@ class TestWorktreeManager:
         assert not info.path.exists()
 
     async def test_cleanup_nonexistent_raises(self, worktree_mgr: WorktreeManager) -> None:
-        with pytest.raises(RuntimeError, match="No worktree"):
+        with pytest.raises(SubprocessError, match="No worktree"):
             await worktree_mgr.cleanup("bonfire/does-not-exist")
 
     async def test_cleanup_all(self, worktree_mgr: WorktreeManager, tmp_git_repo: Path) -> None:

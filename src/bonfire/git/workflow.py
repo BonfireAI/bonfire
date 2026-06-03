@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 BRANCH_PREFIX = "bonfire/"
 
 
+class BranchCollisionError(RuntimeError):
+    """Raised by ``create_branch`` when the target branch already exists.
+
+    A ``RuntimeError`` subclass so existing broad ``except RuntimeError``
+    handlers keep working, while callers that care can narrow to the typed
+    form and read the structured ``branch`` and ``stderr`` attributes instead
+    of substring-matching git's prose.
+    """
+
+    def __init__(self, *, branch: str, stderr: str) -> None:
+        super().__init__(f"Branch {branch!r} already exists.\n{stderr}")
+        self.branch = branch
+        self.stderr = stderr
+
+
 def _validate_ref_name(name: str) -> None:
     """Reject ref names that could be interpreted as git flags.
 
@@ -90,14 +105,18 @@ class GitWorkflow:
 
         if checkout:
             cmd: list[str] = ["checkout", "-b", name]
-            if base is not None:
-                cmd.append(base)
-            await _run_git(self._repo, *cmd)
         else:
             cmd = ["branch", name]
-            if base is not None:
-                cmd.append(base)
+        if base is not None:
+            cmd.append(base)
+
+        try:
             await _run_git(self._repo, *cmd)
+        except RuntimeError as exc:
+            stderr = str(exc)
+            if "already exists" in stderr:
+                raise BranchCollisionError(branch=name, stderr=stderr) from exc
+            raise
 
     async def checkout(self, name: str) -> None:
         """Switch to an existing branch.

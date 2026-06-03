@@ -243,6 +243,7 @@ class PipelineEngine:
                             sequence=0,
                             failed_stage="",
                             error_message=error_msg,
+                            total_cost_usd=total_cost,
                         )
                     )
                     return PipelineResult(
@@ -321,6 +322,7 @@ class PipelineEngine:
                         sequence=0,
                         failed_stage=sname,
                         error_message=error_msg,
+                        total_cost_usd=total_cost,
                     )
                 )
                 return (
@@ -386,6 +388,7 @@ class PipelineEngine:
                     sequence=0,
                     failed_stage=stage_name,
                     error_message=error_msg,
+                    total_cost_usd=total_cost,
                 )
             )
             return (
@@ -675,6 +678,11 @@ class PipelineEngine:
             session_id,
             initial_envelope,
         )
+        # Preserve the ORIGINAL bounce-target envelope (if any) under a
+        # ``<target>__bounced`` marker so downstream consumers that reference
+        # the pre-bounce output are not silently lost when the target re-runs.
+        if target_name in completed:
+            completed[f"{target_name}__bounced"] = completed[target_name]
         completed[target_name] = bounce_env
         total_cost += bounce_env.cost_usd
 
@@ -749,7 +757,15 @@ class PipelineEngine:
             )
             if bounced is not None:
                 stages_done[spec.name] = bounced
-                return None, bounced.cost_usd
+                # The bounce ran the TARGET stage (a real re-execution that
+                # burned tokens) before re-running the original. Both costs
+                # must reach the caller's running total / budget watchdog —
+                # returning only ``bounced.cost_usd`` (the retry) would drop
+                # the bounce-target's own spend. The re-executed target now
+                # lives in ``stages_done[target_name]``.
+                target_env = stages_done.get(spec.on_gate_failure)
+                target_cost = target_env.cost_usd if target_env is not None else 0.0
+                return None, bounced.cost_usd + target_cost
 
         # Gate failure -- halt pipeline.
         duration = time.monotonic() - start
@@ -759,6 +775,7 @@ class PipelineEngine:
                 sequence=0,
                 failed_stage=stage_name,
                 error_message=gate_failure.message,
+                total_cost_usd=total_cost,
             )
         )
         return (

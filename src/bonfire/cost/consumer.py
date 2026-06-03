@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from bonfire.cost.models import DEFAULT_LEDGER_PATH, DispatchRecord, PipelineRecord
-from bonfire.models.events import DispatchCompleted, PipelineCompleted
+from bonfire.models.events import (
+    DispatchCompleted,
+    DispatchFailed,
+    PipelineCompleted,
+    PipelineFailed,
+)
 
 if TYPE_CHECKING:
     from bonfire.events.bus import EventBus
@@ -25,9 +30,16 @@ class CostLedgerConsumer:
         self._ledger_path = Path(ledger_path)
 
     def register(self, bus: EventBus) -> None:
-        """Subscribe to cost-bearing events on the bus."""
+        """Subscribe to cost-bearing events on the bus.
+
+        Both the completed AND failed variants are recorded: a dispatch or
+        pipeline that fails still burned real tokens, so its spend must reach
+        the ledger or the rollup under-counts.
+        """
         bus.subscribe(DispatchCompleted, self._on_dispatch_completed)
+        bus.subscribe(DispatchFailed, self._on_dispatch_failed)
         bus.subscribe(PipelineCompleted, self._on_pipeline_completed)
+        bus.subscribe(PipelineFailed, self._on_pipeline_failed)
 
     async def _on_dispatch_completed(self, event: DispatchCompleted) -> None:
         record = DispatchRecord(
@@ -37,6 +49,17 @@ class CostLedgerConsumer:
             cost_usd=event.cost_usd,
             duration_seconds=event.duration_seconds,
             model=event.model,
+            status="completed",
+        )
+        self._append(record)
+
+    async def _on_dispatch_failed(self, event: DispatchFailed) -> None:
+        record = DispatchRecord(
+            timestamp=event.timestamp,
+            session_id=event.session_id,
+            agent_name=event.agent_name,
+            cost_usd=event.cost_usd,
+            status="failed",
         )
         self._append(record)
 
@@ -47,6 +70,16 @@ class CostLedgerConsumer:
             total_cost_usd=event.total_cost_usd,
             duration_seconds=event.duration_seconds,
             stages_completed=event.stages_completed,
+            status="completed",
+        )
+        self._append(record)
+
+    async def _on_pipeline_failed(self, event: PipelineFailed) -> None:
+        record = PipelineRecord(
+            timestamp=event.timestamp,
+            session_id=event.session_id,
+            total_cost_usd=event.total_cost_usd,
+            status="failed",
         )
         self._append(record)
 

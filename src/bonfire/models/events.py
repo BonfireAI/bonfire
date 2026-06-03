@@ -81,6 +81,7 @@ class PipelineFailed(BonfireEvent):
     event_type: Literal["pipeline.failed"] = "pipeline.failed"
     failed_stage: str
     error_message: str
+    total_cost_usd: float = 0.0
 
 
 class PipelinePaused(BonfireEvent):
@@ -144,6 +145,7 @@ class DispatchFailed(BonfireEvent):
     event_type: Literal["dispatch.failed"] = "dispatch.failed"
     agent_name: str
     error_message: str
+    cost_usd: float = 0.0
 
 
 class DispatchRetry(BonfireEvent):

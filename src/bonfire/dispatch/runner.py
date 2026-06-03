@@ -139,6 +139,7 @@ async def execute_with_retry(
                             sequence=0,
                             agent_name=agent_name,
                             error_message=last_error_msg,
+                            cost_usd=cumulative_cost,
                         ),
                     )
                     return DispatchResult(
@@ -174,6 +175,7 @@ async def execute_with_retry(
                         sequence=0,
                         agent_name=agent_name,
                         error_message=last_error_msg,
+                        cost_usd=cumulative_cost,
                     ),
                 )
                 return DispatchResult(
@@ -236,6 +238,7 @@ async def execute_with_retry(
             sequence=0,
             agent_name=agent_name,
             error_message=last_error_msg,
+            cost_usd=cumulative_cost,
         ),
     )
 

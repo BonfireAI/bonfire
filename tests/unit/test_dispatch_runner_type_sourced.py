@@ -131,9 +131,7 @@ class TestTerminalCodesFromTaxonomyNoRetry:
     async def test_terminal_code_returns_immediately(self, code: str):
         env = _envelope()
         backend = ScriptedBackend([_failed(code)])
-        result = await execute_with_retry(
-            backend, env, _options(), max_retries=5, retry_delay=0.0
-        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=5, retry_delay=0.0)
         assert result.envelope.status == TaskStatus.FAILED
         assert result.retries == 0, f"terminal code {code!r} must not be retried"
         assert backend.call_count == 1, f"terminal code {code!r} must make exactly one call"
@@ -142,9 +140,7 @@ class TestTerminalCodesFromTaxonomyNoRetry:
     async def test_terminal_code_preserves_error_detail(self, code: str):
         env = _envelope()
         backend = ScriptedBackend([_failed(code)])
-        result = await execute_with_retry(
-            backend, env, _options(), max_retries=3, retry_delay=0.0
-        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=3, retry_delay=0.0)
         assert result.envelope.error is not None
         assert result.envelope.error.error_type == code
 
@@ -162,9 +158,7 @@ class TestRetryableCodesFromTaxonomyDoRetry:
         env = _envelope()
         success = env.with_result("ok", cost_usd=0.01)
         backend = ScriptedBackend([_failed(code), success])
-        result = await execute_with_retry(
-            backend, env, _options(), max_retries=3, retry_delay=0.0
-        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=3, retry_delay=0.0)
         assert result.envelope.status == TaskStatus.COMPLETED
         assert result.retries == 1, f"retryable code {code!r} must be retried"
         assert backend.call_count == 2
@@ -174,9 +168,7 @@ class TestRetryableCodesFromTaxonomyDoRetry:
         env = _envelope()
         crash = _failed(code)
         backend = ScriptedBackend([crash, crash])
-        result = await execute_with_retry(
-            backend, env, _options(), max_retries=1, retry_delay=0.0
-        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=1, retry_delay=0.0)
         assert result.envelope.status == TaskStatus.FAILED
         assert result.retries == 1
 
@@ -194,9 +186,7 @@ class TestUnknownErrorTypeStaysRetryable:
         crash = _failed("SomeExoticErrorNotInTaxonomy")
         success = env.with_result("ok", cost_usd=0.01)
         backend = ScriptedBackend([crash, success])
-        result = await execute_with_retry(
-            backend, env, _options(), max_retries=3, retry_delay=0.0
-        )
+        result = await execute_with_retry(backend, env, _options(), max_retries=3, retry_delay=0.0)
         assert result.envelope.status == TaskStatus.COMPLETED
         assert result.retries == 1
 

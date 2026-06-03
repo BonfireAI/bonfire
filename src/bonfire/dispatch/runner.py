@@ -61,6 +61,7 @@ def _is_terminal_error_type(error_type: str) -> bool:
         return False
     return cls.is_terminal
 
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

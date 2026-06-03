@@ -162,9 +162,7 @@ class ClaudeSDKBackend:
                         # detail is self-describing (populated traceback). The
                         # error_type string equals the class name unchanged.
                         try:
-                            raise RateLimitError(
-                                "Rate limit exceeded — request rejected by API"
-                            )
+                            raise RateLimitError("Rate limit exceeded — request rejected by API")
                         except RateLimitError as exc:
                             return envelope.with_error(ErrorDetail.from_exception(exc))
                     elif status == "allowed_warning":
@@ -179,9 +177,7 @@ class ClaudeSDKBackend:
         if is_error:
             error_msgs = [str(e) for e in errors] if errors else []
             agent_message = (
-                "; ".join(error_msgs)
-                if error_msgs
-                else (final_text or "Agent reported error")
+                "; ".join(error_msgs) if error_msgs else (final_text or "Agent reported error")
             )
             # Source the failure from the typed vocabulary: raise the taxonomy
             # class and capture it via from_exception so the detail is

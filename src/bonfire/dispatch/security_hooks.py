@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import posixpath
 import re
 import unicodedata
 from typing import TYPE_CHECKING, Any
@@ -437,15 +438,118 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Sensitive Write/Edit path rules — BON-1032
+#
+# The shared DEFAULT_DENY_PATTERNS catalogue is Sage-locked (its rule-id set
+# and counts are frozen). These credential / system-state file rules are a
+# Write/Edit-specific concern — they only make sense against a canonicalized
+# file_path, never against a Bash command string — so they live HERE, beside
+# the canonicalizer, rather than in the locked catalogue.
+#
+# Each pattern anchors on path-SEGMENT boundaries: ``(?:^|/)`` before the
+# credential filename and a ``(?=/|$)`` lookahead after it. Run against the
+# canonicalized path (``//`` collapsed, ``..``/``.`` resolved), this makes
+# ``/home/u/.npmrc`` DENY while ``/home/u/xnpmrc`` (shares the suffix but not
+# at a boundary) stays ALLOWED. The rules are home-prefix agnostic — they fire
+# on ``/home/<u>/``, ``/Users/<u>/`` (macOS, mandatory per BON-1032), ``~/``
+# and ``$HOME/`` forms alike, because the segment anchor matches the trailing
+# credential filename wherever it sits. Scope is macOS + Linux ONLY; Windows
+# analogues are explicitly DEFERRED per the ticket.
+# ---------------------------------------------------------------------------
+
+
+_SENSITIVE_WRITE_PATH_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "W1.1-write-npmrc",
+        re.compile(r"(?:^|/)\.npmrc(?=/|$)"),
+        "Writing ~/.npmrc (npm auth token store) — denied.",
+    ),
+    (
+        "W1.2-write-pypirc",
+        re.compile(r"(?:^|/)\.pypirc(?=/|$)"),
+        "Writing ~/.pypirc (PyPI upload credentials) — denied.",
+    ),
+    (
+        "W1.3-write-gcloud-adc",
+        re.compile(r"(?:^|/)application_default_credentials\.json(?=/|$)"),
+        "Writing gcloud application_default_credentials.json — denied.",
+    ),
+    (
+        "W1.4-write-gcloud-legacy",
+        re.compile(r"(?:^|/)legacy_credentials/.+/adc\.json(?=/|$)"),
+        "Writing a gcloud legacy_credentials adc.json — denied.",
+    ),
+    (
+        "W1.5-write-git-credentials",
+        re.compile(r"(?:^|/)\.git-credentials(?=/|$)"),
+        "Writing ~/.git-credentials (git credential store) — denied.",
+    ),
+    (
+        "W1.6-write-gh-hosts",
+        re.compile(r"(?:^|/)\.config/gh/hosts\.yml(?=/|$)"),
+        "Writing ~/.config/gh/hosts.yml (gh CLI token file) — denied.",
+    ),
+    (
+        "W1.7-write-bash-history",
+        re.compile(r"(?:^|/)\.bash_history(?=/|$)"),
+        "Writing ~/.bash_history (shell history) — denied.",
+    ),
+    (
+        "W1.8-write-zsh-history",
+        re.compile(r"(?:^|/)\.zsh_history(?=/|$)"),
+        "Writing ~/.zsh_history (shell history) — denied.",
+    ),
+)
+
+
+def _match_sensitive_write_path(path: str) -> tuple[str, str] | None:
+    """Return (rule_id, message) for the first sensitive-path rule that hits.
+
+    ``path`` is the already-canonicalized Write/Edit file_path. Returns
+    ``None`` when nothing matches.
+    """
+    for rule_id, pattern, message in _SENSITIVE_WRITE_PATH_RULES:
+        if pattern.search(path):
+            return rule_id, message
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Stage 3 — prefilter + extract
 # ---------------------------------------------------------------------------
+
+
+def _canonicalize_path(file_path: str) -> str:
+    """Canonicalize a Write/Edit ``file_path`` before the deny rules run.
+
+    Collapses repeated separators (``//``, ``///``), resolves relative
+    traversal (``../`` and ``./``), and strips trailing separators — so a
+    credential path dressed up with segment juggling
+    (``/home/u/.config/gh/../gh/hosts.yml``) canonicalizes to its true target
+    (``/home/u/.config/gh/hosts.yml``) and the segment-anchored C8 rules fire.
+
+    Uses ``posixpath`` deliberately (NOT ``os.path``): BON-1032 scopes this to
+    macOS + Linux only, and ``posixpath`` keeps ``/`` separators on every host
+    so the rule regexes match deterministically regardless of where the hook
+    runs. The ``~`` and ``$HOME`` prefixes have no separators of their own, so
+    normalization leaves them intact and the segment anchor still matches the
+    credential filename that follows.
+
+    Returns the path unchanged when it is empty or has no normalizable
+    structure; ``posixpath.normpath`` never raises on a string input.
+    """
+    if not file_path:
+        return file_path
+    return posixpath.normpath(file_path)
 
 
 def _extract_command(tool_name: str, tool_input: Any) -> str:
     """Extract the string payload to scan for a given tool.
 
     Bash → ``command``. Write/Edit → ``file_path`` (and optionally
-    ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12).
+    ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12). The
+    Write/Edit ``file_path`` is canonicalized (BON-1032) so separator and
+    traversal evasions cannot slip past the segment-anchored deny rules.
     """
     if not isinstance(tool_input, dict):
         return ""
@@ -457,11 +561,13 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
         return ""
     if isinstance(cmd, bytes):
         try:
-            return cmd.decode("utf-8", errors="replace")
+            cmd = cmd.decode("utf-8", errors="replace")
         except Exception:
             return ""
     if not isinstance(cmd, str):
         return ""
+    if tool_name in ("Write", "Edit"):
+        return _canonicalize_path(cmd)
     return cmd
 
 
@@ -627,6 +733,29 @@ def build_preexec_hook(
                         ),
                     )
                 return _deny_envelope(reason)
+
+            # Sensitive Write/Edit path check (BON-1032). ``command`` is the
+            # canonicalized file_path for Write/Edit; match the credential /
+            # system-state rules directly, BEFORE the Bash-oriented keyword
+            # prefilter (a credential path carries none of those verbs, so
+            # the prefilter would otherwise wrongly skip it).
+            if tool_name in ("Write", "Edit"):
+                write_hit = _match_sensitive_write_path(command)
+                if write_hit is not None:
+                    rule_id, message = write_hit
+                    if emit:
+                        await _safe_emit(
+                            bus,
+                            SecurityDenied(
+                                session_id=sid,
+                                sequence=0,
+                                tool_name=tool_name,
+                                reason=message,
+                                pattern_id=rule_id,
+                                agent_name=aname,
+                            ),
+                        )
+                    return _deny_envelope(message)
 
             # Prefilter skips the expensive regex pool unless the command
             # carries a "dangerous-looking" token OR the user supplied

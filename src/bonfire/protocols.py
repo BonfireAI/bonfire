@@ -23,7 +23,16 @@ Design constraints
 ~~~~~~~~~~~~~~~~~~
 *   All protocols are ``@runtime_checkable``.
 *   No ABCs.  ``typing.Protocol`` gives structural subtyping.
-*   Only ``bonfire.models`` may be imported (via TYPE_CHECKING).
+*   Cross-package model imports (``bonfire.models``) stay under
+    ``TYPE_CHECKING``, so importing this module does not drag the models
+    package in at runtime.
+*   One acknowledged exception to that layering rule: ``SecurityHooksConfig``
+    is imported from ``bonfire.dispatch.security_hooks`` at module (runtime)
+    scope, NOT under ``TYPE_CHECKING``. Pydantic needs the concrete runtime
+    type to validate the ``DispatchOptions.security_hooks`` field, so the
+    import cannot be deferred. This is intentional and means extension authors
+    who import ``bonfire.protocols`` also pull in ``bonfire.dispatch``; the
+    "only ``bonfire.models``" claim is qualified by this single carve-out.
 """
 
 from __future__ import annotations

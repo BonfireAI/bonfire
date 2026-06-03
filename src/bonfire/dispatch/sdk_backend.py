@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from bonfire.dispatch._cost import safe_cost_from_attr
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
+from bonfire.errors import AgentError, RateLimitError
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
@@ -156,12 +157,16 @@ class ClaudeSDKBackend:
                 elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
                     status = getattr(msg, "status", "")
                     if status == "rejected":
-                        return envelope.with_error(
-                            ErrorDetail(
-                                error_type="RateLimitError",
-                                message="Rate limit exceeded — request rejected by API",
+                        # Source the failure from the typed vocabulary: raise the
+                        # taxonomy class and capture it via from_exception so the
+                        # detail is self-describing (populated traceback). The
+                        # error_type string equals the class name unchanged.
+                        try:
+                            raise RateLimitError(
+                                "Rate limit exceeded — request rejected by API"
                             )
-                        )
+                        except RateLimitError as exc:
+                            return envelope.with_error(ErrorDetail.from_exception(exc))
                     elif status == "allowed_warning":
                         logger.warning("Rate limit warning: approaching limit")
 
@@ -173,16 +178,19 @@ class ClaudeSDKBackend:
         # Check is_error flag from ResultMessage
         if is_error:
             error_msgs = [str(e) for e in errors] if errors else []
-            return envelope.with_error(
-                ErrorDetail(
-                    error_type="AgentError",
-                    message=(
-                        "; ".join(error_msgs)
-                        if error_msgs
-                        else (final_text or "Agent reported error")
-                    ),
-                )
+            agent_message = (
+                "; ".join(error_msgs)
+                if error_msgs
+                else (final_text or "Agent reported error")
             )
+            # Source the failure from the typed vocabulary: raise the taxonomy
+            # class and capture it via from_exception so the detail is
+            # self-describing (populated traceback). The error_type string
+            # equals the class name unchanged.
+            try:
+                raise AgentError(agent_message)
+            except AgentError as exc:
+                return envelope.with_error(ErrorDetail.from_exception(exc))
 
         # Success path — set duration + session_id metadata then enrich with result.
         enriched = envelope.with_result(result=final_text, cost_usd=cost_usd)

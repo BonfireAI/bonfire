@@ -16,12 +16,12 @@ try:
         GateContext,
         GateResult,
         StageSpec,
-        WorkflowPlan,
+        WorkflowSpec,
         WorkflowType,
     )
 except ImportError as _exc:  # pragma: no cover
     _IMPORT_ERROR: Exception | None = _exc
-    GateContext = GateResult = StageSpec = WorkflowPlan = WorkflowType = None  # type: ignore[assignment,misc]
+    GateContext = GateResult = StageSpec = WorkflowSpec = WorkflowType = None  # type: ignore[assignment,misc]
 else:
     _IMPORT_ERROR = None
 
@@ -31,6 +31,28 @@ def _require_module():
     """Fail every test with the import error while bonfire.models.plan is missing."""
     if _IMPORT_ERROR is not None:
         pytest.fail(f"bonfire.models.plan not importable: {_IMPORT_ERROR}")
+
+
+# ---------------------------------------------------------------------------
+# ADR-001 class rename: the plan model -> WorkflowSpec ("Spec" implies a frozen
+# contract). Alpha: no back-compat alias — the old name must be fully gone.
+# The deprecated name is built dynamically so this file stays clean under
+# the rename's own verification gate (no literal old class name in any .py).
+# ---------------------------------------------------------------------------
+
+_DEPRECATED_PLAN_NAME = "Workflow" + "Plan"
+
+
+class TestWorkflowSpecRename:
+    def test_workflow_spec_is_the_public_class(self):
+        from bonfire.models.plan import WorkflowSpec
+
+        assert WorkflowSpec.__name__ == "WorkflowSpec"
+
+    def test_no_deprecated_plan_alias(self):
+        import bonfire.models.plan as plan_module
+
+        assert not hasattr(plan_module, _DEPRECATED_PLAN_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -205,13 +227,13 @@ class TestStageSpec:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — happy path
+# WorkflowSpec — happy path
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanConstruction:
+class TestWorkflowSpecConstruction:
     def test_single_stage(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="test",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="build", agent_name="knight")],
@@ -220,7 +242,7 @@ class TestWorkflowPlanConstruction:
         assert len(plan.stages) == 1
 
     def test_linear_three_stages(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="test",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -233,7 +255,7 @@ class TestWorkflowPlanConstruction:
 
     def test_diamond_dependency(self):
         """A -> B, A -> C, B -> D, C -> D is a valid DAG."""
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="diamond",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -246,7 +268,7 @@ class TestWorkflowPlanConstruction:
         assert len(plan.stages) == 4
 
     def test_default_budget(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="k")],
@@ -254,7 +276,7 @@ class TestWorkflowPlanConstruction:
         assert plan.budget_usd == 10.0
 
     def test_custom_budget(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="k")],
@@ -264,7 +286,7 @@ class TestWorkflowPlanConstruction:
 
     def test_task_alias_accepted(self):
         """`task` is an input alias for `name`."""
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             task="aliased-task",  # type: ignore[call-arg]
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="k")],
@@ -272,7 +294,7 @@ class TestWorkflowPlanConstruction:
         assert plan.name == "aliased-task"
 
     def test_frozen(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="k")],
@@ -282,43 +304,43 @@ class TestWorkflowPlanConstruction:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — empty stages
+# WorkflowSpec — empty stages
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanEmptyStages:
+class TestWorkflowSpecEmptyStages:
     def test_empty_rejected_for_standard(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(name="t", workflow_type=WorkflowType.STANDARD, stages=[])
+            WorkflowSpec(name="t", workflow_type=WorkflowType.STANDARD, stages=[])
         assert "empty" in str(exc.value).lower() or "stages" in str(exc.value).lower()
 
     def test_empty_rejected_for_research(self):
         with pytest.raises(ValidationError):
-            WorkflowPlan(name="t", workflow_type=WorkflowType.RESEARCH, stages=[])
+            WorkflowSpec(name="t", workflow_type=WorkflowType.RESEARCH, stages=[])
 
     def test_empty_rejected_for_debug(self):
         with pytest.raises(ValidationError):
-            WorkflowPlan(name="t", workflow_type=WorkflowType.DEBUG, stages=[])
+            WorkflowSpec(name="t", workflow_type=WorkflowType.DEBUG, stages=[])
 
     def test_empty_rejected_for_custom(self):
         with pytest.raises(ValidationError):
-            WorkflowPlan(name="t", workflow_type=WorkflowType.CUSTOM, stages=[])
+            WorkflowSpec(name="t", workflow_type=WorkflowType.CUSTOM, stages=[])
 
     def test_empty_allowed_for_single(self):
         """SINGLE workflow may have an empty stages list."""
-        plan = WorkflowPlan(name="t", workflow_type=WorkflowType.SINGLE, stages=[])
+        plan = WorkflowSpec(name="t", workflow_type=WorkflowType.SINGLE, stages=[])
         assert plan.stages == []
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — duplicate names
+# WorkflowSpec — duplicate names
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanDuplicateNames:
+class TestWorkflowSpecDuplicateNames:
     def test_duplicate_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -331,7 +353,7 @@ class TestWorkflowPlanDuplicateNames:
 
     def test_duplicate_error_names_the_duplicate(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -344,14 +366,14 @@ class TestWorkflowPlanDuplicateNames:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — dangling references
+# WorkflowSpec — dangling references
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanDanglingReferences:
+class TestWorkflowSpecDanglingReferences:
     def test_depends_on_unknown_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[StageSpec(name="a", agent_name="k", depends_on=["ghost"])],
@@ -360,7 +382,7 @@ class TestWorkflowPlanDanglingReferences:
 
     def test_on_gate_failure_unknown_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[StageSpec(name="a", agent_name="k", on_gate_failure="ghost")],
@@ -369,7 +391,7 @@ class TestWorkflowPlanDanglingReferences:
 
     def test_dangling_error_message_contains_name(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -382,14 +404,14 @@ class TestWorkflowPlanDanglingReferences:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — self-bounce
+# WorkflowSpec — self-bounce
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanSelfBounce:
+class TestWorkflowSpecSelfBounce:
     def test_self_bounce_on_depends_on_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[StageSpec(name="a", agent_name="k", depends_on=["a"])],
@@ -399,7 +421,7 @@ class TestWorkflowPlanSelfBounce:
 
     def test_self_bounce_on_gate_failure_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[StageSpec(name="a", agent_name="k", on_gate_failure="a")],
@@ -409,14 +431,14 @@ class TestWorkflowPlanSelfBounce:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — cycle detection
+# WorkflowSpec — cycle detection
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanCycles:
+class TestWorkflowSpecCycles:
     def test_two_node_cycle_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -429,7 +451,7 @@ class TestWorkflowPlanCycles:
 
     def test_two_node_cycle_error_includes_path(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -442,7 +464,7 @@ class TestWorkflowPlanCycles:
 
     def test_two_node_cycle_path_names_both_nodes(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -455,7 +477,7 @@ class TestWorkflowPlanCycles:
 
     def test_three_node_cycle_rejected(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -469,7 +491,7 @@ class TestWorkflowPlanCycles:
 
     def test_three_node_cycle_error_includes_path(self):
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -486,7 +508,7 @@ class TestWorkflowPlanCycles:
     def test_cycle_via_on_gate_failure(self):
         """on_gate_failure counts in the dependency graph for cycle detection."""
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -499,10 +521,10 @@ class TestWorkflowPlanCycles:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — cycle path format (R-001 regression)
+# WorkflowSpec — cycle path format (R-001 regression)
 # ---------------------------------------------------------------------------
 #
-# The existing TestWorkflowPlanCycles suite asserts name-membership and
+# The existing TestWorkflowSpecCycles suite asserts name-membership and
 # arrow-presence, but not the EXACT path-format contract. R-001 discovered
 # that _dfs() produces strings with a duplicate terminal node
 # ("a → b → b" for a two-node cycle) instead of closing on the origin
@@ -525,13 +547,13 @@ def _extract_cycle_path(msg: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-class TestWorkflowPlanCyclePathFormat:
+class TestWorkflowSpecCyclePathFormat:
     """R-001 regression: cycle path must close on origin (first == last)."""
 
     def test_two_node_cycle_path_closes_on_origin(self):
         """For a 2-node cycle, path must form 'X → Y → X' (not 'X → Y → Y')."""
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -553,7 +575,7 @@ class TestWorkflowPlanCyclePathFormat:
     def test_three_node_cycle_path_closes_on_origin(self):
         """For a 3-node cycle, path must form 'X → Y → Z → X' (4 tokens)."""
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -577,7 +599,7 @@ class TestWorkflowPlanCyclePathFormat:
     def test_cycle_path_has_no_duplicate_terminal(self):
         """Explicit contract: the last two tokens are NEVER equal."""
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -595,7 +617,7 @@ class TestWorkflowPlanCyclePathFormat:
     def test_cycle_via_on_gate_failure_path_closes_on_origin(self):
         """Format contract also holds for on_gate_failure cycles."""
         with pytest.raises(ValidationError) as exc:
-            WorkflowPlan(
+            WorkflowSpec(
                 name="t",
                 workflow_type=WorkflowType.STANDARD,
                 stages=[
@@ -611,13 +633,13 @@ class TestWorkflowPlanCyclePathFormat:
 
 
 # ---------------------------------------------------------------------------
-# WorkflowPlan — describe()
+# WorkflowSpec — describe()
 # ---------------------------------------------------------------------------
 
 
-class TestWorkflowPlanDescribe:
+class TestWorkflowSpecDescribe:
     def test_describe_returns_string(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="test",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="knight")],
@@ -626,7 +648,7 @@ class TestWorkflowPlanDescribe:
         assert isinstance(out, str)
 
     def test_describe_includes_name(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="unique-plan-name",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="a", agent_name="knight")],
@@ -634,7 +656,7 @@ class TestWorkflowPlanDescribe:
         assert "unique-plan-name" in plan.describe()
 
     def test_describe_includes_workflow_type(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.RESEARCH,
             stages=[StageSpec(name="a", agent_name="knight")],
@@ -642,7 +664,7 @@ class TestWorkflowPlanDescribe:
         assert "research" in plan.describe()
 
     def test_describe_includes_stage_names(self):
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[

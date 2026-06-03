@@ -63,7 +63,7 @@ from bonfire.models.events import (
     StageFailed,
     StageStarted,
 )
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -150,8 +150,8 @@ def _stage(
     )
 
 
-def _plan(*stages: StageSpec, budget: float = 10.0) -> WorkflowPlan:
-    return WorkflowPlan(
+def _plan(*stages: StageSpec, budget: float = 10.0) -> WorkflowSpec:
+    return WorkflowSpec(
         name="executor-test",
         workflow_type=WorkflowType.STANDARD,
         stages=list(stages),

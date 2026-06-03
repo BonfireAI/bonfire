@@ -16,7 +16,7 @@ Sub-modules (imported by path — e.g.
       the pipeline plus its ``TaskStatus`` enum.
     * :mod:`bonfire.models.events` — ``BonfireEvent`` base + the typed
       event hierarchy emitted on the bus.
-    * :mod:`bonfire.models.plan` — ``WorkflowPlan``, ``StageSpec``,
+    * :mod:`bonfire.models.plan` — ``WorkflowSpec``, ``StageSpec``,
       ``GateContext`` / ``GateResult`` and related plan-level types.
 
 No ``__all__`` is defined here because the package deliberately does

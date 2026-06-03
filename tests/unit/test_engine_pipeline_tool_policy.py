@@ -35,7 +35,7 @@ from bonfire.dispatch.result import DispatchResult
 from bonfire.events.bus import EventBus
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import Envelope, ErrorDetail
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -62,8 +62,8 @@ class _MockBackend:
         return True
 
 
-def _single_plan(*, role: str = "", agent_name: str = "s1") -> WorkflowPlan:
-    return WorkflowPlan(
+def _single_plan(*, role: str = "", agent_name: str = "s1") -> WorkflowSpec:
+    return WorkflowSpec(
         name="pipeline-tool-policy-test",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name="s1", agent_name=agent_name, role=role)],
@@ -395,7 +395,7 @@ class TestMultiStageRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="multi",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -431,7 +431,7 @@ class TestMultiStageRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="two-warriors",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -468,7 +468,7 @@ class TestParallelGroupRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="parallel-roles",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -559,7 +559,7 @@ class TestPipelineHandlerRouteBypass:
             ) -> Envelope:
                 return envelope.with_result("handled", cost_usd=0.0)
 
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="handler-plan",
             workflow_type=WorkflowType.STANDARD,
             stages=[

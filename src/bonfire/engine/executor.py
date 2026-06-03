@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from bonfire.engine.advisor import VaultAdvisor
     from bonfire.events.bus import EventBus
     from bonfire.models.config import BonfireSettings, PipelineConfig
-    from bonfire.models.plan import StageSpec, WorkflowPlan
+    from bonfire.models.plan import StageSpec, WorkflowSpec
     from bonfire.protocols import StageHandler
 
 
@@ -101,7 +101,7 @@ class StageExecutor:
         stage: StageSpec,
         prior_results: dict[str, Any],
         total_cost: float,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
     ) -> Envelope:
         """Execute a single stage with iteration support. Never raises (C19)."""
@@ -125,7 +125,7 @@ class StageExecutor:
         stages: list[StageSpec],
         prior_results: dict[str, Any],
         total_cost: float,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
     ) -> dict[str, Envelope]:
         """Run stages concurrently via TaskGroup, returning name -> Envelope."""
@@ -158,7 +158,7 @@ class StageExecutor:
         stage: StageSpec,
         prior_results: dict[str, Any],
         total_cost: float,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
     ) -> Envelope:
         """Core loop: emit start, iterate, emit completion or failure."""

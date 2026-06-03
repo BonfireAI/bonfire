@@ -6,7 +6,7 @@ spike) plus a named WorkflowRegistry. The private ``project_strategist``
 factory is deferred — it depends on the Strategist handler, which is not
 part of this transfer.
 
-Every factory returns a frozen, DAG-validated WorkflowPlan. The package
+Every factory returns a frozen, DAG-validated WorkflowSpec. The package
 depends on ``bonfire.models`` alone — no engine, dispatch, handler, event,
 or CLI imports (constraint C9).
 
@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 import pytest
 from pydantic import ValidationError
 
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -73,23 +73,23 @@ _PUBLIC_FACTORIES: list[tuple[str, str]] = [
 ]
 
 
-def _call(factory_name: str) -> WorkflowPlan:
+def _call(factory_name: str) -> WorkflowSpec:
     """Resolve and call a public factory by name through the package surface."""
     import bonfire.workflow as pkg
 
-    factory: Callable[..., WorkflowPlan] = getattr(pkg, factory_name)
+    factory: Callable[..., WorkflowSpec] = getattr(pkg, factory_name)
     return factory()
 
 
-def _dummy_plan(name: str = "dummy") -> WorkflowPlan:
-    return WorkflowPlan(
+def _dummy_plan(name: str = "dummy") -> WorkflowSpec:
+    return WorkflowSpec(
         name=name,
         workflow_type=WorkflowType.CUSTOM,
         stages=[StageSpec(name="only", agent_name="only", role="scout")],
     )
 
 
-def _dummy_factory() -> WorkflowPlan:
+def _dummy_factory() -> WorkflowSpec:
     return _dummy_plan()
 
 
@@ -168,7 +168,7 @@ class TestPackageSurface:
 
 
 class TestFactoryInvariants:
-    """Every factory produces a valid, frozen, DAG-clean WorkflowPlan.
+    """Every factory produces a valid, frozen, DAG-clean WorkflowSpec.
 
     Each test iterates across every public factory — one assertion per
     invariant, N factories deep. A single failure pinpoints both the
@@ -178,7 +178,7 @@ class TestFactoryInvariants:
     def test_returns_workflow_plan(self) -> None:
         for factory_name, _ in _PUBLIC_FACTORIES:
             plan = _call(factory_name)
-            assert isinstance(plan, WorkflowPlan), f"{factory_name} did not return a WorkflowPlan"
+            assert isinstance(plan, WorkflowSpec), f"{factory_name} did not return a WorkflowSpec"
 
     def test_plan_is_frozen(self) -> None:
         for factory_name, _ in _PUBLIC_FACTORIES:
@@ -279,7 +279,7 @@ class TestFactoryInvariants:
 
 
 class TestStandardBuild:
-    """standard_build() returns a valid 9-stage STANDARD WorkflowPlan.
+    """standard_build() returns a valid 9-stage STANDARD WorkflowSpec.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
     bard -> wizard -> merge_preflight -> steward.
@@ -292,19 +292,19 @@ class TestStandardBuild:
     """
 
     @pytest.fixture()
-    def plan(self) -> WorkflowPlan:
+    def plan(self) -> WorkflowSpec:
         return _call("standard_build")
 
-    def test_returns_workflow_plan(self, plan: WorkflowPlan) -> None:
-        assert isinstance(plan, WorkflowPlan)
+    def test_returns_workflow_plan(self, plan: WorkflowSpec) -> None:
+        assert isinstance(plan, WorkflowSpec)
 
-    def test_workflow_type_is_standard(self, plan: WorkflowPlan) -> None:
+    def test_workflow_type_is_standard(self, plan: WorkflowSpec) -> None:
         assert plan.workflow_type == WorkflowType.STANDARD
 
-    def test_has_nine_stages(self, plan: WorkflowPlan) -> None:
+    def test_has_nine_stages(self, plan: WorkflowSpec) -> None:
         assert len(plan.stages) == 9
 
-    def test_stage_names_in_order(self, plan: WorkflowPlan) -> None:
+    def test_stage_names_in_order(self, plan: WorkflowSpec) -> None:
         names = [s.name for s in plan.stages]
         assert names == [
             "scout",
@@ -318,143 +318,143 @@ class TestStandardBuild:
             "steward",
         ]
 
-    def test_scout_role(self, plan: WorkflowPlan) -> None:
+    def test_scout_role(self, plan: WorkflowSpec) -> None:
         scout = plan.stages[0]
         assert scout.role == "scout"
 
-    def test_knight_role(self, plan: WorkflowPlan) -> None:
+    def test_knight_role(self, plan: WorkflowSpec) -> None:
         knight = plan.stages[1]
         assert knight.role == "knight"
 
-    def test_knight_has_completion_gate(self, plan: WorkflowPlan) -> None:
+    def test_knight_has_completion_gate(self, plan: WorkflowSpec) -> None:
         knight = plan.stages[1]
         assert "completion" in knight.gates
 
-    def test_warrior_role(self, plan: WorkflowPlan) -> None:
+    def test_warrior_role(self, plan: WorkflowSpec) -> None:
         warrior = plan.stages[2]
         assert warrior.role == "warrior"
 
-    def test_warrior_has_test_pass_gate(self, plan: WorkflowPlan) -> None:
+    def test_warrior_has_test_pass_gate(self, plan: WorkflowSpec) -> None:
         warrior = plan.stages[2]
         assert "test_pass" in warrior.gates
 
-    def test_warrior_max_iterations_is_three(self, plan: WorkflowPlan) -> None:
+    def test_warrior_max_iterations_is_three(self, plan: WorkflowSpec) -> None:
         warrior = plan.stages[2]
         assert warrior.max_iterations == 3
 
-    def test_warrior_no_on_gate_failure(self, plan: WorkflowPlan) -> None:
+    def test_warrior_no_on_gate_failure(self, plan: WorkflowSpec) -> None:
         """Regression guard: warrior must NOT carry on_gate_failure to itself."""
         warrior = plan.stages[2]
         assert warrior.on_gate_failure is None
 
-    def test_warrior_depends_on_knight(self, plan: WorkflowPlan) -> None:
+    def test_warrior_depends_on_knight(self, plan: WorkflowSpec) -> None:
         warrior = plan.stages[2]
         assert "knight" in warrior.depends_on
 
-    def test_prover_role(self, plan: WorkflowPlan) -> None:
+    def test_prover_role(self, plan: WorkflowSpec) -> None:
         prover = plan.stages[3]
         assert prover.role == "prover"
 
-    def test_prover_has_verification_gate(self, plan: WorkflowPlan) -> None:
+    def test_prover_has_verification_gate(self, plan: WorkflowSpec) -> None:
         prover = plan.stages[3]
         assert "verification" in prover.gates
 
-    def test_prover_bounces_to_warrior(self, plan: WorkflowPlan) -> None:
+    def test_prover_bounces_to_warrior(self, plan: WorkflowSpec) -> None:
         prover = plan.stages[3]
         assert prover.on_gate_failure == "warrior"
 
-    def test_prover_depends_on_warrior(self, plan: WorkflowPlan) -> None:
+    def test_prover_depends_on_warrior(self, plan: WorkflowSpec) -> None:
         prover = plan.stages[3]
         assert "warrior" in prover.depends_on
 
-    def test_sage_correction_bounce_name(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_name(self, plan: WorkflowSpec) -> None:
         stage = plan.stages[4]
         assert stage.name == "sage_correction_bounce"
 
-    def test_sage_correction_bounce_role(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_role(self, plan: WorkflowSpec) -> None:
         """The synthesizer-correction stage carries the synthesizer role."""
         stage = plan.stages[4]
         assert stage.role == "synthesizer"
 
-    def test_sage_correction_bounce_handler_name(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_handler_name(self, plan: WorkflowSpec) -> None:
         stage = plan.stages[4]
         assert stage.handler_name == "sage_correction_bounce"
 
-    def test_sage_correction_bounce_has_resolved_gate(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_has_resolved_gate(self, plan: WorkflowSpec) -> None:
         stage = plan.stages[4]
         assert "sage_correction_resolved" in stage.gates
 
-    def test_sage_correction_bounce_bounces_to_warrior(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_bounces_to_warrior(self, plan: WorkflowSpec) -> None:
         """On gate failure the synthesizer-correction stage bounces to
         Warrior, mirroring the prover bounce pattern."""
         stage = plan.stages[4]
         assert stage.on_gate_failure == "warrior"
 
-    def test_sage_correction_bounce_depends_on_prover(self, plan: WorkflowPlan) -> None:
+    def test_sage_correction_bounce_depends_on_prover(self, plan: WorkflowSpec) -> None:
         stage = plan.stages[4]
         assert "prover" in stage.depends_on
 
-    def test_bard_role(self, plan: WorkflowPlan) -> None:
+    def test_bard_role(self, plan: WorkflowSpec) -> None:
         bard = plan.stages[5]
         assert bard.role == "bard"
 
-    def test_bard_handler_name(self, plan: WorkflowPlan) -> None:
+    def test_bard_handler_name(self, plan: WorkflowSpec) -> None:
         bard = plan.stages[5]
         assert bard.handler_name == "bard"
 
-    def test_bard_depends_on_sage_correction_bounce(self, plan: WorkflowPlan) -> None:
+    def test_bard_depends_on_sage_correction_bounce(self, plan: WorkflowSpec) -> None:
         """Bard's upstream dependency moves from prover to the
         synthesizer-correction stage once the latter is wired."""
         bard = plan.stages[5]
         assert "sage_correction_bounce" in bard.depends_on
         assert "prover" not in bard.depends_on
 
-    def test_wizard_role(self, plan: WorkflowPlan) -> None:
+    def test_wizard_role(self, plan: WorkflowSpec) -> None:
         wizard = plan.stages[6]
         assert wizard.role == "wizard"
 
-    def test_wizard_handler_name(self, plan: WorkflowPlan) -> None:
+    def test_wizard_handler_name(self, plan: WorkflowSpec) -> None:
         wizard = plan.stages[6]
         assert wizard.handler_name == "wizard"
 
-    def test_wizard_has_review_approval_gate(self, plan: WorkflowPlan) -> None:
+    def test_wizard_has_review_approval_gate(self, plan: WorkflowSpec) -> None:
         wizard = plan.stages[6]
         assert "review_approval" in wizard.gates
 
-    def test_wizard_bounces_to_warrior(self, plan: WorkflowPlan) -> None:
+    def test_wizard_bounces_to_warrior(self, plan: WorkflowSpec) -> None:
         wizard = plan.stages[6]
         assert wizard.on_gate_failure == "warrior"
 
-    def test_wizard_depends_on_bard(self, plan: WorkflowPlan) -> None:
+    def test_wizard_depends_on_bard(self, plan: WorkflowSpec) -> None:
         wizard = plan.stages[6]
         assert "bard" in wizard.depends_on
 
-    def test_merge_preflight_role(self, plan: WorkflowPlan) -> None:
+    def test_merge_preflight_role(self, plan: WorkflowSpec) -> None:
         preflight = plan.stages[7]
         assert preflight.role == "verifier"
 
-    def test_merge_preflight_handler_name(self, plan: WorkflowPlan) -> None:
+    def test_merge_preflight_handler_name(self, plan: WorkflowSpec) -> None:
         preflight = plan.stages[7]
         assert preflight.handler_name == "merge_preflight"
 
-    def test_merge_preflight_depends_on_wizard(self, plan: WorkflowPlan) -> None:
+    def test_merge_preflight_depends_on_wizard(self, plan: WorkflowSpec) -> None:
         preflight = plan.stages[7]
         assert "wizard" in preflight.depends_on
 
-    def test_steward_role(self, plan: WorkflowPlan) -> None:
+    def test_steward_role(self, plan: WorkflowSpec) -> None:
         steward = plan.stages[8]
         assert steward.role == "steward"
 
-    def test_steward_handler_name(self, plan: WorkflowPlan) -> None:
+    def test_steward_handler_name(self, plan: WorkflowSpec) -> None:
         steward = plan.stages[8]
         assert steward.handler_name == "steward"
 
-    def test_steward_depends_on_merge_preflight(self, plan: WorkflowPlan) -> None:
+    def test_steward_depends_on_merge_preflight(self, plan: WorkflowSpec) -> None:
         """steward.depends_on stays rewired to ['merge_preflight']."""
         steward = plan.stages[8]
         assert "merge_preflight" in steward.depends_on
 
-    def test_plan_is_frozen(self, plan: WorkflowPlan) -> None:
+    def test_plan_is_frozen(self, plan: WorkflowSpec) -> None:
         with pytest.raises(ValidationError):
             plan.name = "mutated"  # type: ignore[misc]
 
@@ -463,7 +463,7 @@ class TestStandardBuild:
         plan = _call("standard_build")
         assert plan is not None
 
-    def test_no_parallel_groups(self, plan: WorkflowPlan) -> None:
+    def test_no_parallel_groups(self, plan: WorkflowSpec) -> None:
         """standard_build is a linear pipeline — no stages run in parallel."""
         groups = {s.parallel_group for s in plan.stages if s.parallel_group is not None}
         assert groups == set()
@@ -478,32 +478,32 @@ class TestDebug:
     """debug() returns a minimal scout -> warrior plan with no gates."""
 
     @pytest.fixture()
-    def plan(self) -> WorkflowPlan:
+    def plan(self) -> WorkflowSpec:
         return _call("debug")
 
-    def test_returns_workflow_plan(self, plan: WorkflowPlan) -> None:
-        assert isinstance(plan, WorkflowPlan)
+    def test_returns_workflow_plan(self, plan: WorkflowSpec) -> None:
+        assert isinstance(plan, WorkflowSpec)
 
-    def test_workflow_type_is_debug(self, plan: WorkflowPlan) -> None:
+    def test_workflow_type_is_debug(self, plan: WorkflowSpec) -> None:
         assert plan.workflow_type == WorkflowType.DEBUG
 
-    def test_has_two_stages(self, plan: WorkflowPlan) -> None:
+    def test_has_two_stages(self, plan: WorkflowSpec) -> None:
         assert len(plan.stages) == 2
 
-    def test_stage_names(self, plan: WorkflowPlan) -> None:
+    def test_stage_names(self, plan: WorkflowSpec) -> None:
         names = [s.name for s in plan.stages]
         assert "scout" in names
         assert "warrior" in names
 
-    def test_no_gates(self, plan: WorkflowPlan) -> None:
+    def test_no_gates(self, plan: WorkflowSpec) -> None:
         for stage in plan.stages:
             assert stage.gates == []
 
-    def test_no_bounce_back(self, plan: WorkflowPlan) -> None:
+    def test_no_bounce_back(self, plan: WorkflowSpec) -> None:
         for stage in plan.stages:
             assert stage.on_gate_failure is None
 
-    def test_warrior_depends_on_scout(self, plan: WorkflowPlan) -> None:
+    def test_warrior_depends_on_scout(self, plan: WorkflowSpec) -> None:
         warrior = next(s for s in plan.stages if s.role == "warrior")
         scout = next(s for s in plan.stages if s.role == "scout")
         assert scout.name in warrior.depends_on
@@ -518,30 +518,30 @@ class TestDualScout:
     """dual_scout() returns a research plan with 2 scouts and a sage."""
 
     @pytest.fixture()
-    def plan(self) -> WorkflowPlan:
+    def plan(self) -> WorkflowSpec:
         return _call("dual_scout")
 
-    def test_returns_workflow_plan(self, plan: WorkflowPlan) -> None:
-        assert isinstance(plan, WorkflowPlan)
+    def test_returns_workflow_plan(self, plan: WorkflowSpec) -> None:
+        assert isinstance(plan, WorkflowSpec)
 
-    def test_workflow_type_is_research(self, plan: WorkflowPlan) -> None:
+    def test_workflow_type_is_research(self, plan: WorkflowSpec) -> None:
         assert plan.workflow_type == WorkflowType.RESEARCH
 
-    def test_has_two_scouts(self, plan: WorkflowPlan) -> None:
+    def test_has_two_scouts(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         assert len(scouts) == 2
 
-    def test_scouts_share_parallel_group(self, plan: WorkflowPlan) -> None:
+    def test_scouts_share_parallel_group(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         groups = {s.parallel_group for s in scouts}
         assert len(groups) == 1
         assert None not in groups
 
-    def test_has_sage_stage(self, plan: WorkflowPlan) -> None:
+    def test_has_sage_stage(self, plan: WorkflowSpec) -> None:
         sages = [s for s in plan.stages if s.role == "sage"]
         assert len(sages) == 1
 
-    def test_sage_depends_on_both_scouts(self, plan: WorkflowPlan) -> None:
+    def test_sage_depends_on_both_scouts(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         sage = next(s for s in plan.stages if s.role == "sage")
         scout_names = {s.name for s in scouts}
@@ -557,30 +557,30 @@ class TestTripleScout:
     """triple_scout() returns a research plan with 3 scouts and a sage."""
 
     @pytest.fixture()
-    def plan(self) -> WorkflowPlan:
+    def plan(self) -> WorkflowSpec:
         return _call("triple_scout")
 
-    def test_returns_workflow_plan(self, plan: WorkflowPlan) -> None:
-        assert isinstance(plan, WorkflowPlan)
+    def test_returns_workflow_plan(self, plan: WorkflowSpec) -> None:
+        assert isinstance(plan, WorkflowSpec)
 
-    def test_workflow_type_is_research(self, plan: WorkflowPlan) -> None:
+    def test_workflow_type_is_research(self, plan: WorkflowSpec) -> None:
         assert plan.workflow_type == WorkflowType.RESEARCH
 
-    def test_has_three_scouts(self, plan: WorkflowPlan) -> None:
+    def test_has_three_scouts(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         assert len(scouts) == 3
 
-    def test_scouts_share_parallel_group(self, plan: WorkflowPlan) -> None:
+    def test_scouts_share_parallel_group(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         groups = {s.parallel_group for s in scouts}
         assert len(groups) == 1
         assert None not in groups
 
-    def test_has_sage_stage(self, plan: WorkflowPlan) -> None:
+    def test_has_sage_stage(self, plan: WorkflowSpec) -> None:
         sages = [s for s in plan.stages if s.role == "sage"]
         assert len(sages) == 1
 
-    def test_sage_depends_on_all_three_scouts(self, plan: WorkflowPlan) -> None:
+    def test_sage_depends_on_all_three_scouts(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         sage = next(s for s in plan.stages if s.role == "sage")
         scout_names = {s.name for s in scouts}
@@ -597,25 +597,25 @@ class TestSpike:
     """spike() returns a valid research plan with no implementation stages."""
 
     @pytest.fixture()
-    def plan(self) -> WorkflowPlan:
+    def plan(self) -> WorkflowSpec:
         return _call("spike")
 
-    def test_returns_workflow_plan(self, plan: WorkflowPlan) -> None:
-        assert isinstance(plan, WorkflowPlan)
+    def test_returns_workflow_plan(self, plan: WorkflowSpec) -> None:
+        assert isinstance(plan, WorkflowSpec)
 
-    def test_workflow_type_is_research(self, plan: WorkflowPlan) -> None:
+    def test_workflow_type_is_research(self, plan: WorkflowSpec) -> None:
         assert plan.workflow_type == WorkflowType.RESEARCH
 
-    def test_has_scouts(self, plan: WorkflowPlan) -> None:
+    def test_has_scouts(self, plan: WorkflowSpec) -> None:
         scouts = [s for s in plan.stages if s.role == "scout"]
         assert len(scouts) >= 2
 
-    def test_no_warrior_stage(self, plan: WorkflowPlan) -> None:
+    def test_no_warrior_stage(self, plan: WorkflowSpec) -> None:
         """Spike is research only — no implementation stages."""
         warriors = [s for s in plan.stages if s.role == "warrior"]
         assert len(warriors) == 0
 
-    def test_no_knight_stage(self, plan: WorkflowPlan) -> None:
+    def test_no_knight_stage(self, plan: WorkflowSpec) -> None:
         """Spike is research only — no TDD stages."""
         knights = [s for s in plan.stages if s.role == "knight"]
         assert len(knights) == 0
@@ -717,7 +717,7 @@ class TestWorkflowRegistry:
         reg = WorkflowRegistry()
         reg.register("callable", _dummy_factory)
         plan = reg.get("callable")()
-        assert isinstance(plan, WorkflowPlan)
+        assert isinstance(plan, WorkflowSpec)
 
     def test_registry_accepts_lambdas(self) -> None:
         reg = WorkflowRegistry()
@@ -730,7 +730,7 @@ class TestWorkflowRegistry:
         reg = WorkflowRegistry()
         reg.register("dup", _dummy_factory)
 
-        def _other_factory() -> WorkflowPlan:
+        def _other_factory() -> WorkflowSpec:
             return _dummy_plan("other")
 
         with pytest.raises(ValueError):
@@ -798,7 +798,7 @@ class TestGetDefaultRegistry:
         reg = get_default_registry()
         for name in reg.list_names():
             plan = reg.get(name)()
-            assert isinstance(plan, WorkflowPlan)
+            assert isinstance(plan, WorkflowSpec)
 
     def test_fresh_instance_per_call(self) -> None:
         """Mutation of one default registry must not leak into the next call."""

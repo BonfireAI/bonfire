@@ -34,7 +34,7 @@ from bonfire.models.envelope import (
     ErrorDetail,
     TaskStatus,
 )
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -166,14 +166,14 @@ def _make_engine(handlers: dict[str, object]) -> PipelineEngine:
     )
 
 
-def _build_plan_with_preflight() -> WorkflowPlan:
+def _build_plan_with_preflight() -> WorkflowSpec:
     """Mini plan: bard -> wizard -> merge_preflight -> steward.
 
     Drops scout/knight/warrior/prover (pure backend stages) for test
     speed; the contract is preserved at the wizard->merge_preflight->
     steward slice which is what BON-519 introduces.
     """
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="preflight_integration",
         workflow_type=WorkflowType.STANDARD,
         stages=[

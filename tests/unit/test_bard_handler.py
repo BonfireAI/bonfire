@@ -53,6 +53,11 @@ try:
 except ImportError:  # pragma: no cover
     _slugify_task = None  # type: ignore[assignment]
 
+try:
+    from bonfire.git.workflow import BranchCollisionError  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover
+    BranchCollisionError = None  # type: ignore[assignment,misc]
+
 from bonfire.agent.roles import AgentRole
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import (
@@ -854,6 +859,44 @@ class TestPhantomCommitDetection:
 # ---------------------------------------------------------------------------
 
 
+_BRANCH_COLLISION_XFAIL = pytest.mark.xfail(
+    condition=BranchCollisionError is None,
+    reason="typed BranchCollisionError not yet defined in bonfire.git.workflow",
+    strict=False,
+)
+
+
+def _make_collision_error(branch: str = "bonfire/bard/x") -> RuntimeError:
+    """Build the typed collision error the handler now catches.
+
+    Falls back to a plain RuntimeError carrying the legacy 'already exists'
+    substring while the typed class is absent, so the suite stays importable
+    in the RED phase.
+    """
+    stderr = f"fatal: A branch named '{branch}' already exists."
+    if BranchCollisionError is None:  # pragma: no cover - RED phase only
+        return RuntimeError(stderr)
+    return BranchCollisionError(branch=branch, stderr=stderr)
+
+
+class TestBranchCollisionErrorType:
+    """The typed error contract lives in bonfire.git.workflow."""
+
+    @_BRANCH_COLLISION_XFAIL
+    def test_branch_collision_error_is_runtime_error_subclass(self) -> None:
+        """BranchCollisionError must subclass RuntimeError (catch-compatible)."""
+        assert BranchCollisionError is not None
+        assert issubclass(BranchCollisionError, RuntimeError)
+
+    @_BRANCH_COLLISION_XFAIL
+    def test_branch_collision_error_carries_branch_and_stderr(self) -> None:
+        """Typed error exposes structured branch + stderr attributes."""
+        assert BranchCollisionError is not None
+        err = BranchCollisionError(branch="bonfire/bard/x", stderr="fatal: ... already exists.")
+        assert err.branch == "bonfire/bard/x"
+        assert err.stderr == "fatal: ... already exists."
+
+
 class TestBranchCollision:
     @_BARD_META_XFAIL
     @pytest.mark.asyncio
@@ -863,12 +906,10 @@ class TestBranchCollision:
         artifacts_envelope: Envelope,
         github_client,  # noqa: ANN001
     ) -> None:
-        """create_branch RuntimeError -> branch_collision token."""
+        """create_branch BranchCollisionError -> branch_collision token."""
         wf = AsyncMock()
         wf.rev_parse = AsyncMock(return_value="a" * 40)
-        wf.create_branch = AsyncMock(
-            side_effect=RuntimeError("fatal: A branch named 'bonfire/bard/x' already exists.")
-        )
+        wf.create_branch = AsyncMock(side_effect=_make_collision_error())
         wf.commit = AsyncMock(return_value="b" * 40)
         wf.push = AsyncMock(return_value=None)
 
@@ -888,9 +929,7 @@ class TestBranchCollision:
         github_client,  # noqa: ANN001
     ) -> None:
         """Collision path has BRANCH + BASE_SHA but NO COMMIT_SHA."""
-        git_workflow.create_branch = AsyncMock(
-            side_effect=RuntimeError("fatal: A branch named 'bonfire/bard/x' already exists."),
-        )
+        git_workflow.create_branch = AsyncMock(side_effect=_make_collision_error())
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
         envelope = _make_envelope("Implement r")
         result = await handler.handle(bard_stage, envelope, {})
@@ -904,6 +943,57 @@ class TestBranchCollision:
         assert META_BARD_COMMIT_SHA not in result.metadata
         assert META_BARD_STAGED_FILES not in result.metadata
         git_workflow.commit.assert_not_awaited()
+
+    @_BRANCH_COLLISION_XFAIL
+    @pytest.mark.asyncio
+    async def test_typed_collision_caught_specifically(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """A typed BranchCollisionError is mapped to error_type='branch_collision'."""
+        wf = AsyncMock()
+        wf.rev_parse = AsyncMock(return_value="a" * 40)
+        wf.create_branch = AsyncMock(side_effect=_make_collision_error())
+        wf.commit = AsyncMock(return_value="b" * 40)
+        wf.push = AsyncMock(return_value=None)
+
+        handler = BardHandler(git_workflow=wf, github_client=github_client)
+        result = await handler.handle(bard_stage, artifacts_envelope, {})
+        assert result.status is TaskStatus.FAILED
+        assert result.error is not None
+        assert result.error.error_type == "branch_collision"
+        wf.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_plain_runtime_error_is_not_a_collision(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """A non-collision RuntimeError falls through to the generic handler.
+
+        This is the regression guard for the substring->typed narrowing: a
+        plain RuntimeError whose message merely happens to mention 'already
+        exists' must NOT be misclassified as a branch_collision once the
+        handler catches the typed error specifically.
+        """
+        wf = AsyncMock()
+        wf.rev_parse = AsyncMock(return_value="a" * 40)
+        wf.create_branch = AsyncMock(
+            side_effect=RuntimeError("fatal: remote already exists in some other sense")
+        )
+        wf.commit = AsyncMock(return_value="b" * 40)
+        wf.push = AsyncMock(return_value=None)
+
+        handler = BardHandler(git_workflow=wf, github_client=github_client)
+        result = await handler.handle(bard_stage, artifacts_envelope, {})
+        assert result.status is TaskStatus.FAILED
+        assert result.error is not None
+        assert result.error.error_type == "RuntimeError"
+        wf.commit.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

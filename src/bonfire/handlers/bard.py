@@ -33,6 +33,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
+from bonfire.git.workflow import BranchCollisionError
 from bonfire.models.envelope import (
     META_PR_NUMBER,
     META_PR_URL,
@@ -171,28 +172,26 @@ class BardHandler:
             # 5. Create branch; structured error on collision.
             try:
                 await self._git_workflow.create_branch(branch_name)
-            except RuntimeError as branch_exc:
-                if "already exists" in str(branch_exc):
-                    return envelope.model_copy(
-                        update={
-                            "metadata": {
-                                **envelope.metadata,
-                                _META_BRANCH: branch_name,
-                                _META_BASE_SHA: base_sha,
-                                _META_STAGING_FAILURE_REASON: "branch_collision",
-                            },
-                            "error": ErrorDetail(
-                                error_type="branch_collision",
-                                message=(
-                                    f"Branch {branch_name!r} already exists; "
-                                    "refusing to rewrite history."
-                                ),
-                                stage_name=stage.name,
-                            ),
-                            "status": TaskStatus.FAILED,
+            except BranchCollisionError:
+                return envelope.model_copy(
+                    update={
+                        "metadata": {
+                            **envelope.metadata,
+                            _META_BRANCH: branch_name,
+                            _META_BASE_SHA: base_sha,
+                            _META_STAGING_FAILURE_REASON: "branch_collision",
                         },
-                    )
-                raise
+                        "error": ErrorDetail(
+                            error_type="branch_collision",
+                            message=(
+                                f"Branch {branch_name!r} already exists; "
+                                "refusing to rewrite history."
+                            ),
+                            stage_name=stage.name,
+                        ),
+                        "status": TaskStatus.FAILED,
+                    },
+                )
 
             # 6. Stage + commit. Returns full HEAD SHA.
             commit_sha = await self._git_workflow.commit(

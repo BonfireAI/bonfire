@@ -53,7 +53,7 @@ def _shipped_version() -> str:
     """The single source of truth: ``version = "..."`` in pyproject.toml."""
     text = _PYPROJECT.read_text(encoding="utf-8")
     match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
-    assert match, "Could not find a `version = \"...\"` line in pyproject.toml"
+    assert match, 'Could not find a `version = "..."` line in pyproject.toml'
     return match.group(1)
 
 
@@ -61,9 +61,7 @@ def _offending_lines(path: Path, needle: str) -> list[tuple[int, str]]:
     """Return (lineno, line) for every line in *path* containing *needle*."""
     text = path.read_text(encoding="utf-8")
     return [
-        (i, line.rstrip())
-        for i, line in enumerate(text.splitlines(), start=1)
-        if needle in line
+        (i, line.rstrip()) for i, line in enumerate(text.splitlines(), start=1) if needle in line
     ]
 
 
@@ -154,16 +152,9 @@ class TestReleaseChecklistNamesVersionLiteralGrep:
     def test_release_policy_checklist_item_is_a_list_entry(self) -> None:
         """The grep guidance lives in an actual checklist/list item, not buried prose."""
         text = _RELEASE_POLICY.read_text(encoding="utf-8")
-        grep_lines = [
-            line
-            for line in text.splitlines()
-            if "grep" in line.lower()
-        ]
+        grep_lines = [line for line in text.splitlines() if "grep" in line.lower()]
         assert grep_lines, "No line in docs/release-policy.md mentions grep."
-        assert any(
-            line.lstrip().startswith(("-", "*", "1.", "- [ ]"))
-            for line in grep_lines
-        ), (
+        assert any(line.lstrip().startswith(("-", "*", "1.", "- [ ]")) for line in grep_lines), (
             "The version-literal grep guidance must be a list/checklist item "
             f"(starts with '-', '*' or a number). Found grep on: {grep_lines!r}"
         )
@@ -191,9 +182,7 @@ class TestVersionConsistencyAcrossSurfaces:
         shipped = _shipped_version()
         for path in (_README, _CLAUDE):
             text = path.read_text(encoding="utf-8")
-            assert shipped in text, (
-                f"{path.name} must name the shipped version {shipped!r}."
-            )
+            assert shipped in text, f"{path.name} must name the shipped version {shipped!r}."
             assert _STALE_LITERAL not in text, (
                 f"{path.name} must not name the stale version {_STALE_LITERAL!r}."
             )

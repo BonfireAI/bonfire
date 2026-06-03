@@ -438,7 +438,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Sensitive Write/Edit path rules — BON-1032
+# Sensitive Write/Edit path rules
 #
 # The shared DEFAULT_DENY_PATTERNS catalogue is Sage-locked (its rule-id set
 # and counts are frozen). These credential / system-state file rules are a
@@ -451,7 +451,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
 # canonicalized path (``//`` collapsed, ``..``/``.`` resolved), this makes
 # ``/home/u/.npmrc`` DENY while ``/home/u/xnpmrc`` (shares the suffix but not
 # at a boundary) stays ALLOWED. The rules are home-prefix agnostic — they fire
-# on ``/home/<u>/``, ``/Users/<u>/`` (macOS, mandatory per BON-1032), ``~/``
+# on ``/home/<u>/``, ``/Users/<u>/`` (macOS, mandatory), ``~/``
 # and ``$HOME/`` forms alike, because the segment anchor matches the trailing
 # credential filename wherever it sits. Scope is macOS + Linux ONLY; Windows
 # analogues are explicitly DEFERRED per the ticket.
@@ -528,7 +528,7 @@ def _canonicalize_path(file_path: str) -> str:
     (``/home/u/.config/gh/../gh/hosts.yml``) canonicalizes to its true target
     (``/home/u/.config/gh/hosts.yml``) and the segment-anchored C8 rules fire.
 
-    Uses ``posixpath`` deliberately (NOT ``os.path``): BON-1032 scopes this to
+    Uses ``posixpath`` deliberately (NOT ``os.path``): this is scoped to
     macOS + Linux only, and ``posixpath`` keeps ``/`` separators on every host
     so the rule regexes match deterministically regardless of where the hook
     runs. The ``~`` and ``$HOME`` prefixes have no separators of their own, so
@@ -548,7 +548,7 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
 
     Bash → ``command``. Write/Edit → ``file_path`` (and optionally
     ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12). The
-    Write/Edit ``file_path`` is canonicalized (BON-1032) so separator and
+    Write/Edit ``file_path`` is canonicalized so separator and
     traversal evasions cannot slip past the segment-anchored deny rules.
     """
     if not isinstance(tool_input, dict):
@@ -734,7 +734,7 @@ def build_preexec_hook(
                     )
                 return _deny_envelope(reason)
 
-            # Sensitive Write/Edit path check (BON-1032). ``command`` is the
+            # Sensitive Write/Edit path check. ``command`` is the
             # canonicalized file_path for Write/Edit; match the credential /
             # system-state rules directly, BEFORE the Bash-oriented keyword
             # prefilter (a credential path carries none of those verbs, so

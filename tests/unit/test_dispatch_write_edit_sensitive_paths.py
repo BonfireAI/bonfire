@@ -180,12 +180,12 @@ async def test_canonicalizer_catches_evasion(label: str, path: str):
 @pytest.mark.parametrize(
     "path",
     [
-        "/home/user/xnpmrc",          # ends in 'npmrc' but not at a / boundary
-        "/home/user/mypypirc",        # ends in 'pypirc' but not at a / boundary
+        "/home/user/xnpmrc",  # ends in 'npmrc' but not at a / boundary
+        "/home/user/mypypirc",  # ends in 'pypirc' but not at a / boundary
         "/home/user/not-git-credentials-real",
-        "/home/user/notes.txt",       # fully benign
+        "/home/user/notes.txt",  # fully benign
         "/home/user/src/history.py",  # contains 'history' but is source
-        "/home/user/npmrc.md",        # docs about npmrc, not the rc file
+        "/home/user/npmrc.md",  # docs about npmrc, not the rc file
     ],
 )
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 
 """Workflow plan models — DAG-validated, frozen Pydantic v2 models.
 
-All models are frozen (immutable). WorkflowPlan validates its stage DAG
+All models are frozen (immutable). WorkflowSpec validates its stage DAG
 at construction time: duplicate names, dangling references, self-bounces,
 and cycles are rejected with descriptive error messages including cycle paths.
 """
@@ -66,7 +66,7 @@ class StageSpec(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class WorkflowPlan(BaseModel):
+class WorkflowSpec(BaseModel):
     """Immutable, DAG-validated workflow plan.
 
     Construction fails if:
@@ -88,7 +88,7 @@ class WorkflowPlan(BaseModel):
     task_description: str = ""
 
     @model_validator(mode="after")
-    def _validate_dag(self) -> WorkflowPlan:
+    def _validate_dag(self) -> WorkflowSpec:
         """Ensure the stage graph is a valid DAG."""
         if not self.stages:
             if self.workflow_type == WorkflowType.SINGLE:

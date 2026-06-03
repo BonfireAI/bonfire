@@ -36,7 +36,7 @@ from bonfire.dispatch.result import DispatchResult
 from bonfire.events.bus import EventBus
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -80,8 +80,8 @@ def _stage(
     )
 
 
-def _plan(*stages: StageSpec, budget: float = 10.0) -> WorkflowPlan:
-    return WorkflowPlan(
+def _plan(*stages: StageSpec, budget: float = 10.0) -> WorkflowSpec:
+    return WorkflowSpec(
         name="executor-tool-policy-test",
         workflow_type=WorkflowType.STANDARD,
         stages=list(stages),

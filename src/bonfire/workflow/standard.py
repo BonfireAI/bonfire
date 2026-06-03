@@ -3,13 +3,13 @@
 
 """Standard workflow factories — the bread and butter of Bonfire pipelines.
 
-These factories produce immutable WorkflowPlans for common build patterns.
+These factories produce immutable WorkflowSpecs for common build patterns.
 Each factory returns a DAG-validated, frozen plan ready for the engine.
 """
 
 from __future__ import annotations
 
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 
 
 def _stage(
@@ -37,7 +37,7 @@ def _stage(
     )
 
 
-def standard_build() -> WorkflowPlan:
+def standard_build() -> WorkflowSpec:
     """The reference 9-stage TDD build pipeline.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
@@ -48,7 +48,7 @@ def standard_build() -> WorkflowPlan:
     pytest against the simulated merged tip before the merge button
     (Sage memo ``bon-519-sage-20260428T033101Z.md`` §D6 lines 530-544).
     """
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="standard_build",
         workflow_type=WorkflowType.STANDARD,
         description="Full TDD build pipeline: scout through steward with quality gates.",
@@ -108,7 +108,7 @@ def standard_build() -> WorkflowPlan:
     )
 
 
-def debug() -> WorkflowPlan:
+def debug() -> WorkflowSpec:
     """Minimal 2-stage workflow for quick iteration.
 
     Flow: scout -> warrior
@@ -116,7 +116,7 @@ def debug() -> WorkflowPlan:
     No gates, no bounce-back. Useful for debugging and rapid prototyping
     where the full ceremony of the standard pipeline is overkill.
     """
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="debug",
         workflow_type=WorkflowType.DEBUG,
         description="Minimal scout-warrior pipeline for rapid iteration.",

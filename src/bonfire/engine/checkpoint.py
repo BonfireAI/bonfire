@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from bonfire.engine.pipeline import PipelineResult
-    from bonfire.models.plan import WorkflowPlan
+    from bonfire.models.plan import WorkflowSpec
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ class CheckpointManager:
         self,
         session_id: str,
         result: PipelineResult,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
     ) -> Path:
         """Persist pipeline state to JSON with atomic write.
 

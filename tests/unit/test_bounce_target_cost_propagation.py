@@ -45,7 +45,7 @@ from bonfire.models.plan import (
     GateContext,
     GateResult,
     StageSpec,
-    WorkflowPlan,
+    WorkflowSpec,
     WorkflowType,
 )
 
@@ -108,9 +108,9 @@ def _engine(gates: dict[str, object]) -> PipelineEngine:
     )
 
 
-def _plan() -> WorkflowPlan:
+def _plan() -> WorkflowSpec:
     """A two-stage plan: ``warrior`` bounces to ``scout`` on gate failure."""
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="p",
         workflow_type=WorkflowType.CUSTOM,
         budget_usd=10.0,
@@ -140,7 +140,7 @@ def _patch_execute_stage(
         spec: StageSpec,
         completed: dict[str, Envelope],
         total_cost: float,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
         initial_envelope: Envelope | None = None,
     ) -> Envelope:

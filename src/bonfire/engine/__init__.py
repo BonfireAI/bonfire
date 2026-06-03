@@ -3,7 +3,7 @@
 
 """Pipeline execution engine — the heart of Bonfire.
 
-This package walks a frozen :class:`~bonfire.models.plan.WorkflowPlan`
+This package walks a frozen :class:`~bonfire.models.plan.WorkflowSpec`
 in topological order and turns each stage into an envelope-carrying
 agent dispatch with quality gates, checkpoints, and observable cost.
 

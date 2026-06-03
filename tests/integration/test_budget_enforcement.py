@@ -36,7 +36,7 @@ from bonfire.engine.pipeline import PipelineEngine, PipelineResult
 from bonfire.events.bus import EventBus
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import Envelope, TaskStatus
-from bonfire.models.plan import GateContext, StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import GateContext, StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 try:
@@ -84,8 +84,8 @@ def _single_plan(
     agent_name: str = "scout-agent",
     budget_usd: float = 10.0,
     gates: list[str] | None = None,
-) -> WorkflowPlan:
-    return WorkflowPlan(
+) -> WorkflowSpec:
+    return WorkflowSpec(
         name=name,
         workflow_type=WorkflowType.STANDARD,
         stages=[
@@ -99,9 +99,9 @@ def _single_plan(
     )
 
 
-def _two_stage_plan(*, budget_usd: float = 1.0) -> WorkflowPlan:
+def _two_stage_plan(*, budget_usd: float = 1.0) -> WorkflowSpec:
     """A linear 2-stage plan used for cumulative-cost budget tests."""
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="two-stage",
         workflow_type=WorkflowType.STANDARD,
         stages=[
@@ -260,7 +260,7 @@ class TestBudgetRemainingClamping:
             context_builder=_SpyBuilder(),
         )
         stage = StageSpec(name="s1", agent_name="a1")
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="p",
             workflow_type=WorkflowType.STANDARD,
             stages=[stage],
@@ -476,7 +476,7 @@ class TestEndToEndBudgetExhaustion:
             backend=backend,
             gate_registry={"cost_limit": CostLimitGate(budget_usd=0.5)},
         )
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="gated",
             workflow_type=WorkflowType.STANDARD,
             stages=[

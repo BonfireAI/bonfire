@@ -11,7 +11,7 @@ This package provides pre-built workflow plans for common patterns:
 - **triple_scout**: Three parallel scouts + sage synthesis
 - **spike**: Pure research — scouts + sage, no implementation
 
-All factories return frozen, DAG-validated WorkflowPlan instances.
+All factories return frozen, DAG-validated WorkflowSpec instances.
 Depends only on bonfire.models — no engine, dispatch, or handler imports.
 """
 

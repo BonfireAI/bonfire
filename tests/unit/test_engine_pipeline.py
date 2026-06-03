@@ -97,7 +97,7 @@ from bonfire.models.events import (
     StageSkipped,
     StageStarted,
 )
-from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowSpec, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -221,20 +221,20 @@ class _EventCollector:
 # ---------------------------------------------------------------------------
 
 
-def _single_plan(agent_name: str = "s1") -> WorkflowPlan:
-    return WorkflowPlan(
+def _single_plan(agent_name: str = "s1") -> WorkflowSpec:
+    return WorkflowSpec(
         name="single",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name="s1", agent_name=agent_name)],
     )
 
 
-def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowPlan:
+def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowSpec:
     stages = []
     for i, name in enumerate(names):
         deps = [names[i - 1]] if i > 0 else []
         stages.append(StageSpec(name=name, agent_name=name, depends_on=deps))
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="linear",
         workflow_type=WorkflowType.STANDARD,
         stages=stages,
@@ -242,17 +242,17 @@ def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowPlan:
     )
 
 
-def _parallel_plan(group: str, *names: str) -> WorkflowPlan:
-    return WorkflowPlan(
+def _parallel_plan(group: str, *names: str) -> WorkflowSpec:
+    return WorkflowSpec(
         name="parallel",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name=n, agent_name=n, parallel_group=group) for n in names],
     )
 
 
-def _diamond_plan() -> WorkflowPlan:
+def _diamond_plan() -> WorkflowSpec:
     """A -> B,C -> D."""
-    return WorkflowPlan(
+    return WorkflowSpec(
         name="diamond",
         workflow_type=WorkflowType.STANDARD,
         stages=[
@@ -619,7 +619,7 @@ class TestDAGExecution:
     async def test_root_runs_before_child(self) -> None:
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -671,7 +671,7 @@ class TestResume:
         pre = Envelope(
             task="t", agent_name="s1-agent", status=TaskStatus.COMPLETED, result="cached"
         )
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="resume",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -694,7 +694,7 @@ class TestGateEvaluation:
     async def test_passing_gate_continues(self) -> None:
         gate = _MockGate(passed=True)
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -709,7 +709,7 @@ class TestGateEvaluation:
     async def test_failing_error_gate_halts(self) -> None:
         gate = _MockGate(passed=False, severity="error", message="bad")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["check"])],
@@ -722,7 +722,7 @@ class TestGateEvaluation:
     async def test_warning_gate_does_not_halt(self) -> None:
         gate = _MockGate(passed=False, severity="warning", message="minor")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["check"])],
@@ -735,7 +735,7 @@ class TestGateEvaluation:
         bus = EventBus()
         bus.subscribe_all(collector)
         engine = _make_engine(bus=bus, gate_registry={})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["nonexistent"])],
@@ -748,7 +748,7 @@ class TestGateEvaluation:
         pass_gate = _MockGate(passed=True)
         fail_gate = _MockGate(passed=False, severity="error")
         engine = _make_engine(gate_registry={"pass": pass_gate, "fail": fail_gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["pass", "fail"])],
@@ -770,7 +770,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -793,7 +793,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -816,7 +816,7 @@ class TestBounceBack:
         gate = _EventualPassGate()
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -836,7 +836,7 @@ class TestBounceBack:
     async def test_bounce_without_target_halts(self) -> None:
         gate = _MockGate(passed=False, severity="error")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -856,7 +856,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error", message="forever broken")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -885,7 +885,7 @@ class TestIteration:
     async def test_stage_retries_up_to_max(self) -> None:
         backend = _MockBackend(fail_agents={"s1"})
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="i",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
@@ -897,7 +897,7 @@ class TestIteration:
     async def test_exhausted_iterations_yields_failure(self) -> None:
         backend = _MockBackend(fail_agents={"s1"})
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="i",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", max_iterations=2)],
@@ -916,7 +916,7 @@ class TestBudget:
 
     async def test_within_budget_succeeds(self) -> None:
         engine = _make_engine()
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="ok",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -928,7 +928,7 @@ class TestBudget:
     async def test_over_budget_halts(self) -> None:
         backend = _MockBackend(cost=5.0)
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="over",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -947,7 +947,7 @@ class TestBudget:
 
         backend = _MockBackend(cost=100.0)
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1027,7 +1027,7 @@ class TestEventEmission:
         bus = EventBus()
         bus.subscribe_all(collector)
         engine = _make_engine(bus=bus)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="test-plan",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -1049,7 +1049,7 @@ class TestNeverRaise:
 
     async def test_handler_exception_returns_failed_result(self) -> None:
         engine = _make_engine(handlers={"boom": _RaisingHandler()})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="boom")],
@@ -1075,7 +1075,7 @@ class TestNeverRaise:
 
     async def test_unknown_handler_does_not_raise(self) -> None:
         engine = _make_engine(handlers={})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="nope")],
@@ -1092,7 +1092,7 @@ class TestNeverRaise:
                 raise RuntimeError("gate exploded")
 
         engine = _make_engine(gate_registry={"boom": _ExplodingGate()})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["boom"])],
@@ -1114,7 +1114,7 @@ class TestHandlers:
         handler = _MockHandler(result="custom-result")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, handlers={"custom": handler})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="h",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="custom")],
@@ -1126,7 +1126,7 @@ class TestHandlers:
 
     async def test_unknown_handler_fails_gracefully(self) -> None:
         engine = _make_engine(handlers={})
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="h",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="missing")],
@@ -1175,7 +1175,7 @@ class TestInitialEnvelope:
     async def test_initial_metadata_propagates_to_stages(self) -> None:
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="meta",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -1190,7 +1190,7 @@ class TestInitialEnvelope:
         """Stage-level role wins on key collision (last-write)."""
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="meta",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="stage-role")],
@@ -1261,7 +1261,7 @@ class TestModelResolution:
 
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="role-pass",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
@@ -1282,7 +1282,7 @@ class TestModelResolution:
 
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="override-wins",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1314,7 +1314,7 @@ class TestModelResolution:
         cfg = PipelineConfig(model="pipeline-config-fallback")
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="config-fallback",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="")],
@@ -1391,7 +1391,7 @@ class TestPipelineEnvelopeInternalSentinel:
         # the config value into envelope.model and FAIL this assertion.
         cfg = PipelineConfig(model="pipeline-config-default")
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="envelope-sentinel",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
@@ -1457,7 +1457,7 @@ class TestPipelineUsesResolveDispatchModel:
         backend = _EnvelopeAndOptionsRecordingPipelineBackend()
         cfg = PipelineConfig(model="pipeline-config-default")
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="helper-call",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1523,7 +1523,7 @@ class TestPipelineLastResortFallbackUnnamedTask:
         the literal ``"<unnamed>"`` at the call site.
         """
         engine = _make_engine()
-        plan = WorkflowPlan(
+        plan = WorkflowSpec(
             name="last-resort-empty-name",
             workflow_type=WorkflowType.STANDARD,
             stages=[

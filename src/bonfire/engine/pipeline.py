@@ -3,7 +3,7 @@
 
 """Pipeline execution engine -- the heart of Bonfire.
 
-Executes a WorkflowPlan as a DAG of stages using TopologicalSorter.
+Executes a WorkflowSpec as a DAG of stages using TopologicalSorter.
 Features: parallel groups via TaskGroup, gate evaluation, bounce-back,
 iteration/retry, budget enforcement, event emission, resume from checkpoint.
 
@@ -53,7 +53,7 @@ from bonfire.models.events import (
     StageSkipped,
     StageStarted,
 )
-from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowPlan
+from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowSpec
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
@@ -92,7 +92,7 @@ class PipelineResult(BaseModel):
 
 
 class PipelineEngine:
-    """Executes a WorkflowPlan as a DAG with gates, bounces, and budget control.
+    """Executes a WorkflowSpec as a DAG with gates, bounces, and budget control.
 
     Constructor accepts all dependencies via keyword-only arguments.
     ``run()`` is the sole public method -- a never-raise shell around
@@ -131,7 +131,7 @@ class PipelineEngine:
 
     async def run(
         self,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         *,
         session_id: str | None = None,
         completed: dict[str, Envelope] | None = None,
@@ -160,7 +160,7 @@ class PipelineEngine:
 
     async def _run_inner(
         self,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
         completed: dict[str, Envelope],
         start: float,
@@ -288,7 +288,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         initial_envelope: Envelope | None,
     ) -> tuple[PipelineResult | None, float]:
         """Execute a parallel group via TaskGroup, then evaluate gates."""
@@ -367,7 +367,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         initial_envelope: Envelope | None,
     ) -> tuple[PipelineResult | None, float]:
         """Execute a single stage sequentially, then evaluate gates."""
@@ -430,7 +430,7 @@ class PipelineEngine:
         spec: StageSpec,
         completed: dict[str, Envelope],
         total_cost: float,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         session_id: str,
         initial_envelope: Envelope | None = None,
     ) -> Envelope:
@@ -646,7 +646,7 @@ class PipelineEngine:
 
     async def _handle_bounce(
         self,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         spec: StageSpec,
         gate_result: GateResult,
         completed: dict[str, Envelope],
@@ -723,7 +723,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowPlan,
+        plan: WorkflowSpec,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
     ) -> tuple[PipelineResult | None, float]:
@@ -799,12 +799,12 @@ class PipelineEngine:
         await self._bus.emit(event)
 
     @staticmethod
-    def _build_stage_map(plan: WorkflowPlan) -> dict[str, StageSpec]:
+    def _build_stage_map(plan: WorkflowSpec) -> dict[str, StageSpec]:
         """Build a name->StageSpec lookup from a plan."""
         return {s.name: s for s in plan.stages}
 
     @staticmethod
-    def _build_dag(plan: WorkflowPlan, skip: set[str]) -> TopologicalSorter[str]:
+    def _build_dag(plan: WorkflowSpec, skip: set[str]) -> TopologicalSorter[str]:
         """Build a TopologicalSorter from plan stages, skipping completed ones."""
         dag: TopologicalSorter[str] = TopologicalSorter()
         for stage in plan.stages:

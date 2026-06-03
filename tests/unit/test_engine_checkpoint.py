@@ -32,15 +32,15 @@ import pytest
 from pydantic import ValidationError
 
 from bonfire.models.envelope import Envelope, TaskStatus
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 
 # ---------------------------------------------------------------------------
 # Helpers — mirror V1 test_checkpoint.py style
 # ---------------------------------------------------------------------------
 
 
-def _make_plan(name: str = "ck-plan") -> WorkflowPlan:
-    return WorkflowPlan(
+def _make_plan(name: str = "ck-plan") -> WorkflowSpec:
+    return WorkflowSpec(
         name=name,
         workflow_type=WorkflowType.STANDARD,
         stages=[

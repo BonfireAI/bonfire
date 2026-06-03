@@ -10,7 +10,7 @@ their findings into a coherent recommendation.
 
 from __future__ import annotations
 
-from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
 
 
 def _scout(name: str, *, parallel_group: str) -> StageSpec:
@@ -38,7 +38,7 @@ def _multi_scout_workflow(
     *,
     scout_count: int,
     description: str = "",
-) -> WorkflowPlan:
+) -> WorkflowSpec:
     """Shared factory for N-scout + sage research workflows.
 
     ``dual_scout()`` and ``spike()`` are aliases — same shape, two names by intent.
@@ -47,7 +47,7 @@ def _multi_scout_workflow(
     scout_names = [f"scout_{i + 1}" for i in range(scout_count)]
     scouts = [_scout(sn, parallel_group=group) for sn in scout_names]
 
-    return WorkflowPlan(
+    return WorkflowSpec(
         name=name,
         workflow_type=WorkflowType.RESEARCH,
         description=description,
@@ -55,7 +55,7 @@ def _multi_scout_workflow(
     )
 
 
-def dual_scout() -> WorkflowPlan:
+def dual_scout() -> WorkflowSpec:
     """Two parallel scouts with competing perspectives, synthesized by a sage.
 
     The dual workflow is Bonfire's signature: two scouts attack the same
@@ -68,7 +68,7 @@ def dual_scout() -> WorkflowPlan:
     )
 
 
-def triple_scout() -> WorkflowPlan:
+def triple_scout() -> WorkflowSpec:
     """Three parallel scouts for deep research, synthesized by a sage.
 
     When the problem space is large or contentious, three perspectives
@@ -81,7 +81,7 @@ def triple_scout() -> WorkflowPlan:
     )
 
 
-def spike() -> WorkflowPlan:
+def spike() -> WorkflowSpec:
     """Research spike — scouts explore, sage synthesizes. No implementation.
 
     A spike is pure research: no knights, no warriors, no code.

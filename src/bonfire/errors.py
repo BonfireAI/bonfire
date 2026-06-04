@@ -139,6 +139,37 @@ class IsolationError(BonfireError):
 
 
 # ---------------------------------------------------------------------------
+# Verdict failures — pre-flight gate refusals and baseline divergence (terminal)
+# ---------------------------------------------------------------------------
+
+
+class GateError(BonfireError):
+    """A pre-flight gate refused to proceed — a verification verdict.
+
+    Distinct from input ``ValidationError``: a gate refusal means a pre-dispatch
+    check (tree hygiene, base verification) blocked the operation. Remediation is
+    to *fix the flagged condition and re-run the gate*, not to correct caller
+    input. Terminal for the current attempt (no auto-retry).
+    """
+
+    is_terminal = True
+    code = "gate"
+
+
+class DriftError(BonfireError):
+    """A declared baseline diverged from runtime — a divergence verdict.
+
+    Distinct from a static ``ConfigError`` load failure or an ``IsolationError``
+    boundary cross: a drift means an expected baseline (cwd, permission matrix)
+    no longer matches runtime. Remediation is to *re-sync to the baseline /
+    investigate the divergence*. Terminal — the run halts until reconciled.
+    """
+
+    is_terminal = True
+    code = "drift"
+
+
+# ---------------------------------------------------------------------------
 # Containment helper — never-raise shells capture failure as ErrorDetail
 # ---------------------------------------------------------------------------
 

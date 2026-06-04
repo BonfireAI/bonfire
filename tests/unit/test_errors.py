@@ -39,7 +39,9 @@ try:
         BonfireError,
         CLINotFoundError,
         ConfigError,
+        DriftError,
         ExecutorError,
+        GateError,
         IsolationError,
         NetworkError,
         RateLimitError,
@@ -65,6 +67,8 @@ try:
         RateLimitError,
         CLINotFoundError,
         ExecutorError,
+        GateError,
+        DriftError,
     ]
     _OPERATIONAL_CLASSES = [
         RetrievalError,
@@ -189,6 +193,12 @@ class TestCodesLocked:
     def test_executor_code(self) -> None:
         assert ExecutorError.code == "executor"
 
+    def test_gate_code(self) -> None:
+        assert GateError.code == "gate"
+
+    def test_drift_code(self) -> None:
+        assert DriftError.code == "drift"
+
 
 # ===========================================================================
 # SchemaError lineage
@@ -243,3 +253,25 @@ class TestErrorDetailFromException:
         except ValueError as exc:
             detail = ErrorDetail.from_exception(exc)
         assert detail.stage_name is None
+
+    def test_gate_error_flows_through_error_detail(self) -> None:
+        from bonfire.models.envelope import ErrorDetail
+
+        try:
+            raise GateError("tree not clean")
+        except GateError as exc:
+            assert exc.code == "gate"
+            detail = ErrorDetail.from_exception(exc)
+        assert detail.error_type == "GateError"
+        assert detail.message == "tree not clean"
+
+    def test_drift_error_flows_through_error_detail(self) -> None:
+        from bonfire.models.envelope import ErrorDetail
+
+        try:
+            raise DriftError("cwd moved")
+        except DriftError as exc:
+            assert exc.code == "drift"
+            detail = ErrorDetail.from_exception(exc)
+        assert detail.error_type == "DriftError"
+        assert detail.message == "cwd moved"

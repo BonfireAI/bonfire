@@ -77,7 +77,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 |---|---|
 | `bonfire.cli` | Typer composition root — `app` is the entry point exposed by `[project.scripts]`. |
 | `bonfire.cli.commands` | Per-command Typer modules (`init`, `scan`, `status`, `resume`, `handoff`, `persona`, `cost`). |
-| `bonfire.workflows` | Pre-built workflow plans (`standard_build`, `debug`, `dual_scout`, `triple_scout`, `spike`) — pure data factories that depend only on `bonfire.models`. |
+| `bonfire.workflow` | Pre-built workflow plans (`standard_build`, `debug`, `dual_scout`, `triple_scout`, `spike`) — pure data factories that depend only on `bonfire.models`. |
 
 ### Reserved
 
@@ -96,9 +96,9 @@ A single `bonfire run` follows the same path top-to-bottom every time:
 
 1. **CLI entry.** `bonfire.cli.app` parses the command and instantiates
    the composition root. The user-facing `bonfire run`-style commands
-   resolve a workflow plan from `bonfire.workflows` (e.g.
+   resolve a workflow plan from `bonfire.workflow` (e.g.
    `standard_build`).
-2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
+2. **Workflow plan.** A `WorkflowSpec` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
    a handler, a list of gates, and dependency edges to earlier stages.
 3. **PipelineEngine.** `bonfire.engine.pipeline.PipelineEngine` walks
@@ -185,9 +185,9 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
   persona TOML with the required schema and `PersonaLoader.load` will
   pick it up. Personas are display-only — they cannot reach into
   prompts or gates by construction.
-- **Workflows — `bonfire.workflows`**: register a new workflow factory
+- **Workflows — `bonfire.workflow`**: register a new workflow factory
   on the `WorkflowRegistry`. The factory returns a frozen,
-  DAG-validated `WorkflowPlan`. The package depends only on
+  DAG-validated `WorkflowSpec`. The package depends only on
   `bonfire.models`, so new workflows do not need to touch the engine.
 - **Stage handlers — `StageHandler`** (`bonfire.protocols`):
   implement `handle(stage, envelope, prior_results) -> Envelope` if you
@@ -289,5 +289,5 @@ a contract is shaped the way it is:
 
 For surface-level reading, the package-level `__init__.py` docstrings
 (notably `bonfire.handlers`, `bonfire.persona`, and
-`bonfire.workflows`) are the model voice for the rest of the codebase
+`bonfire.workflow`) are the model voice for the rest of the codebase
 and double as quick reference cards.

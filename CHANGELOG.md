@@ -227,4 +227,6 @@ end-to-end CLI verb are still in progress and ship in subsequent
   historical for the v0.1.0a1 alpha release. New commits comply with
   [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
 
+[Unreleased]: https://github.com/BonfireAI/bonfire/compare/v0.1.0a2...HEAD
+[0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1

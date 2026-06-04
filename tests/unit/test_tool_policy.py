@@ -112,11 +112,13 @@ class TestProtocolExportDiscipline:
 
         assert not hasattr(proto_mod, "ToolPolicy")
 
-    def test_protocols_all_unchanged(self) -> None:
-        """Sage D8 — ``bonfire.protocols.__all__`` remains exactly the v0.1 set."""
+    def test_protocols_all_is_v01_plus_verify_and_retrieval_superset(self) -> None:
+        """Sage D8 — ``bonfire.protocols.__all__`` is the v0.1 set plus the
+        verify/Mirror vocabulary and the retrieval seam (Topic 5 superset),
+        and STILL excludes ``ToolPolicy`` / ``DefaultToolPolicy``."""
         import bonfire.protocols as proto_mod
 
-        assert set(proto_mod.__all__) == {
+        v01_core = {
             "AgentBackend",
             "DispatchOptions",
             "QualityGate",
@@ -124,6 +126,26 @@ class TestProtocolExportDiscipline:
             "VaultBackend",
             "VaultEntry",
         }
+        verify_and_retrieval_superset = {
+            "ArtificerReport",
+            "AxiomVariantReceipt",
+            "BracketPassReport",
+            "ContextAtom",
+            "Finding",
+            "MuscleWriteReceipt",
+            "ProbeFinding",
+            "RetrievalProvider",
+            "SCHEMA_VERSION",
+            "Severity",
+            "ValidationOutcome",
+            "Verdict",
+            "VerdictStatus",
+        }
+        exported = set(proto_mod.__all__)
+        assert exported == v01_core | verify_and_retrieval_superset
+        # D8 discipline preserved: tool-policy names never leak here.
+        assert "ToolPolicy" not in exported
+        assert "DefaultToolPolicy" not in exported
 
 
 # ===========================================================================

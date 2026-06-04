@@ -19,6 +19,7 @@ subcommands but stay out of ``bonfire --version`` and ``bonfire --help``.
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
@@ -254,6 +255,98 @@ def install_skill(
 ) -> None:
     """Copy the bundled Claude Code skill to a user-writable location."""
     _lazy_run("bonfire.cli.commands.install_skill", "install_skill")(target=target, force=force)
+
+
+# ---------------------------------------------------------------------------
+# Cadre subagent commands — UNION SPIKE graft. These live ALONGSIDE
+# ``install-skill`` (the opinion-package surface stays intact); the two
+# product surfaces coexist. Lazy shims mirror the install-skill pattern so
+# ``bonfire --help`` lists the names without importing the heavy modules.
+# ---------------------------------------------------------------------------
+@app.command("install-agents")
+def install_agents(
+    scope: str = typer.Option(
+        "user",
+        "--scope",
+        "-s",
+        help=(
+            "Install target: 'user' (~/.claude/agents/bonfire/) "
+            "or 'project' (./.claude/agents/bonfire/)."
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be installed without writing any files.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite existing files even when their content differs.",
+    ),
+) -> None:
+    """Install Bonfire cadre subagent files at user or project scope."""
+    _lazy_run("bonfire.cli.commands.install_agents", "install_agents")(
+        scope=scope, dry_run=dry_run, force=force
+    )
+
+
+@app.command("uninstall-agents")
+def uninstall_agents(
+    scope: str = typer.Option(
+        "user",
+        "--scope",
+        "-s",
+        help="Uninstall target: 'user' or 'project'.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be removed without deleting any files.",
+    ),
+) -> None:
+    """Remove Bonfire cadre subagent files installed by `install-agents`."""
+    _lazy_run("bonfire.cli.commands.install_agents", "uninstall_agents")(
+        scope=scope, dry_run=dry_run
+    )
+
+
+@app.command("list-agents")
+def list_agents(
+    scope: str = typer.Option(
+        "user",
+        "--scope",
+        "-s",
+        help="Scope to inspect: 'user' or 'project'.",
+    ),
+) -> None:
+    """Report which cadre files are installed at the given scope."""
+    _lazy_run("bonfire.cli.commands.install_agents", "list_agents")(scope=scope)
+
+
+@app.command("build-agents")
+def build_agents(
+    output_dir: Path = typer.Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Directory to write generated agent files (default: ./agents/).",
+    ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Exit non-zero if generated files differ from canonical sources. CI-friendly.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite existing files without prompting.",
+    ),
+) -> None:
+    """Generate Claude Code-shaped subagent files from canonical prompts + metadata."""
+    _lazy_run("bonfire.cli.commands.build_agents", "build_agents")(
+        output_dir=output_dir, check=check, force=force
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""In-memory vault backend for testing.
+"""In-memory vault backend.
 
 Stores entries in a list. Query uses substring matching on content.
 No embeddings, no external dependencies. Implements VaultBackend protocol.
+
+Originally documented as "for testing," but the knowledge factory returns
+this backend as the SHIPPING DEFAULT when knowledge is unconfigured
+(``enabled=False`` or ``backend="memory"``). Production users hit this class
+on every ``bonfire scan`` unless they explicitly opt into LanceDB, so its
+performance characteristics matter accordingly.
 
 Maintains side indices so the hot paths scale linearly:
 
@@ -29,7 +35,17 @@ if TYPE_CHECKING:
 
 
 class InMemoryVaultBackend:
-    """In-memory vault for tests. No embeddings, substring matching."""
+    """In-memory vault. Substring matching, no embeddings.
+
+    Shipping default when knowledge is unconfigured. ``exists()`` is O(1) via
+    the ``_hash_set`` side index; ``query()`` reads pre-lowered content from
+    the ``_lower_cache`` side index (filled lazily, once per entry) so it does
+    NOT allocate ``e.content.lower()`` per entry per call.
+
+    The ``_entries: list[VaultEntry]`` attribute is the canonical iteration /
+    inspection surface and is append-only -- ``store()`` does NOT dedup on
+    hash collision (the caller owns the ``exists()``-then-``store()`` guard).
+    """
 
     def __init__(self) -> None:
         self._entries: list[VaultEntry] = []

@@ -51,6 +51,7 @@ _EXPECTED_CONSUMERS: frozenset[str] = frozenset(
         "engine/checkpoint.py",
         "onboard/config_generator.py",
         "onboard/scanners/claude_memory.py",
+        "onboard/scanners/mcp_servers.py",
         "onboard/scanners/vault_seed.py",
         "scan/tech_scanner.py",
         "session/persistence.py",

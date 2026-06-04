@@ -98,7 +98,8 @@ class LanceDBBackend:
         try:
             results = self._table.search().where(f"content_hash = '{safe_hash}'").limit(1).to_list()
             return len(results) > 0
-        except Exception:
+        except Exception as exc:
+            logger.warning("Vault exists check failed: %s", exc)
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:

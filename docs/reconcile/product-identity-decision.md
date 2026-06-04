@@ -94,10 +94,11 @@ the never-merge rule) grafted the cadre surface onto the trunk and measured it.
   `cli or cadre or install or agents`; 368 passed (1 xpassed) for the
   app/help/command tests; 12 passed for the `install_skill`/`skill` tests
   (the A surface is un-regressed).
-- **Does it actually work?** Functional smokes: `bonfire build-agents` wrote
-  all seven role files (proving prompt loading through `importlib.resources`
-  plus the packaging glob); `bonfire install-agents --dry-run` enumerated the
-  seven `bonfire-*` agents (proving role metadata + the cadre contract).
+- **Does it actually work?** Functional smokes (run on the spike branch,
+  where the cadre verbs exist): the spike's `build-agents` wrote all seven
+  role files (proving prompt loading through `importlib.resources` plus the
+  packaging glob); `install-agents --dry-run` enumerated the seven
+  `bonfire-*` agents (proving role metadata + the cadre contract).
 - **Diff shape:** 13 files changed, +1134 / −0 — purely additive, the exact
   inverse of B-naive's −2062.
 

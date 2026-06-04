@@ -15,9 +15,9 @@ name: Smoke
 
 on:
   push:
-    branches: [main, v0.1]
+    branches: [main, v0.1, reconcile/v1-trunk]
   pull_request:
-    branches: [main, v0.1]
+    branches: [main, v0.1, reconcile/v1-trunk]
 
 permissions:
   contents: read

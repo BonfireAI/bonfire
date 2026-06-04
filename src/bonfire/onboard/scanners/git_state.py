@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
+from bonfire.timeouts import resolve_timeout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -39,11 +40,15 @@ PANEL = "git_state"
 #: Sentinel returncode used when ``asyncio.wait_for`` raises ``TimeoutError``.
 _RC_TIMEOUT: int = -1
 
+#: Per-command git subprocess timeout (seconds). Sourced from the shared
+#: resolver; behavior-preserving alias of ``DEFAULT_TIMEOUTS["git"]`` (5.0).
+_GIT_TIMEOUT = resolve_timeout("git")
+
 
 async def _run_cmd(
     cmd: list[str],
     cwd: Path | str | None = None,
-    timeout: float = 5.0,
+    timeout: float | None = None,
 ) -> tuple[int | None, str]:
     """Run a subprocess, return (returncode, stdout_text).
 
@@ -54,7 +59,12 @@ async def _run_cmd(
 
     Returns ``(-1, "")`` on timeout (``_RC_TIMEOUT``) and ``(None, "")``
     on ``OSError`` during ``create_subprocess_exec``.
+
+    ``timeout`` defaults to the shared ``_GIT_TIMEOUT`` (5.0s) when not
+    supplied explicitly.
     """
+    if timeout is None:
+        timeout = _GIT_TIMEOUT
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,

@@ -192,15 +192,25 @@ class TestEntryTypeMapping:
 
 class TestContentHashing:
     async def test_content_hash_computed_via_knowledge_hasher(self) -> None:
-        """Entry.content_hash == content_hash(entry.content) (byte-stable)."""
+        """Entry.content_hash == content_hash(event_id + content) (byte-stable).
+
+        The dedup key is scoped by event_id so two distinct events
+        with identical text do not collide. The stored hash is therefore the
+        hash of ``"{event_id}\\n{content}"``, not the content text alone.
+        """
         backend = _FakeBackend()
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
-        await consumer.on_stage_completed(_stage_completed())
+        event = _stage_completed()
+        await consumer.on_stage_completed(event)
         entry = backend.stored[0]
-        assert entry.content_hash == _ch(entry.content)
+        assert entry.content_hash == _ch(f"{event.event_id}\n{entry.content}")
 
     async def test_dedup_skips_store_when_hash_exists(self) -> None:
-        """If backend.exists(hash) is True, consumer does NOT call store()."""
+        """If backend.exists(hash) is True, consumer does NOT call store().
+
+        The dedup key is the event-scoped hash, so pre-seed the
+        backend with ``content_hash(event_id + content)`` (the real key).
+        """
         # Pre-compute content that matches the consumer's output for stage_completed.
         event = _stage_completed()
         expected_content = (
@@ -208,7 +218,7 @@ class TestContentHashing:
             f"agent={event.agent_name} "
             f"duration={event.duration_seconds} cost={event.cost_usd}"
         )
-        expected_hash = _ch(expected_content)
+        expected_hash = _ch(f"{event.event_id}\n{expected_content}")
         backend = _FakeBackend(pre_existing={expected_hash})
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
         await consumer.on_stage_completed(event)

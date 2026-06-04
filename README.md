@@ -1,6 +1,9 @@
 # Bonfire
 
-**An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary.** Define agents. Wire stages. Ship quality.
+**Bonfire is the nucleus of agentic discipline.** The *how* is dry and
+mechanical: an installable Python pipeline runtime that enforces
+software-build discipline at the dispatch boundary, not at the prompt
+layer. Define agents. Wire stages. Ship quality.
 
 [![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
 [![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)

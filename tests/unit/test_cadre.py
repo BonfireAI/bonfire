@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import importlib.resources
+
 import pytest
 
 from bonfire.cadre import (
@@ -89,3 +91,31 @@ class TestResolveRolePrompt:
         # Per Python convention: typed errors should subclass standard exception
         # families so generic except-handlers still catch them.
         assert issubclass(UnknownCadreRoleError, ValueError)
+
+
+class TestResolveRolePromptRoundtrip:
+    """Pin the packaging contract: every publishable role resolves to EXACTLY
+    its bundled `bonfire/prompts/<role>.md` body.
+
+    The non-empty + spot-check tests above prove the lookup returns *something*
+    plausible. This class pins the stronger 1:1 contract the wheel must ship:
+    the adapter maps role -> file with no transformation, and the packaged
+    wheel bundles a prompt file for the full publishable set. A drift in
+    either direction (a missing prompt file, or an adapter that rewrites the
+    body) breaks the round-trip and fails here.
+    """
+
+    @pytest.mark.parametrize("role_name", PUBLISHABLE_ROLE_NAMES)
+    def test_resolve_returns_exact_bundled_body(self, role_name: str) -> None:
+        bundled = (importlib.resources.files("bonfire") / "prompts" / f"{role_name}.md").read_text(
+            encoding="utf-8"
+        )
+        assert resolve_role_prompt(role_name) == bundled
+
+    def test_every_publishable_role_has_a_bundled_prompt_file(self) -> None:
+        # The wheel must ship one prompt file per publishable role; a role in
+        # the registry without a backing file would raise here on read.
+        prompts_dir = importlib.resources.files("bonfire") / "prompts"
+        for role_name in PUBLISHABLE_ROLE_NAMES:
+            prompt_file = prompts_dir / f"{role_name}.md"
+            assert prompt_file.is_file(), f"missing bundled prompt for {role_name!r}"

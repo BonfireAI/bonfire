@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from bonfire.errors import NetworkError, RetrievalError
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,10 +72,10 @@ class OllamaEmbedder:
         except Exception as exc:
             exc_name = type(exc).__name__.lower()
             if "connect" in exc_name or "connection" in exc_name:
-                raise RuntimeError("Ollama server not running. Start with: ollama serve") from None
+                raise NetworkError("Ollama server not running. Start with: ollama serve") from None
             status = getattr(exc, "status_code", None)
             if status == 404:
-                raise RuntimeError(
+                raise RetrievalError(
                     f"Model '{self._model}' not found. Run: ollama pull {self._model}"
                 ) from None
             raise

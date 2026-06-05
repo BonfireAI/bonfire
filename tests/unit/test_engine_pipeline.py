@@ -317,10 +317,15 @@ class TestImports:
 
 
 class TestPipelineResult:
-    """PipelineResult: frozen Pydantic model with the V1 8-field shape (Sage D8)."""
+    """PipelineResult: frozen Pydantic model.
+
+    The original 8-field shape was additively extended with
+    ``error_detail: ErrorDetail | None`` -- the structured, traceback-bearing
+    failure (Elegance Law). ``error`` (str) stays for back-compat.
+    """
 
     def test_field_list_matches_v1(self) -> None:
-        """Locked 8-field set."""
+        """Locked field set: the original 8 fields plus the additive ``error_detail``."""
         from bonfire.engine.pipeline import PipelineResult
 
         expected = {
@@ -330,6 +335,7 @@ class TestPipelineResult:
             "total_cost_usd",
             "duration_seconds",
             "error",
+            "error_detail",
             "failed_stage",
             "gate_failure",
         }

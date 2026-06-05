@@ -74,6 +74,9 @@ class PipelineResult(BaseModel):
     total_cost_usd: float = 0.0
     duration_seconds: float = 0.0
     error: str = ""
+    # Structured, traceback-bearing failure (Elegance Law). Populated on the
+    # never-raise shell's catch-all path; ``error`` (str) stays for back-compat.
+    error_detail: ErrorDetail | None = None
     failed_stage: str = ""
     gate_failure: GateResult | None = None
 
@@ -179,12 +182,16 @@ class PipelineEngine:
                     stages_completed=len(stages_seen),
                 )
             )
+            # Build the structured detail INSIDE the except so the traceback
+            # is live (Elegance Law); ``error`` (str) stays for back-compat.
+            error_detail = ErrorDetail.from_exception(exc)
             return PipelineResult(
                 success=False,
                 session_id=sid,
                 stages=stages_seen,
                 total_cost_usd=total_cost,
                 error=error_msg,
+                error_detail=error_detail,
                 duration_seconds=duration,
             )
 

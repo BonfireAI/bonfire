@@ -17,6 +17,7 @@ All git commands use ``asyncio.create_subprocess_exec`` with a
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
@@ -30,6 +31,12 @@ if TYPE_CHECKING:
 __all__ = ["sanitize_remote_url", "scan"]
 
 PANEL = "git_state"
+
+#: Module logger. Subprocess failures (timeout, launch failure) are narrated at
+#: DEBUG so an operator can see *why* a git fact (branch, remotes, last-commit)
+#: went missing instead of staring at a silently empty panel. Matches the
+#: in-repo idiom in ``bonfire.onboard.scanners.mcp_servers``.
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -80,9 +87,24 @@ async def _run_cmd(
                 await proc.communicate()
             except Exception:  # noqa: BLE001 — best-effort drain
                 pass
+            # Name the subcommand (not the cwd path) so the missing git fact is
+            # traceable without leaking filesystem layout.
+            _log.debug(
+                "git_state: timeout after %.1fs running %r — returning sentinel",
+                timeout,
+                " ".join(cmd),
+            )
             return (_RC_TIMEOUT, "")
         return (proc.returncode, stdout.decode(errors="replace").strip())
-    except OSError:
+    except OSError as exc:
+        # The binary could not be launched (missing, not executable, etc.).
+        # Narrate the subcommand and underlying cause so the skipped git fact is
+        # visible in the logs instead of vanishing silently.
+        _log.debug(
+            "git_state: OSError running %r: %s — returning sentinel",
+            " ".join(cmd),
+            exc,
+        )
         return (None, "")
 
 

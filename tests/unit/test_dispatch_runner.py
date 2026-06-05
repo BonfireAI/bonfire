@@ -533,6 +533,51 @@ class TestRetryableFailedEnvelope:
 
 
 # ---------------------------------------------------------------------------
+# Dispatch-terminal scope guard
+# ---------------------------------------------------------------------------
+
+
+class TestTaxonomyTerminalButRetriedInDispatch:
+    """Codes that are terminal in the typed vocabulary yet never surface in a
+    dispatch FAILED envelope must stay retryable HERE.
+
+    ``gate`` and ``drift`` carry ``is_terminal = True`` in the failure
+    vocabulary, but they belong to pipeline-gate / drift-detection surfaces,
+    not the agent-backend dispatch path. The dispatch-terminal set is exactly
+    the five backend-originating codes; reflecting the whole taxonomy would
+    silently widen it to seven and retire retries that should happen. These
+    assertions pin the divergence so a regression is caught, not absorbed.
+    """
+
+    @pytest.mark.parametrize("error_type", ["gate", "drift"])
+    async def test_taxonomy_terminal_code_is_retried_to_exhaustion(self, error_type: str):
+        env = _envelope()
+        failed = env.with_error(ErrorDetail(error_type=error_type, message=f"{error_type} msg"))
+        # Same FAILED envelope on every attempt — if this code were treated as
+        # dispatch-terminal the runner would return after one call.
+        backend = ScriptedBackend([failed, failed, failed, failed])
+        result = await execute_with_retry(backend, env, _options(), max_retries=3, retry_delay=0.0)
+        assert result.envelope.status == TaskStatus.FAILED
+        assert result.retries == 3
+        assert backend.call_count > 1
+        assert backend.call_count == 4
+
+    @pytest.mark.parametrize("error_type", ["gate", "drift"])
+    async def test_taxonomy_terminal_code_emits_retry_events(self, error_type: str):
+        """A retried code emits DispatchRetry — a terminal code would emit none."""
+        bus, capture = _bus_with_capture(DispatchStarted, DispatchRetry, DispatchFailed)
+        env = _envelope(agent_name="scout")
+        failed = env.with_error(ErrorDetail(error_type=error_type, message=f"{error_type} msg"))
+        backend = ScriptedBackend([failed, failed, failed])
+        await execute_with_retry(
+            backend, env, _options(), max_retries=2, event_bus=bus, retry_delay=0.0
+        )
+        assert len(capture.of_type(DispatchStarted)) == 1
+        assert len(capture.of_type(DispatchRetry)) == 2
+        assert len(capture.of_type(DispatchFailed)) == 1
+
+
+# ---------------------------------------------------------------------------
 # Cost accumulation across retries
 # ---------------------------------------------------------------------------
 

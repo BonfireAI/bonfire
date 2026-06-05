@@ -17,8 +17,10 @@ from typing import Any
 
 import pytest
 
+from bonfire.errors import NetworkError, RetrievalError
 from bonfire.knowledge.embeddings import EmbeddingProvider, get_embedder
 from bonfire.knowledge.mock_embedder import MockEmbedder
+from bonfire.knowledge.ollama_embedder import OllamaEmbedder
 
 # ---------------------------------------------------------------------------
 # Protocol conformance
@@ -119,3 +121,57 @@ class TestGetEmbedderPassThrough:
     def test_get_embedder_respects_dim(self) -> None:
         embedder: Any = get_embedder(provider="mock", dim=256)
         assert embedder.dim == 256
+
+
+# ---------------------------------------------------------------------------
+# OllamaEmbedder — typed-failure surface
+# ---------------------------------------------------------------------------
+
+
+class ConnectionRefused(Exception):
+    """A connection-flavoured failure (name matches the connect/connection guard)."""
+
+
+class _StatusError(Exception):
+    """A failure carrying an HTTP-style status_code attribute."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__(f"status {status_code}")
+        self.status_code = status_code
+
+
+class _RaisingClient:
+    """A stand-in ollama client whose embed() raises the supplied exception."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def embed(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise self._exc
+
+
+def _embedder_with_client(client: Any) -> OllamaEmbedder:
+    """Build an OllamaEmbedder around a fake client without importing ollama."""
+    embedder = OllamaEmbedder.__new__(OllamaEmbedder)
+    embedder._client = client
+    embedder._model = "nomic-embed-text"
+    embedder._dim = 768
+    embedder._prefix = "search_document: "
+    embedder._max_batch_size = 8
+    return embedder
+
+
+class TestOllamaEmbedderTypedFailure:
+    """A failing batch speaks the shared typed-failure vocabulary, not RuntimeError."""
+
+    def test_connection_failure_raises_network_error(self) -> None:
+        embedder = _embedder_with_client(_RaisingClient(ConnectionRefused("refused")))
+        with pytest.raises(NetworkError) as caught:
+            embedder.embed(["hello"])
+        assert caught.value.retryable is True
+
+    def test_model_not_found_raises_retrieval_error(self) -> None:
+        embedder = _embedder_with_client(_RaisingClient(_StatusError(404)))
+        with pytest.raises(RetrievalError) as caught:
+            embedder.embed(["hello"])
+        assert caught.value.retryable is True

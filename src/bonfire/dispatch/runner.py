@@ -15,10 +15,13 @@ It wraps every ``backend.execute()`` call with:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from typing import TYPE_CHECKING
 
+from bonfire import errors as errors_module
 from bonfire.dispatch.result import DispatchResult
+from bonfire.errors import BonfireError
 from bonfire.models.envelope import ErrorDetail, TaskStatus
 from bonfire.models.events import (
     BonfireEvent,
@@ -33,17 +36,50 @@ if TYPE_CHECKING:
     from bonfire.models.envelope import Envelope
     from bonfire.protocols import AgentBackend, DispatchOptions
 
-# Error types that indicate terminal (non-retryable) failures.
-# Everything else is assumed retryable (subprocess crash, timeout, etc).
-_TERMINAL_ERROR_TYPES = frozenset(
-    {
-        "AgentError",  # Agent itself reported error (is_error=True from SDK)
-        "RateLimitError",  # Rate limit rejected — retrying won't help
-        "config",  # Configuration error (unknown handler, etc.)
-        "CLINotFoundError",  # CLI binary not found
-        "executor",  # Executor-level failure
-    }
-)
+# Terminality is sourced from the one typed failure vocabulary, not a
+# duplicated string-set: each BonfireError subclass declares its own
+# ``is_terminal``. We index the taxonomy by its stable wire ``code`` so a
+# FAILED envelope's ``error_type`` string resolves back to the typed class
+# that owns the retry decision.
+_ERROR_CODE_TO_CLASS: dict[str, type[BonfireError]] = {
+    cls.code: cls
+    for _, cls in inspect.getmembers(errors_module, inspect.isclass)
+    if issubclass(cls, BonfireError) and cls is not BonfireError
+}
+
+# Codes that are *taxonomy*-terminal but NOT *dispatch*-terminal.
+#
+# ``gate`` (GateError) and ``drift`` (DriftError) carry ``is_terminal = True``
+# in the typed vocabulary, but they are never raised inside the agent-backend
+# dispatch FAILED path this runner retries — they belong to pipeline-gate and
+# drift-detection surfaces. The dispatch-terminal set is deliberately the five
+# backend-originating codes
+# ``{AgentError, RateLimitError, config, CLINotFoundError, executor}``; widening
+# it to seven by reflecting the whole taxonomy would silently retire retries
+# for failures that never reach here. This exclusion is a runner-local scope
+# decision, NOT a taxonomy change — the typed classes stay terminal everywhere
+# else. Taxonomy growth remains Wizard-gated.
+_NON_DISPATCH_TERMINAL_CODES = frozenset({"gate", "drift"})
+
+
+def _is_terminal_error_type(error_type: str) -> bool:
+    """Whether a FAILED envelope's ``error_type`` is dispatch-terminal (no retry).
+
+    Reads the typed vocabulary: resolve the wire string back to its
+    ``BonfireError`` subclass and consult ``is_terminal``. An unrecognized
+    ``error_type`` (no taxonomy entry) is treated as retryable — the safer
+    default that preserves the previous behavior. Codes that are
+    taxonomy-terminal but never surface in a dispatch FAILED envelope
+    (see ``_NON_DISPATCH_TERMINAL_CODES``) stay retryable here so the
+    effective dispatch-terminal set is exactly the five backend codes.
+    """
+    if error_type in _NON_DISPATCH_TERMINAL_CODES:
+        return False
+    cls = _ERROR_CODE_TO_CLASS.get(error_type)
+    if cls is None:
+        return False
+    return cls.is_terminal
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -130,7 +166,7 @@ async def execute_with_retry(
                 last_error_msg = result_env.error.message if result_env.error else "unknown"
 
                 # Terminal errors: return immediately, no retry.
-                if error_type in _TERMINAL_ERROR_TYPES:
+                if _is_terminal_error_type(error_type):
                     duration = time.monotonic() - start
                     await _emit(
                         event_bus,

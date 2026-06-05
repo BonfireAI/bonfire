@@ -28,6 +28,12 @@ Surfaces locked here:
     runs on every CI run.
   * ``.pre-commit-config.yaml`` and ``pyproject.toml`` — the formatter
     is pinned to one exact version in both places, and they agree.
+  * The behavioral test coverage for the surfaces above — the ISM
+    document, loader, and builtin-example test modules, plus the
+    citation-drift script's own test. The production surfaces are guarded
+    by name; their coverage must be guarded too, or a wholesale code drop
+    could delete the tests silently (fewer collected tests is not a
+    pytest failure).
 """
 
 from __future__ import annotations
@@ -177,3 +183,44 @@ def test_ruff_pinned_consistently() -> None:
     assert f'"ruff=={_RUFF_VERSION}"' in pyproject_text, (
         f"pyproject no longer pins ruff=={_RUFF_VERSION}"
     )
+
+
+# The behavioral test modules that exercise the surfaces guarded above.
+# Each entry is the path relative to the repo root and a token that must
+# appear in the file. The token anchors on a real test name in each
+# module, so deleting the file *or* gutting it down to a stub that no
+# longer runs that test turns the guard red. A wholesale code drop that
+# removed these would otherwise just lower the collected-test count,
+# which pytest does not treat as a failure.
+_GUARDED_TEST_MODULES = (
+    ("tests/unit/test_integrations_document.py", "def test_"),
+    ("tests/unit/test_integrations_loader.py", "def test_"),
+    ("tests/unit/test_integrations_github_ism.py", "def test_"),
+    ("tests/scripts/test_check_protocol_doc_citations.py", "def test_"),
+)
+
+
+def test_guarded_surfaces_keep_their_tests() -> None:
+    """The behavioral tests for the locked surfaces exist and still run.
+
+    The production ISM package, its spec and builtin, and the citation
+    drift script are guarded by name above. Their coverage must be
+    guarded too: deleting (or stubbing out) any of the ISM document /
+    loader / builtin test modules or the citation-script test fails this
+    test, because a vanished test module is silent to pytest otherwise.
+    """
+    missing: list[str] = []
+    stubbed: list[str] = []
+    for rel_path, marker in _GUARDED_TEST_MODULES:
+        path = _REPO_ROOT / rel_path
+        if not path.is_file():
+            missing.append(rel_path)
+            continue
+        text = path.read_text(encoding="utf-8")
+        # A real test module carries at least one test function and is not
+        # a truncated placeholder.
+        if marker not in text or len(text) < 500:
+            stubbed.append(rel_path)
+
+    assert not missing, f"behavioral test modules are missing: {missing}"
+    assert not stubbed, f"behavioral test modules gutted to stubs: {stubbed}"

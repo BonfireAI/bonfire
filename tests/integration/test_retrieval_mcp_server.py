@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Integration smoke for the bonfire-public retrieval MCP server.
 
-Tests the tool's handler directly. End-to-end stdio testing is out of scope
-for this PR — a future ticket can add a subprocess-based smoke that spawns
-the server and exchanges JSON-RPC frames.
+Tests the tool's handler directly. End-to-end stdio coverage — a subprocess
+smoke that spawns the server and exchanges JSON-RPC frames — is not exercised
+here; the handler is the unit under test.
 """
 
 from __future__ import annotations

@@ -1,39 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""RED contract tests: retrieve_context must bound a hung provider with a timeout.
+"""Timeout and failure-containment contract for ``bonfire.mcp.retrieval_server``.
 
-These tests pin the timeout contract for ``bonfire.mcp.retrieval_server``. They
-were authored against an implementation that has NO timeout — a hung provider
-blocks the stdio loop forever — so they are expected to FAIL until the timeout
-wrapper lands.
-
-The contract pinned here (implementer must satisfy EXACTLY this surface):
+``handle_retrieve_context`` must never let a misbehaving provider block the
+stdio loop or escape as an exception. The contract pinned here:
 
 1. Module constant ``DEFAULT_RETRIEVE_TIMEOUT_S: float = 30.0``.
 2. Helper ``_retrieve_timeout() -> float`` returning
    ``float(os.getenv("BONFIRE_RETRIEVE_TIMEOUT_S", DEFAULT_RETRIEVE_TIMEOUT_S))``
-   — env override wins; absent env falls back to the default constant.
-3. ``handle_retrieve_context`` wraps the provider call in
+   — the env override wins; an absent env falls back to the default constant.
+3. The provider call is wrapped in
    ``asyncio.wait_for(active.retrieve(...), timeout=_retrieve_timeout())``. On
-   timeout it must surface an error string (the repo convention is a plain
-   ``"retrieve_context: ..."`` text response, NOT an MCP ``isError`` envelope)
-   whose text contains the phrase ``timed out``.
+   timeout the handler surfaces a plain ``"retrieve_context: ..."`` text
+   response (not an MCP ``isError`` envelope) whose text contains ``timed out``.
 4. A fast provider call returns unchanged.
+5. Any other provider exception is contained as
+   ``"retrieve_context: provider raised {type}: {exc}"`` — never re-raised.
 
-NOTE ON CONTRACT DRIFT (read before implementing):
-The originating ticket described a different surface than the one that exists in
-the tree today — ``_handle_retrieve_context(arguments)``, a module-level
-``_PROVIDER``/``_get_provider`` hook, ``DEFAULT_RETRIEVE_TIMEOUT_S``, and an
-existing ``tests/mcp/test_retrieval_server.py`` with 7 tests. None of that
-matches reality: the real entry point is the keyword-only
-``handle_retrieve_context(*, query, token_budget=4000, provider=None)``, the
-provider is discovered via ``bonfire._discovery.discover_retrieval_provider``,
-and the generic-except path returns
-``f"retrieve_context: provider raised {type(exc).__name__}: {exc}"``. These
-tests are written against the REAL surface. The two env-knob tests assume the
-implementer adds the constant + helper named above; if the implementer chooses
-different names, these tests are the contract and the names must match them.
+The entry point is the keyword-only
+``handle_retrieve_context(*, query, token_budget=4000, provider=None)``; when
+``provider`` is ``None`` the active provider is discovered via
+``bonfire._discovery.discover_retrieval_provider``.
 """
 
 from __future__ import annotations
@@ -74,6 +62,13 @@ class _FastProvider:
 
     async def retrieve(self, *, query: str, seed_keys=None, token_budget: int = 4000):
         return self._atoms
+
+
+class _RaisingProvider:
+    """A provider whose retrieve() raises a non-timeout error."""
+
+    async def retrieve(self, *, query: str, seed_keys=None, token_budget: int = 4000):
+        raise RuntimeError("backend unreachable")
 
 
 def test_retrieve_timeout_default_is_constant(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,6 +117,17 @@ async def test_fast_provider_unaffected_by_timeout(
     assert "1 atoms" in text
     assert "k1" in text
     assert "ok" in text
+
+
+async def test_raising_provider_is_contained_as_error_text() -> None:
+    """A provider that raises a non-timeout error is contained as a text
+    response naming the exception type — it is never re-raised at the handler."""
+    text = await mod.handle_retrieve_context(query="hi", provider=_RaisingProvider())
+
+    assert isinstance(text, str)
+    assert "provider raised" in text
+    assert "RuntimeError" in text
+    assert "backend unreachable" in text
 
 
 async def test_custom_timeout_honored_cancels_provider(

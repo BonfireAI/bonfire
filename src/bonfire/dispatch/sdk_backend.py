@@ -21,7 +21,9 @@ from contextlib import aclosing
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from bonfire.dispatch._cost import safe_cost_from_attr
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
+from bonfire.errors import AgentError, RateLimitError
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
@@ -246,7 +248,7 @@ class ClaudeSDKBackend:
                                 on_stream(block_text)
 
                 elif ResultMessage is not None and isinstance(msg, ResultMessage):
-                    cost_usd = getattr(msg, "total_cost_usd", None) or 0.0
+                    cost_usd = safe_cost_from_attr(msg, "total_cost_usd")
                     duration_ms = getattr(msg, "duration_ms", 0) or 0
                     duration_seconds = duration_ms / 1000.0
                     session_id = getattr(msg, "session_id", None)
@@ -257,12 +259,20 @@ class ClaudeSDKBackend:
                 elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
                     status = getattr(msg, "status", "")
                     if status == "rejected":
-                        return envelope.with_error(
-                            ErrorDetail(
-                                error_type="RateLimitError",
-                                message="Rate limit exceeded — request rejected by API",
+                        # Source the failure from the typed vocabulary so the
+                        # taxonomy (terminal/no-retry) flows. Capture via the
+                        # redaction policy — never the raw ``format_exc()`` —
+                        # so persisted JSONL cannot leak the prompt/options.
+                        try:
+                            raise RateLimitError("Rate limit exceeded — request rejected by API")
+                        except RateLimitError as exc:
+                            return envelope.with_error(
+                                ErrorDetail(
+                                    error_type=type(exc).__name__,
+                                    message=str(exc),
+                                    traceback=_format_error_traceback(exc),
+                                )
                             )
-                        )
                     elif status == "allowed_warning":
                         logger.warning("Rate limit warning: approaching limit")
 
@@ -274,16 +284,23 @@ class ClaudeSDKBackend:
         # Check is_error flag from ResultMessage
         if is_error:
             error_msgs = [str(e) for e in errors] if errors else []
-            return envelope.with_error(
-                ErrorDetail(
-                    error_type="AgentError",
-                    message=(
-                        "; ".join(error_msgs)
-                        if error_msgs
-                        else (final_text or "Agent reported error")
-                    ),
-                )
+            agent_message = (
+                "; ".join(error_msgs) if error_msgs else (final_text or "Agent reported error")
             )
+            # Source the failure from the typed vocabulary so the taxonomy
+            # (terminal/no-retry) flows. Capture via the redaction policy —
+            # never the raw ``format_exc()`` — so persisted JSONL cannot leak
+            # the prompt/options.
+            try:
+                raise AgentError(agent_message)
+            except AgentError as exc:
+                return envelope.with_error(
+                    ErrorDetail(
+                        error_type=type(exc).__name__,
+                        message=str(exc),
+                        traceback=_format_error_traceback(exc),
+                    )
+                )
 
         # Success path — set duration + session_id metadata then enrich with result.
         enriched = envelope.with_result(result=final_text, cost_usd=cost_usd)

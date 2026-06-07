@@ -247,7 +247,7 @@ class TestPydanticFrozenShape:
         )
         # Field reassignment must raise (Pydantic ValidationError or AttributeError;
         # both are subclasses of Exception). v1 floor uses pytest.raises(Exception).
-        first_field = next(iter(instance.model_fields))
+        first_field = next(iter(type(instance).model_fields))
         with pytest.raises(Exception):  # noqa: B017
             setattr(instance, first_field, getattr(instance, first_field))
 

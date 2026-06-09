@@ -15,6 +15,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from bonfire.errors import RetrievalError
 from bonfire.knowledge.hasher import content_hash as compute_hash
 
 if TYPE_CHECKING:
@@ -76,8 +77,15 @@ class LanceDBBackend:
         try:
             results = search.to_list()
         except Exception as exc:
-            logger.warning("Vault query failed: %s", exc)
-            return []
+            # Elegance Law: a real backend failure must SPEAK in the one typed
+            # vocabulary, not masquerade as a zero-hit ``[]``. A
+            # genuine empty result is still a success (handled above and by an
+            # empty ``to_list()``); only a *thrown* lookup becomes a typed,
+            # retryable RetrievalError carrying the originating exception.
+            raise RetrievalError(
+                f"Vault query failed: {exc}",
+                context={"query": query, "limit": limit, "entry_type": entry_type},
+            ) from exc
 
         return [self._record_to_entry(r) for r in results]
 

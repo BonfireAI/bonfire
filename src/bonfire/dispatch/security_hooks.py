@@ -276,6 +276,8 @@ def _split_chain(segment: str) -> list[str]:
     return [p for p in parts if p]
 
 
+# recursion: bounded by the $()/backtick nesting depth of ``segment`` — each
+# recursive call receives a strictly shorter inner body, so depth shrinks to 0.
 def _extract_substitutions(segment: str) -> list[str]:
     """Return the inner bodies of $(...) and `...` in ``segment``.
 

@@ -1,0 +1,68 @@
+{
+  "frozen_count": 9,
+  "entries": [
+    {
+      "file": "src/bonfire/dispatch/runner.py",
+      "symbol_or_line": "execute_with_retry",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except at the dispatch retry boundary; the catch records the failure for the retry verdict, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/engine/advisor.py",
+      "symbol_or_line": "VaultAdvisor.check",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except in the vault advisor probe; advisory-only fail-open path (logs a warning, returns empty), shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/engine/executor.py",
+      "symbol_or_line": "StageExecutor.execute_single",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except at the stage-execution boundary; the catch converts to a typed failure envelope, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/engine/factory.py",
+      "symbol_or_line": "load_settings_or_default",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except guarding settings load (wraps tomllib + pydantic types) with a logged explicit-default fallback, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/engine/pipeline.py",
+      "symbol_or_line": "PipelineEngine.run",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except at the pipeline run boundary; CancelledError deliberately propagates past it, failure surfaces as a typed outcome, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/engine/pipeline.py",
+      "symbol_or_line": "PipelineEngine._execute_stage",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except at the per-stage handler boundary; the catch converts to an envelope with a typed ErrorDetail, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/errors.py",
+      "symbol_or_line": "contain_as_error",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — the deliberate containment shell of the typed-error vocabulary: everything caught here becomes ErrorDetail.from_exception (containment by design, per the in-code comment)",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/mcp/retrieval_server.py",
+      "symbol_or_line": "handle_retrieve_context",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except at the MCP tool-handler boundary; the agent receives a structured error message instead of a crash, shrink via the failure-architecture ratchet",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    },
+    {
+      "file": "src/bonfire/prompt/precompose.py",
+      "symbol_or_line": "prebake_retrieval",
+      "rule": "BLE001",
+      "reason": "grandfathered at mount, audit 2026-06-10 — pre-existing broad-except around the optional retrieval prebake; degradation is logged and compose continues with empty context (containment by design, per the in-code comment)",
+      "approver": "BubbleGum mount (gauge-kit adoption), 2026-06-10"
+    }
+  ]
+}

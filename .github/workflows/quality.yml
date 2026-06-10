@@ -1,0 +1,23 @@
+# candyfactory-quality caller stub — generated surface; copy to
+# .github/workflows/quality.yml in the consumer repo. STRUCTURAL CONSTRAINTS
+# (each one is a Law-1 refuter neutering vector, banned by the gate itself):
+#   - triggers stay push + pull_request on the default branch — NO `paths:` /
+#     `paths-ignore:` filter (a filtered gate only runs when someone remembers)
+#   - NO `continue-on-error:` anywhere (a red-but-non-blocking gate is prose)
+#   - NO skip/mode inputs — the shared workflow declares none, so GitHub
+#     rejects any `with:` block at call time
+#   - the `uses:` ref is a FULL 40-hex commit SHA; Dependabot bumps it
+#     (docs/sha-pin-doctrine.md) — never @main, never a tag
+#   - mount this workflow as a REQUIRED status check in the repo's branch
+#     protection/ruleset, or the gate runs red and merges land anyway
+name: quality-gate
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  gate:
+    # Pinned to a full commit SHA of the kit repo (sha-pin doctrine; Dependabot bumps it):
+    uses: BonfireAI/candyfactory-quality/.github/workflows/quality-gate.yml@0e0b321de04f85bb144dc7644c28e17680bb587e
+    secrets: inherit

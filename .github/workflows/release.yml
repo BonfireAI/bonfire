@@ -65,6 +65,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Release version-truth guard (tag must equal declared version)
+        # Tripwire: this workflow publishes on ANY v*.*.* tag push, so a tag
+        # that disagrees with pyproject.toml would ship a wrong public
+        # release. Fail closed, with a typed error, before anything builds.
+        run: python scripts/check_tag_version.py "${GITHUB_REF_NAME}"
+
       - name: Install build frontend
         run: |
           python -m pip install --upgrade pip

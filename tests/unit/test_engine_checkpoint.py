@@ -71,7 +71,7 @@ def _make_completed() -> dict[str, Envelope]:
     }
 
 
-def _make_result(session_id: str = "sess-abc"):  # noqa: ANN202 — built lazily, depends on impl
+def _make_result(session_id: str = "sess-abc"):
     from bonfire.engine.pipeline import PipelineResult
 
     return PipelineResult(
@@ -594,7 +594,7 @@ class TestCorruptFileHandling:
         (tmp_path / "bad.json").write_text("{not json")
 
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
-        with pytest.raises(Exception):  # noqa: B017 — JSONDecodeError or ValidationError
+        with pytest.raises(Exception):
             mgr.load("bad")
 
 

@@ -47,7 +47,7 @@ from bonfire.models.envelope import (
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
-    from bonfire.events.bus import EventBus  # noqa: TC004 -- only for type hints
+    from bonfire.events.bus import EventBus
     from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.models.plan import StageSpec
 

@@ -1254,7 +1254,7 @@ class TestVocabularyParity:
                             not BALANCED.
         """
         from bonfire.agent.tiers import resolve_model_for_role
-        from bonfire.engine.executor import StageExecutor  # noqa: F401 — used below
+        from bonfire.engine.executor import StageExecutor
         from bonfire.models.config import BonfireSettings
 
         settings = BonfireSettings()

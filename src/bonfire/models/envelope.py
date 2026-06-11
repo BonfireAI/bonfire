@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import traceback
 from enum import StrEnum
-from pathlib import Path  # noqa: TC003 — Pydantic needs Path at runtime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 

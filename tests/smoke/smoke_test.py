@@ -85,7 +85,7 @@ def _run(
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``argv`` with captured text output and the prepared child env."""
-    return subprocess.run(  # noqa: S603 — argv is list[str], shell=False.
+    return subprocess.run(
         list(argv),
         capture_output=True,
         text=True,
@@ -116,7 +116,7 @@ def step1_import_bonfire() -> None:
     """1. ``import bonfire`` → ``__version__`` non-empty string."""
     label = "step1: import bonfire + __version__"
     try:
-        import bonfire  # noqa: PLC0415 — runtime import is the test.
+        import bonfire
     except Exception as exc:  # pragma: no cover — failure path is the gate.
         _fail(label, f"import failed: {exc!r}")
         return
@@ -130,7 +130,7 @@ def step2_protocols_surface() -> None:
     """2. ``from bonfire.protocols import …`` six public names."""
     label = "step2: bonfire.protocols public surface"
     try:
-        from bonfire.protocols import (  # noqa: F401, PLC0415
+        from bonfire.protocols import (  # noqa: F401
             AgentBackend,
             DispatchOptions,
             QualityGate,
@@ -148,7 +148,7 @@ def step3_engine_surface() -> None:
     """3. ``from bonfire.engine import PipelineEngine, PipelineResult``."""
     label = "step3: bonfire.engine public surface"
     try:
-        from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401, PLC0415
+        from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401
     except Exception as exc:
         _fail(label, f"import failed: {exc!r}")
         return

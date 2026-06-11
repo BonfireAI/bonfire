@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bonfire.models.events import BonfireEvent  # noqa: TC001 — runtime use for model_dump()
+from bonfire.models.events import BonfireEvent
 
 
 class SessionPersistence:

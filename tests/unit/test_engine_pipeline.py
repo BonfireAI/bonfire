@@ -270,7 +270,7 @@ def _make_engine(
     config: PipelineConfig | None = None,
     handlers: dict[str, Any] | None = None,
     gate_registry: dict[str, Any] | None = None,
-):  # noqa: ANN201 — engine is lazily imported
+):
     from bonfire.engine.pipeline import PipelineEngine
 
     return PipelineEngine(

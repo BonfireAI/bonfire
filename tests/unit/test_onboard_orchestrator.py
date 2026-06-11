@@ -107,7 +107,7 @@ def _make_counting_scan(count: int) -> Callable:
     orchestrator's accounting can be asserted exactly.
     """
 
-    async def _scan(project_path, emit) -> int:  # noqa: ARG001 - interface parity
+    async def _scan(project_path, emit) -> int:
         return count
 
     return _scan
@@ -121,7 +121,7 @@ def _make_raising_scan(message: str) -> Callable:
     real cause via ``_log.exception`` rather than swallowing it silently.
     """
 
-    async def _scan(project_path, emit) -> int:  # noqa: ARG001 - interface parity
+    async def _scan(project_path, emit) -> int:
         raise RuntimeError(message)
 
     return _scan

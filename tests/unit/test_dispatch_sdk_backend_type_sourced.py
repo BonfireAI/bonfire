@@ -60,9 +60,9 @@ except ImportError:  # pragma: no cover
     _HAS_SDK_TYPES = False
 
 
-from bonfire.dispatch.sdk_backend import ClaudeSDKBackend  # noqa: E402
-from bonfire.models.envelope import Envelope  # noqa: E402
-from bonfire.protocols import DispatchOptions  # noqa: E402
+from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
+from bonfire.models.envelope import Envelope
+from bonfire.protocols import DispatchOptions
 
 
 def _mock_assistant_message(text: str) -> MagicMock:

@@ -47,7 +47,7 @@ import pytest
 # guard would defer ImportError to test execution; the BON-349 mission
 # spec requires 8 collection-time errors). The ScanUpdate symbol still
 # only flows through type annotations at runtime.
-from bonfire.onboard.protocol import ScanUpdate  # noqa: TC001 - runtime-anchor for RED collection
+from bonfire.onboard.protocol import ScanUpdate
 
 # ---------------------------------------------------------------------------
 # Helpers

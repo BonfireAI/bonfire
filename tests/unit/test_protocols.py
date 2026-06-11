@@ -37,9 +37,9 @@ if TYPE_CHECKING:
     # These names are used only by stringified annotations inside the
     # conformer test classes below. ``from __future__ import annotations``
     # defers their evaluation, so they never need to resolve at runtime.
-    # noqa is load-bearing: ruff cannot see the deferred-annotation usage.
-    from bonfire.models.envelope import Envelope  # noqa: F401
-    from bonfire.models.plan import (  # noqa: F401
+
+    from bonfire.models.envelope import Envelope
+    from bonfire.models.plan import (
         GateContext,
         GateResult,
         StageSpec,

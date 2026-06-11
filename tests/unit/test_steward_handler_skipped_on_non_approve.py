@@ -61,7 +61,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture()
-def github_client():  # noqa: ANN201
+def github_client():
     return MockGitHubClient()
 
 
@@ -76,7 +76,7 @@ def base_envelope() -> Envelope:
 
 
 @pytest.fixture()
-def handler(github_client) -> Any:  # noqa: ANN001, ANN201
+def handler(github_client) -> Any:
     return StewardHandler(github_client=github_client)
 
 
@@ -95,10 +95,10 @@ class TestStatusReflectsActualMerge:
 
     async def test_reject_verdict_returns_skipped(
         self,
-        handler,  # noqa: ANN001
+        handler,
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,  # noqa: ANN001
+        github_client,
     ) -> None:
         """verdict='reject' + pr_number present → SKIPPED (no merge happened)."""
         pr_number = await _seed_pr(github_client)
@@ -115,10 +115,10 @@ class TestStatusReflectsActualMerge:
 
     async def test_empty_verdict_returns_skipped(
         self,
-        handler,  # noqa: ANN001
+        handler,
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,  # noqa: ANN001
+        github_client,
     ) -> None:
         """No verdict key in prior_results → SKIPPED (no merge happened)."""
         pr_number = await _seed_pr(github_client)
@@ -132,7 +132,7 @@ class TestStatusReflectsActualMerge:
 
     async def test_approve_without_pr_number_returns_skipped(
         self,
-        handler,  # noqa: ANN001
+        handler,
         steward_stage: StageSpec,
         base_envelope: Envelope,
     ) -> None:
@@ -148,10 +148,10 @@ class TestStatusReflectsActualMerge:
 
     async def test_approve_with_pr_number_returns_completed(
         self,
-        handler,  # noqa: ANN001
+        handler,
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,  # noqa: ANN001
+        github_client,
     ) -> None:
         """Regression guard: the only TRUE merge path still returns COMPLETED."""
         pr_number = await _seed_pr(github_client)
@@ -174,10 +174,10 @@ class TestStatusPreservesEnvelopeStructure:
 
     async def test_skipped_path_still_attaches_metadata(
         self,
-        handler,  # noqa: ANN001
+        handler,
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,  # noqa: ANN001
+        github_client,
     ) -> None:
         """The SKIPPED-return path still records steward_verdict + steward_pr metadata.
 

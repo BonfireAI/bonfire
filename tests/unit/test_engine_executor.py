@@ -244,7 +244,7 @@ class TestConstructor:
     def test_accepts_project_root_kwarg(self, bus: EventBus, config: PipelineConfig) -> None:
         from bonfire.engine.executor import StageExecutor
 
-        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config, project_root="/tmp/proj")
+        ex = StageExecutor(backend=_MockBackend(), bus=bus, config=config, project_root="/fake")
         assert ex is not None
 
     def test_rejects_compiler_kwarg(self, bus: EventBus, config: PipelineConfig) -> None:

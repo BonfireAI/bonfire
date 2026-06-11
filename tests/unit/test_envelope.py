@@ -226,8 +226,8 @@ class TestEnvelopeConstruction:
             Envelope()  # type: ignore[call-arg]
 
     def test_working_dir_accepts_path(self):
-        env = Envelope(task="x", working_dir=Path("/tmp"))
-        assert env.working_dir == Path("/tmp")
+        env = Envelope(task="x", working_dir=Path("/fake/wd"))
+        assert env.working_dir == Path("/fake/wd")
 
     def test_thirteen_declared_fields(self):
         """Envelope must expose exactly 13 fields per the v0.1 contract."""
@@ -436,9 +436,9 @@ class TestEnvelopeChain:
         assert child.context == "ctx"
 
     def test_child_inherits_working_dir(self):
-        parent = Envelope(task="x", working_dir=Path("/tmp/wd"))
+        parent = Envelope(task="x", working_dir=Path("/fake/wd"))
         child = Envelope.chain(parent)
-        assert child.working_dir == Path("/tmp/wd")
+        assert child.working_dir == Path("/fake/wd")
 
     def test_child_has_new_envelope_id(self):
         parent = Envelope(task="x")

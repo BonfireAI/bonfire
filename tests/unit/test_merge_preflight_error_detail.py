@@ -46,7 +46,7 @@ def test_pytest_result_error_defaults_none() -> None:
         returncode=0,
         duration_seconds=0.0,
         stdout_tail="",
-        junit_xml_path=Path("/tmp/x.xml"),
+        junit_xml_path=Path("/fake/x.xml"),
     )
     assert pr.error is None
 

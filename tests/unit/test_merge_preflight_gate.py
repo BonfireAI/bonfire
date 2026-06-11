@@ -145,7 +145,7 @@ class TestGateDebtEnvelope:
 
 
 class TestGateBlockedCrossWave:
-    """FAILED + ErrorDetail(error_type='cross_wave_interaction') -> passed=False, severity='error'."""
+    """FAILED + ErrorDetail cross_wave_interaction -> passed=False, severity='error'."""
 
     @pytest.mark.asyncio
     async def test_cross_wave_blocks_merge(self) -> None:
@@ -181,7 +181,7 @@ class TestGateBlockedPureWarriorBug:
 
 
 class TestGateBlockedPytestCollectionError:
-    """FAILED + ErrorDetail(error_type='pytest_collection_error') -> passed=False, severity='error'."""
+    """FAILED + ErrorDetail pytest_collection_error -> passed=False, severity='error'."""
 
     @pytest.mark.asyncio
     async def test_collection_error_blocks_merge(self) -> None:

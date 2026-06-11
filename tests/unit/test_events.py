@@ -152,10 +152,10 @@ class TestPipelineEvents:
         assert e.error_message == "boom"
 
     def test_pipeline_paused_event_type(self):
-        e = PipelinePaused(reason="budget", checkpoint_path="/tmp/ck", **SESSION)
+        e = PipelinePaused(reason="budget", checkpoint_path="/fake/ck", **SESSION)
         assert e.event_type == "pipeline.paused"
         assert e.reason == "budget"
-        assert e.checkpoint_path == "/tmp/ck"
+        assert e.checkpoint_path == "/fake/ck"
 
     def test_all_pipeline_events_share_category(self):
         events = [

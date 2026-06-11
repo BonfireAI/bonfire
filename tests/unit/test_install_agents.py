@@ -101,7 +101,7 @@ class TestInstall:
             assert f"name: bonfire-{role_name}\n" in content
 
     def test_install_does_not_double_prefix_catchall(self, user_home: Path) -> None:
-        """The catch-all is already `bonfire-powered` — must not become `bonfire-bonfire-powered`."""
+        """The catch-all is `bonfire-powered` — must not become `bonfire-bonfire-powered`."""
         runner.invoke(app, ["install-agents"])
         target = user_home / ".claude" / "agents" / "bonfire"
         # Correct filename (single prefix)

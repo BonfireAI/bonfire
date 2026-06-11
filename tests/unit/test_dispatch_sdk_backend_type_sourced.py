@@ -104,7 +104,7 @@ def _envelope(task: str = "run something") -> Envelope:
 
 def _options(model: str = "claude-sonnet") -> DispatchOptions:
     return DispatchOptions(
-        model=model, max_turns=5, max_budget_usd=1.0, tools=["Read", "Write"], cwd="/tmp/test"
+        model=model, max_turns=5, max_budget_usd=1.0, tools=["Read", "Write"], cwd="/fake/cwd"
     )
 
 

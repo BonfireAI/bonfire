@@ -456,7 +456,7 @@ class TestPipelineEngineConstructor:
             backend=_MockBackend(),
             bus=EventBus(),
             config=PipelineConfig(),
-            project_root="/tmp/proj",
+            project_root="/fake/proj",
         )
         assert engine is not None
 

@@ -21,15 +21,13 @@ four observable contracts that the onboarding theater depends on:
 Each test carries a one-line gloss of the exact narration rule it locks so a
 future reader (human or LLM) understands the contract without reading source.
 
-Determinism note: ``get_narration`` calls ``random.choice`` to pick a line
-from the available pool, so every test that asserts on emitted line content
-seeds ``random`` first. With a fixed seed the selection is reproducible, which
-is what makes the no-reuse assertion a hard guarantee rather than a flake.
+Determinism note: line selection uses a module-level ``random.SystemRandom``
+(non-seedable, cosmetic context), so no test asserts on WHICH line is picked.
+The no-reuse and escalation assertions are structural — ``_used`` filtering
+and disjoint pools guarantee them for every possible draw, never the seed.
 """
 
 from __future__ import annotations
-
-import random
 
 from bonfire.onboard.narration import NarrationEngine
 from bonfire.onboard.protocol import FalcorMessage, ScanUpdate
@@ -137,7 +135,6 @@ class TestGetNarrationNoReuseAndEscalation:
         # twice — _select_line draws only from lines not already in _used.
         # Tier 3 always narrates, so a stream of docker events exercises the
         # selection path on every call with no gating noise.
-        random.seed(20260531)
         engine = NarrationEngine()
         event = _event("cli_toolchain", "docker", "27.0")
 
@@ -157,7 +154,6 @@ class TestGetNarrationNoReuseAndEscalation:
         # Rule: the first time a category is seen it draws from that category's
         # own pool; on repeat (seen count > 1) it escalates to the escalation
         # pool, so the second emission is a distinct line, not a duplicate.
-        random.seed(20260531)
         engine = NarrationEngine()
         event = _event("cli_toolchain", "docker", "27.0")
 
@@ -171,7 +167,6 @@ class TestGetNarrationNoReuseAndEscalation:
     def test_emitted_messages_are_narration_subtype(self) -> None:
         # Rule: every non-skipped emission is a FalcorMessage tagged
         # subtype="narration" (distinct from question/reflection messages).
-        random.seed(20260531)
         engine = NarrationEngine()
         message = engine.get_narration(_event("cli_toolchain", "docker", "27.0"))
         assert isinstance(message, FalcorMessage)
@@ -190,7 +185,6 @@ class TestGetNarrationSkip:
         # Rule: get_narration increments _discovery_count first, then gates.
         # A fresh engine's first Tier-1 discovery lands at count 1, and
         # 1 % 4 != 0, so the engine stays silent and returns None.
-        random.seed(20260531)
         engine = NarrationEngine()
         result = engine.get_narration(_event("git_state", "branch", "feature"))
         assert result is None
@@ -198,7 +192,6 @@ class TestGetNarrationSkip:
     def test_skipped_discovery_emits_no_line_into_used(self) -> None:
         # Rule: a skipped discovery selects no line, so _used stays empty —
         # the engine does not silently consume a line it never spoke.
-        random.seed(20260531)
         engine = NarrationEngine()
         engine.get_narration(_event("git_state", "branch", "feature"))
         assert engine._used == set()

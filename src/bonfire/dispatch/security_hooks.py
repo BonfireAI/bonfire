@@ -29,6 +29,7 @@ import logging
 import posixpath
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -323,52 +324,35 @@ def _extract_substitutions(segment: str) -> list[str]:
     return out
 
 
+# Peel table: (required prefixes — empty means "always try", pattern,
+# capture-group index, strip the captured body). Order is load-bearing:
+# the bash/sh -c form is tried first, exactly as the original chain did.
+_PEEL_RULES: tuple[tuple[tuple[str, ...], re.Pattern[str], int, bool], ...] = (
+    ((), _BASH_SH_C_RE, 2, False),
+    (("sudo ",), _SUDO_RE, 1, True),
+    (("timeout ",), _TIMEOUT_RE, 1, True),
+    (("nohup ",), _NOHUP_RE, 1, True),
+    (("watch ",), _WATCH_RE, 1, True),
+    (("env ",), _ENV_RE, 1, True),
+    (("xargs ",), _XARGS_RE, 1, True),
+    (("find ", "fd "), _FIND_EXEC_RE, 1, True),
+)
+
+
 def _peel_one(segment: str) -> str | None:
     """Try to peel a single unwrapper off ``segment``.
 
     Returns the inner body, or ``None`` if nothing was peeled.
     """
     s = segment.strip()
-
-    m = _BASH_SH_C_RE.match(s)
-    if m is not None:
-        return m.group(2)
-
-    if s.startswith("sudo "):
-        m = _SUDO_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("timeout "):
-        m = _TIMEOUT_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("nohup "):
-        m = _NOHUP_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("watch "):
-        m = _WATCH_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("env "):
-        m = _ENV_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("xargs "):
-        m = _XARGS_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
-    if s.startswith("find ") or s.startswith("fd "):
-        m = _FIND_EXEC_RE.match(s)
-        if m is not None:
-            return m.group(1).strip()
-
+    for prefixes, pattern, group_index, strip_body in _PEEL_RULES:
+        if prefixes and not s.startswith(prefixes):
+            continue
+        m = pattern.match(s)
+        if m is None:
+            continue
+        body = m.group(group_index)
+        return body.strip() if strip_body else body
     return None
 
 
@@ -389,17 +373,9 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
     DENY via the ``_infra.unwrap-exhausted`` slug.
     """
     segments: list[str] = [command]
-
-    # Seed with the chain-split of the top-level command too — each split
-    # segment gets independently inspected / unwrapped.
-    seeds = _split_chain(command)
-    if seeds != [command]:
-        segments.extend(seeds)
-
-    # Also seed with command-substitution bodies.
-    for sub in _extract_substitutions(command):
-        segments.append(sub)
-        segments.extend(_split_chain(sub))
+    # Seed with the chain-split of the top-level command + its
+    # command-substitution bodies — each gets independently inspected.
+    segments.extend(_expand_segment(command))
 
     work: list[str] = list(segments)
     for _depth in range(max_depth):
@@ -410,12 +386,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
                 continue
             next_round.append(peeled)
             # Chain-split + substitution-extract the peeled body too.
-            chained = _split_chain(peeled)
-            if chained != [peeled]:
-                next_round.extend(chained)
-            for sub in _extract_substitutions(peeled):
-                next_round.append(sub)
-                next_round.extend(_split_chain(sub))
+            next_round.extend(_expand_segment(peeled))
         if not next_round:
             break
         segments.extend(next_round)
@@ -429,7 +400,23 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
                 segments.append(_UNWRAP_EXHAUSTED_SENTINEL)
                 break
 
-    # Dedup while preserving order.
+    return _dedup_preserving_order(segments)
+
+
+def _expand_segment(segment: str) -> list[str]:
+    """Chain-split + substitution bodies (and their chain-splits) for one segment."""
+    out: list[str] = []
+    chained = _split_chain(segment)
+    if chained != [segment]:
+        out.extend(chained)
+    for sub in _extract_substitutions(segment):
+        out.append(sub)
+        out.extend(_split_chain(sub))
+    return out
+
+
+def _dedup_preserving_order(segments: list[str]) -> list[str]:
+    """Drop empties + duplicates while preserving first-seen order."""
     seen: set[str] = set()
     unique: list[str] = []
     for seg in segments:
@@ -669,6 +656,175 @@ async def _safe_emit(
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _HookBinding:
+    """Per-dispatch bindings shared by one preexec hook closure."""
+
+    bus: EventBus | None
+    sid: str
+    aname: str
+    user_patterns_source: tuple[str, ...]
+    emit: bool
+
+    async def emit_denied(self, *, tool_name: str, reason: str, pattern_id: str) -> None:
+        """Emit a SecurityDenied event when event emission is configured."""
+        if self.emit:
+            await _safe_emit(
+                self.bus,
+                SecurityDenied(
+                    session_id=self.sid,
+                    sequence=0,
+                    tool_name=tool_name,
+                    reason=reason,
+                    pattern_id=pattern_id,
+                    agent_name=self.aname,
+                ),
+            )
+
+    async def deny(self, *, tool_name: str, reason: str, pattern_id: str) -> dict[str, Any]:
+        """Emit (when configured) and return the DENY envelope."""
+        await self.emit_denied(tool_name=tool_name, reason=reason, pattern_id=pattern_id)
+        return _deny_envelope(reason)
+
+
+def _extract_pre_tool_command(input_data: dict) -> tuple[str, str] | None:
+    """``(tool_name, command)`` for a guarded PreToolUse call, else ``None``."""
+    if not isinstance(input_data, dict):
+        return None
+    if input_data.get("hook_event_name") != "PreToolUse":
+        return None
+
+    tool_name = input_data.get("tool_name", "")
+    if tool_name not in ("Bash", "Write", "Edit"):
+        return None
+
+    tool_input = input_data.get("tool_input", {}) or {}
+    command = _extract_command(tool_name, tool_input)
+    if not command:
+        return None
+    return tool_name, command
+
+
+async def _decide_deny(
+    binding: _HookBinding,
+    tool_name: str,
+    segments: list[str],
+    user_patterns: tuple[tuple[str, re.Pattern[str]], ...],
+) -> dict[str, Any] | None:
+    """First DENY hit across segments -> DENY envelope; ``None`` when clean."""
+    for seg in segments:
+        deny_hit = _match_deny(seg, user_patterns=user_patterns)
+        if deny_hit is not None:
+            rule_id, message = deny_hit
+            return await binding.deny(tool_name=tool_name, reason=message, pattern_id=rule_id)
+    return None
+
+
+async def _decide_warn(
+    binding: _HookBinding,
+    tool_name: str,
+    segments: list[str],
+) -> dict[str, Any]:
+    """First WARN hit -> allow-with-warning envelope; ``{}`` when clean."""
+    warn_hits: list[tuple[str, str]] = []
+    for seg in segments:
+        warn_hit = _match_warn(seg)
+        if warn_hit is not None:
+            warn_hits.append(warn_hit)
+
+    if not warn_hits:
+        return {}
+
+    rule_id, message = warn_hits[0]
+    warn_reason = f"WARN: {message}"
+    await binding.emit_denied(tool_name=tool_name, reason=warn_reason, pattern_id=rule_id)
+    return _allow_envelope(warn_reason)
+
+
+async def _evaluate_pre_tool_use(binding: _HookBinding, input_data: dict) -> dict[str, Any]:
+    """The hook decision pipeline; may raise (caller owns the _infra.error path)."""
+    command_info = _extract_pre_tool_command(input_data)
+    if command_info is None:
+        return {}
+    tool_name, command = command_info
+
+    # Compile user patterns FIRST — a broken pattern must DENY
+    # even for benign commands that would otherwise skip via the
+    # keyword prefilter. Failure here lands in the caller's except,
+    # which is the adjudicated _infra.error DENY path.
+    user_patterns = _compile_user_patterns(list(binding.user_patterns_source))
+
+    normalized = _normalize(command)
+
+    segments = _unwrap(normalized, max_depth=5)
+
+    # Exhaustion sentinel from _unwrap → DENY.
+    if _UNWRAP_EXHAUSTED_SENTINEL in segments:
+        reason = (
+            "security-hook-error: unwrap depth exceeded; command nesting beyond safe scan depth"
+        )
+        return await binding.deny(
+            tool_name=tool_name, reason=reason, pattern_id="_infra.unwrap-exhausted"
+        )
+
+    # Sensitive Write/Edit path check. ``command`` is the
+    # canonicalized file_path for Write/Edit; match the credential /
+    # system-state rules directly, BEFORE the Bash-oriented keyword
+    # prefilter (a credential path carries none of those verbs, so
+    # the prefilter would otherwise wrongly skip it).
+    if tool_name in ("Write", "Edit"):
+        write_hit = _match_sensitive_write_path(command)
+        if write_hit is not None:
+            rule_id, message = write_hit
+            return await binding.deny(tool_name=tool_name, reason=message, pattern_id=rule_id)
+
+    # Prefilter skips the expensive regex pool unless the command
+    # carries a "dangerous-looking" token OR the user supplied
+    # extras (we can't keyword-prefilter for arbitrary user
+    # patterns).
+    if not user_patterns and not _keyword_hit(segments):
+        return {}
+
+    # Match DENY first, then WARN.
+    deny_decision = await _decide_deny(binding, tool_name, segments, user_patterns)
+    if deny_decision is not None:
+        return deny_decision
+
+    # No DENY hits — scan for WARN.
+    return await _decide_warn(binding, tool_name, segments)
+
+
+async def _handle_hook_error(
+    binding: _HookBinding,
+    input_data: dict,
+    exc: Exception,
+) -> dict[str, Any]:
+    """The adjudicated _infra.error DENY path for internal hook failures.
+
+    The caller has already narrated the failure via ``logger.exception``;
+    this path emits the ``_infra.error`` event and fails CLOSED.
+    """
+    reason = f"security-hook-error: {exc!r}"
+    if binding.emit:
+        try:
+            await _safe_emit(
+                binding.bus,
+                SecurityDenied(
+                    session_id=binding.sid,
+                    sequence=0,
+                    tool_name=str(input_data.get("tool_name", ""))
+                    if isinstance(input_data, dict)
+                    else "",
+                    reason=reason,
+                    pattern_id="_infra.error",
+                    agent_name=binding.aname,
+                ),
+            )
+        except Exception:
+            logger.exception("security_hooks: failed to emit _infra.error event")
+    return _deny_envelope(reason)
+
+
 def build_preexec_hook(
     config: SecurityHooksConfig,
     *,
@@ -681,10 +837,13 @@ def build_preexec_hook(
     Each call produces a distinct callable so that concurrent dispatches
     (different agents, different sessions) don't share state.
     """
-    sid = session_id or ""
-    aname = agent_name or ""
-    user_patterns_source = tuple(config.extra_deny_patterns)
-    emit = bool(config.emit_denial_events)
+    binding = _HookBinding(
+        bus=bus,
+        sid=session_id or "",
+        aname=agent_name or "",
+        user_patterns_source=tuple(config.extra_deny_patterns),
+        emit=bool(config.emit_denial_events),
+    )
 
     async def _hook(
         input_data: dict,
@@ -692,152 +851,14 @@ def build_preexec_hook(
         context: dict,
     ) -> dict[str, Any]:
         try:
-            if not isinstance(input_data, dict):
-                return {}
-            if input_data.get("hook_event_name") != "PreToolUse":
-                return {}
-
-            tool_name = input_data.get("tool_name", "")
-            if tool_name not in ("Bash", "Write", "Edit"):
-                return {}
-
-            tool_input = input_data.get("tool_input", {}) or {}
-            command = _extract_command(tool_name, tool_input)
-            if not command:
-                return {}
-
-            # Compile user patterns FIRST — a broken pattern must DENY
-            # even for benign commands that would otherwise skip via the
-            # keyword prefilter. Failure here lands in the outer except,
-            # which is the Sage-mandated _infra.error DENY path.
-            user_patterns = _compile_user_patterns(list(user_patterns_source))
-
-            normalized = _normalize(command)
-
-            segments = _unwrap(normalized, max_depth=5)
-
-            # Exhaustion sentinel from _unwrap → DENY.
-            if _UNWRAP_EXHAUSTED_SENTINEL in segments:
-                reason = (
-                    "security-hook-error: unwrap depth exceeded; "
-                    "command nesting beyond safe scan depth"
-                )
-                if emit:
-                    await _safe_emit(
-                        bus,
-                        SecurityDenied(
-                            session_id=sid,
-                            sequence=0,
-                            tool_name=tool_name,
-                            reason=reason,
-                            pattern_id="_infra.unwrap-exhausted",
-                            agent_name=aname,
-                        ),
-                    )
-                return _deny_envelope(reason)
-
-            # Sensitive Write/Edit path check. ``command`` is the
-            # canonicalized file_path for Write/Edit; match the credential /
-            # system-state rules directly, BEFORE the Bash-oriented keyword
-            # prefilter (a credential path carries none of those verbs, so
-            # the prefilter would otherwise wrongly skip it).
-            if tool_name in ("Write", "Edit"):
-                write_hit = _match_sensitive_write_path(command)
-                if write_hit is not None:
-                    rule_id, message = write_hit
-                    if emit:
-                        await _safe_emit(
-                            bus,
-                            SecurityDenied(
-                                session_id=sid,
-                                sequence=0,
-                                tool_name=tool_name,
-                                reason=message,
-                                pattern_id=rule_id,
-                                agent_name=aname,
-                            ),
-                        )
-                    return _deny_envelope(message)
-
-            # Prefilter skips the expensive regex pool unless the command
-            # carries a "dangerous-looking" token OR the user supplied
-            # extras (we can't keyword-prefilter for arbitrary user
-            # patterns).
-            if not user_patterns and not _keyword_hit(segments):
-                return {}
-
-            # Match DENY first, then WARN.
-            for seg in segments:
-                deny_hit = _match_deny(seg, user_patterns=user_patterns)
-                if deny_hit is not None:
-                    rule_id, message = deny_hit
-                    if emit:
-                        await _safe_emit(
-                            bus,
-                            SecurityDenied(
-                                session_id=sid,
-                                sequence=0,
-                                tool_name=tool_name,
-                                reason=message,
-                                pattern_id=rule_id,
-                                agent_name=aname,
-                            ),
-                        )
-                    return _deny_envelope(message)
-
-            # No DENY hits — scan for WARN.
-            warn_hits: list[tuple[str, str]] = []
-            for seg in segments:
-                warn_hit = _match_warn(seg)
-                if warn_hit is not None:
-                    warn_hits.append(warn_hit)
-
-            if warn_hits:
-                rule_id, message = warn_hits[0]
-                warn_reason = f"WARN: {message}"
-                if emit:
-                    await _safe_emit(
-                        bus,
-                        SecurityDenied(
-                            session_id=sid,
-                            sequence=0,
-                            tool_name=tool_name,
-                            reason=warn_reason,
-                            pattern_id=rule_id,
-                            agent_name=aname,
-                        ),
-                    )
-                return _allow_envelope(warn_reason)
-
-            return {}
-
+            return await _evaluate_pre_tool_use(binding, input_data)
         except asyncio.CancelledError:
             # CancelledError is a BaseException in Py3.8+ but to be safe on
             # older runtimes we explicitly re-raise.
             raise
         except Exception as exc:
-            reason = f"security-hook-error: {exc!r}"
-            logger.exception(
-                "security_hooks: internal error during PreToolUse evaluation",
-            )
-            if emit:
-                try:
-                    await _safe_emit(
-                        bus,
-                        SecurityDenied(
-                            session_id=sid,
-                            sequence=0,
-                            tool_name=str(input_data.get("tool_name", ""))
-                            if isinstance(input_data, dict)
-                            else "",
-                            reason=reason,
-                            pattern_id="_infra.error",
-                            agent_name=aname,
-                        ),
-                    )
-                except Exception:
-                    logger.exception("security_hooks: failed to emit _infra.error event")
-            return _deny_envelope(reason)
+            logger.exception("security_hooks: internal error during PreToolUse evaluation")
+            return await _handle_hook_error(binding, input_data, exc)
 
     return _hook
 

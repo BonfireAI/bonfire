@@ -219,7 +219,13 @@ class PersonaLoader:
         Emits a warning for unknown top-level tables. Raises
         :class:`PersonaSchemaError` for every other shape violation.
         """
-        # ---- Warn on unknown top-level tables (D1 lenient arm) --------
+        self._warn_unknown_tables(name, raw)
+        self._validate_persona_meta(name, raw)
+        self._validate_display_names(name, raw)
+
+    @staticmethod
+    def _warn_unknown_tables(name: str, raw: dict) -> None:
+        """Warn on unknown top-level tables (D1 lenient arm)."""
         for top_key, top_val in raw.items():
             if top_key in _KNOWN_TOPLEVEL_TABLES:
                 continue
@@ -230,7 +236,9 @@ class PersonaLoader:
                     top_key,
                 )
 
-        # ---- [persona] required fields + types ------------------------
+    @staticmethod
+    def _validate_persona_meta(name: str, raw: dict) -> None:
+        """[persona] required fields + types."""
         persona_meta = raw.get("persona")
         if not isinstance(persona_meta, dict):
             raise PersonaSchemaError(f"persona {name!r}: missing [persona] table")
@@ -249,7 +257,9 @@ class PersonaLoader:
             if value == "":
                 raise PersonaSchemaError(f"persona {name!r}: [persona].{field} must be non-empty")
 
-        # ---- [display_names] coverage + strict extras rejection -------
+    @staticmethod
+    def _validate_display_names(name: str, raw: dict) -> None:
+        """[display_names] coverage + strict extras rejection."""
         if "display_names" not in raw:
             raise PersonaSchemaError(f"persona {name!r}: [display_names] table is required")
         display_names = raw["display_names"]

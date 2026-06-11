@@ -565,33 +565,52 @@ class SageCorrectionBounceHandler:
 
         # Step 2: cherry-pick the correction commit.
         commit_sha = self._extract_commit_sha(backend_result)
-        if commit_sha and self._git_workflow is not None:
-            try:
-                cherry_pick_result = self._git_workflow.cherry_pick(commit_sha)
-                if asyncio.iscoroutine(cherry_pick_result):
-                    await cherry_pick_result
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                # Cherry-pick failure -> abort + return FAILED. No re-verify.
-                logger.exception(
-                    "sage_correction_bounce.cherry_pick_failed commit=%s", commit_sha[:12]
-                )
-                self._safe_cherry_pick_abort()
-                return _CorrectionCycleOutcome(
-                    status=TaskStatus.FAILED,
-                    correction_verdict="escalated",
-                    cycles=cycles_out,
-                    escalated=True,
-                    error_type=_ERROR_CHERRY_PICK_FAILED,
-                    error_message=(f"cherry-pick of {commit_sha[:12]} failed: {exc}"),
-                    correction_branch=commit_sha,
-                    error=ErrorDetail.from_exception(exc),
-                )
+        cherry_pick_failure = await self._cherry_pick_correction(commit_sha, cycles_out)
+        if cherry_pick_failure is not None:
+            return cherry_pick_failure
 
-        # Step 3: re-verify pytest. why: pull pytest args from prior
-        # warrior result if structured; else fall back to the bare
-        # invocation. NEVER `shell=True`, ALWAYS tuple args.
+        # Step 3: re-verify pytest.
+        return await self._reverify_correction(commit_sha, cycles_out)
+
+    async def _cherry_pick_correction(
+        self,
+        commit_sha: str,
+        cycles_out: int,
+    ) -> _CorrectionCycleOutcome | None:
+        """Cherry-pick the correction commit; FAILED outcome on failure, else None."""
+        if not commit_sha or self._git_workflow is None:
+            return None
+        try:
+            cherry_pick_result = self._git_workflow.cherry_pick(commit_sha)
+            if asyncio.iscoroutine(cherry_pick_result):
+                await cherry_pick_result
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Cherry-pick failure -> abort + return FAILED. No re-verify.
+            logger.exception("sage_correction_bounce.cherry_pick_failed commit=%s", commit_sha[:12])
+            self._safe_cherry_pick_abort()
+            return _CorrectionCycleOutcome(
+                status=TaskStatus.FAILED,
+                correction_verdict="escalated",
+                cycles=cycles_out,
+                escalated=True,
+                error_type=_ERROR_CHERRY_PICK_FAILED,
+                error_message=(f"cherry-pick of {commit_sha[:12]} failed: {exc}"),
+                correction_branch=commit_sha,
+                error=ErrorDetail.from_exception(exc),
+            )
+        return None
+
+    async def _reverify_correction(
+        self,
+        commit_sha: str,
+        cycles_out: int,
+    ) -> _CorrectionCycleOutcome:
+        """Re-verify pytest. why: pull pytest args from prior warrior result
+        if structured; else fall back to the bare invocation. NEVER
+        ``shell=True``, ALWAYS tuple args.
+        """
         if self._pytest_runner is None:
             # No re-verify possible -> escalate (we cannot confirm correction).
             return _CorrectionCycleOutcome(

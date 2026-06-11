@@ -82,6 +82,45 @@ def _classify_file(path: pathlib.Path, root: pathlib.Path) -> str:
     return "other"
 
 
+def _module_docstring(tree: ast.Module) -> str:
+    """Module docstring (truncated to 500 chars), or empty string."""
+    if (
+        tree.body
+        and isinstance(tree.body[0], ast.Expr)
+        and isinstance(tree.body[0].value, ast.Constant)
+        and isinstance(tree.body[0].value.value, str)
+    ):
+        return tree.body[0].value.value[:500]
+    return ""
+
+
+def _module_members(tree: ast.Module) -> tuple[list[str], list[str], list[str]]:
+    """Top-level (classes, functions, imports) names from a parsed module."""
+    classes: list[str] = []
+    functions: list[str] = []
+    imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            classes.append(node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions.append(node.name)
+        elif isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+    return classes, functions, imports
+
+
+def _module_path_from_source(source_path: str) -> str:
+    """Build the dotted module path from a file path."""
+    module_path = source_path.replace("/", ".").replace("\\", ".")
+    if module_path.endswith(".py"):
+        module_path = module_path[:-3]
+    if module_path.endswith(".__init__"):
+        module_path = module_path[: -len(".__init__")]
+    return module_path
+
+
 def _should_exclude(path: pathlib.Path, root: pathlib.Path, exclude_patterns: list[str]) -> bool:
     """Check if a path should be excluded based on patterns."""
     rel = path.relative_to(root)
@@ -192,70 +231,43 @@ class ProjectScanner:
             if not source_path.endswith(".py"):
                 continue
 
-            full_path = self._project_root / file_info.path
-
-            try:
-                source = full_path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError) as exc:
-                # Python file could not be read: skip signature extraction for it
-                # but narrate the unreadable path and cause.
-                _log.debug("ProjectScanner skipping unreadable Python file %s: %s", full_path, exc)
-                continue
-
-            try:
-                tree = ast.parse(source, filename=source_path)
-            except SyntaxError as exc:
-                # Python file read fine but does not parse: skip it, and say the
-                # reason is a parse/syntax error (distinct from an unreadable file)
-                # so the log is self-describing.
-                _log.debug(
-                    "ProjectScanner skipping unparseable Python file %s (syntax error): %s",
-                    full_path,
-                    exc,
-                )
-                continue
-
-            classes: list[str] = []
-            functions: list[str] = []
-            imports: list[str] = []
-            docstring = ""
-
-            # Extract module docstring
-            if (
-                tree.body
-                and isinstance(tree.body[0], ast.Expr)
-                and isinstance(tree.body[0].value, ast.Constant)
-                and isinstance(tree.body[0].value.value, str)
-            ):
-                docstring = tree.body[0].value.value[:500]
-
-            for node in tree.body:
-                if isinstance(node, ast.ClassDef):
-                    classes.append(node.name)
-                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    functions.append(node.name)
-                elif isinstance(node, ast.Import):
-                    for alias in node.names:
-                        imports.append(alias.name)
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    imports.append(node.module)
-
-            # Build dotted module path from file path
-            module_path = source_path.replace("/", ".").replace("\\", ".")
-            if module_path.endswith(".py"):
-                module_path = module_path[:-3]
-            if module_path.endswith(".__init__"):
-                module_path = module_path[: -len(".__init__")]
-
-            signatures.append(
-                ModuleSignature(
-                    module_path=module_path,
-                    source_path=source_path,
-                    classes=classes,
-                    functions=functions,
-                    imports=imports,
-                    docstring=docstring,
-                )
-            )
+            signature = self._signature_for_file(file_info, source_path)
+            if signature is not None:
+                signatures.append(signature)
 
         return signatures
+
+    def _signature_for_file(self, file_info: FileInfo, source_path: str) -> ModuleSignature | None:
+        """Read + AST-parse one Python file; ``None`` when unreadable or unparseable."""
+        full_path = self._project_root / file_info.path
+
+        try:
+            source = full_path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as exc:
+            # Python file could not be read: skip signature extraction for it
+            # but narrate the unreadable path and cause.
+            _log.debug("ProjectScanner skipping unreadable Python file %s: %s", full_path, exc)
+            return None
+
+        try:
+            tree = ast.parse(source, filename=source_path)
+        except SyntaxError as exc:
+            # Python file read fine but does not parse: skip it, and say the
+            # reason is a parse/syntax error (distinct from an unreadable file)
+            # so the log is self-describing.
+            _log.debug(
+                "ProjectScanner skipping unparseable Python file %s (syntax error): %s",
+                full_path,
+                exc,
+            )
+            return None
+
+        classes, functions, imports = _module_members(tree)
+        return ModuleSignature(
+            module_path=_module_path_from_source(source_path),
+            source_path=source_path,
+            classes=classes,
+            functions=functions,
+            imports=imports,
+            docstring=_module_docstring(tree),
+        )

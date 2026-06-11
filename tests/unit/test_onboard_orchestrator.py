@@ -21,7 +21,7 @@ These tests lock three clauses of that contract:
 * CLAUSE 2 — total accounting: ``AllScansComplete.total_items`` equals the sum
   of every scanner's count, and the int ``run_scan`` returns matches it.
 * CLAUSE 3 — failure isolation (the Elegance Law made testable): when one
-  scanner raises, ``_run_one`` lets the failure *speak* via ``_log.exception``
+  scanner raises, ``_run_one`` lets the failure *speak* via ``logger.exception``
   and substitutes ``item_count=0`` for that panel, while every other scanner's
   count survives and the gather still completes.
 
@@ -118,7 +118,7 @@ def _make_raising_scan(message: str) -> Callable:
 
     The raised exception is loud and typed (``RuntimeError`` with a distinct
     message) so the failure-isolation test can confirm ``_run_one`` narrated the
-    real cause via ``_log.exception`` rather than swallowing it silently.
+    real cause via ``logger.exception`` rather than swallowing it silently.
     """
 
     async def _scan(project_path, emit) -> int:
@@ -237,7 +237,7 @@ async def test_failing_scanner_is_isolated_logs_and_emits_zero(
 
     Locks ``_run_one``'s failure-isolation contract (the Elegance Law made
     testable). When ``git_state.scan`` raises, the orchestrator must:
-      * narrate the failure via ``_log.exception`` (loud, with traceback +
+      * narrate the failure via ``logger.exception`` (loud, with traceback +
         panel name) rather than swallow it,
       * substitute ``ScanComplete(panel="git_state", item_count=0)`` so the reel
         still resolves, and
@@ -257,7 +257,7 @@ async def test_failing_scanner_is_isolated_logs_and_emits_zero(
     monkeypatch.setattr(git_state, "scan", _make_raising_scan(boom_message))
 
     collector = EmitCollector()
-    with caplog.at_level(logging.ERROR, logger=orchestrator._log.name):
+    with caplog.at_level(logging.ERROR, logger=orchestrator.logger.name):
         returned = await orchestrator.run_scan(tmp_path, collector)
 
     # Failure isolation: the crash did not abort the gather; survivors are intact.
@@ -278,11 +278,11 @@ async def test_failing_scanner_is_isolated_logs_and_emits_zero(
     )
 
     # The failure speaks: an ERROR-level record names the panel and the real cause
-    # (exc_info attached by _log.exception), proving it was narrated, not swallowed.
+    # (exc_info attached by logger.exception), proving it was narrated, not swallowed.
     failure_records = [
         r for r in caplog.records if r.levelno == logging.ERROR and "git_state" in r.getMessage()
     ]
     assert failure_records, "the failing scanner must be narrated at ERROR naming the panel"
     assert any(r.exc_info is not None for r in failure_records), (
-        "_log.exception must attach the traceback so the real cause is visible"
+        "logger.exception must attach the traceback so the real cause is visible"
     )

@@ -103,7 +103,7 @@ class LanceDBBackend:
             )
             return len(results) > 0
         except Exception as exc:
-            logger.warning("Vault exists check failed: %s", exc)
+            logger.exception("Vault exists check failed: %s", exc)
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:
@@ -120,7 +120,7 @@ class LanceDBBackend:
             )
             return [self._record_to_entry(r) for r in results]
         except Exception as exc:
-            logger.warning("Vault get_by_source failed: %s", exc)
+            logger.exception("Vault get_by_source failed: %s", exc)
             return []
 
     def _ensure_connected(self) -> None:

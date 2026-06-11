@@ -339,6 +339,7 @@ class SageCorrectionBounceHandler:
             # (pipeline orchestration relies on cancellation surfacing).
             raise
         except Exception as exc:
+            logger.exception("sage_correction_bounce.handler_failed stage=%s", stage.name)
             return envelope.model_copy(
                 update={
                     "metadata": {
@@ -405,10 +406,10 @@ class SageCorrectionBounceHandler:
             try:
                 result = classify(prior_results.get("warrior", ""))
             except Exception:
-                logger.warning("sage_correction_bounce.classifier_invocation_failed")
+                logger.exception("sage_correction_bounce.classifier_invocation_failed")
                 return None
         except Exception:
-            logger.warning("sage_correction_bounce.classifier_invocation_failed")
+            logger.exception("sage_correction_bounce.classifier_invocation_failed")
             return None
 
         # Mock-tolerant verdict extraction: result.verdict could be a
@@ -551,6 +552,7 @@ class SageCorrectionBounceHandler:
             # (the parent pipeline relies on cancellation reaching it).
             raise
         except Exception as exc:
+            logger.exception("sage_correction_bounce.dispatch_failed")
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",
@@ -572,6 +574,9 @@ class SageCorrectionBounceHandler:
                 raise
             except Exception as exc:
                 # Cherry-pick failure -> abort + return FAILED. No re-verify.
+                logger.exception(
+                    "sage_correction_bounce.cherry_pick_failed commit=%s", commit_sha[:12]
+                )
                 self._safe_cherry_pick_abort()
                 return _CorrectionCycleOutcome(
                     status=TaskStatus.FAILED,
@@ -602,6 +607,7 @@ class SageCorrectionBounceHandler:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            logger.exception("sage_correction_bounce.reverify_pytest_failed")
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",

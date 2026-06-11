@@ -68,22 +68,25 @@ async def test_exists_fails_open_to_false_on_backend_error() -> None:
 
 @pytest.mark.asyncio
 async def test_exists_narrates_swallowed_failure_with_a_warning() -> None:
-    """A failed existence lookup must emit a WARNING — it must not fail silently.
+    """A failed existence lookup must speak loudly — it must not fail silently.
 
     Matches the sibling idiom (``query()``/``get_by_source()`` log
-    ``logger.warning('Vault ... failed: %s', exc)``); the underlying exception
-    message must ride in the log so the WHY is recoverable from the trace.
+    ``logger.exception('Vault ... failed: %s', exc)``); the underlying exception
+    message AND traceback must ride in the log so the WHY is recoverable.
     """
     backend = _make_backend()
     with caplog_warning() as records:
         result = await backend.exists("deadbeef")
 
     assert result is False, "fail-open contract must hold"
-    warnings = [r for r in records if r.levelno == logging.WARNING]
-    assert warnings, "exists() must narrate its swallowed failure, not eat it silently"
-    joined = " ".join(r.getMessage() for r in warnings)
+    errors = [r for r in records if r.levelno >= logging.WARNING]
+    assert errors, "exists() must narrate its swallowed failure, not eat it silently"
+    joined = " ".join(r.getMessage() for r in errors)
     assert "simulated LanceDB search failure" in joined, (
-        "the originating exception must be carried in the warning"
+        "the originating exception must be carried in the log message"
+    )
+    assert any(r.exc_info for r in errors), (
+        "logger.exception must attach the traceback so the real cause is visible"
     )
 
 

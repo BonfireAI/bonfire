@@ -90,6 +90,7 @@ class ClaudeSDKBackend:
         try:
             return await self._do_execute(envelope, options=options, on_stream=on_stream)
         except Exception as exc:
+            logger.exception("sdk_backend.execute_failed; returning FAILED envelope")
             return envelope.with_error(ErrorDetail.from_exception(exc))
 
     async def _do_execute(

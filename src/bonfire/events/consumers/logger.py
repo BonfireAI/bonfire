@@ -22,11 +22,11 @@ class SessionLoggerConsumer:
         self._persistence = persistence
 
     async def on_event(self, event: BonfireEvent) -> None:
-        """Persist event. Never crash — log warning on failure."""
+        """Persist event. Never crash — log the failure with its traceback."""
         try:
             self._persistence.append_event(event.session_id, event)
         except Exception:
-            logger.warning("Failed to persist event %s", event.event_id, exc_info=True)
+            logger.exception("Failed to persist event %s", event.event_id)
 
     def register(self, bus: EventBus) -> None:
         """Subscribe as a global listener on the bus."""

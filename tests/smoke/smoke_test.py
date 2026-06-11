@@ -36,6 +36,7 @@ That is deferred to v0.1.1 / BON-633.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -118,6 +119,7 @@ def step1_import_bonfire() -> None:
     try:
         import bonfire
     except Exception as exc:  # pragma: no cover — failure path is the gate.
+        logging.exception("step1: import bonfire crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     version = getattr(bonfire, "__version__", None)
@@ -139,6 +141,7 @@ def step2_protocols_surface() -> None:
             VaultEntry,
         )
     except Exception as exc:
+        logging.exception("step2: bonfire.protocols import crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -150,6 +153,7 @@ def step3_engine_surface() -> None:
     try:
         from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401
     except Exception as exc:
+        logging.exception("step3: bonfire.engine import crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -231,6 +235,7 @@ def step8_packaged_data_file() -> None:
     try:
         resource = files("bonfire.onboard").joinpath("ui.html")
     except Exception as exc:
+        logging.exception("step8: importlib.resources lookup crashed")
         _fail(label, f"importlib.resources lookup failed: {exc!r}")
         return
     if not resource.is_file():

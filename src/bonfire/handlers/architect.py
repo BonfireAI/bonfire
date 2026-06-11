@@ -21,6 +21,7 @@ and dataclass machinery until the stage runs.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from bonfire.models.envelope import Envelope
     from bonfire.models.plan import StageSpec
     from bonfire.protocols import VaultBackend
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level role binding (generic-vocabulary discipline)
@@ -206,6 +209,7 @@ class ArchitectHandler:
 
             return envelope.with_result(json.dumps(summary))
         except Exception as exc:
+            logger.exception("architect.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

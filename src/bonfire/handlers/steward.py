@@ -20,6 +20,7 @@ prior to v0.1.0a1; the cadre display rename to "Steward" landed in the
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
@@ -39,6 +40,8 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 ROLE: AgentRole = AgentRole.CLOSER
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +157,7 @@ class StewardHandler:
                 },
             )
         except Exception as exc:
+            logger.exception("steward.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

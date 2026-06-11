@@ -10,7 +10,7 @@ Sage D8.2 type locks:
 - ``on_dispatch_failed`` -> entry_type="error_pattern"
 - ``on_session_ended`` -> entry_type="session_insight"
 - ``register(bus) -> None`` subscribes all four.
-- ``_store`` dedups via content_hash, catches exceptions, logs WARNING.
+- ``_store`` dedups via content_hash, catches exceptions, narrates via ``logger.exception``.
 - ``VaultEntry.metadata`` keys LOCKED: ``session_id: str``, ``event_id: str`` (no others).
 - ``content_hash`` via ``bonfire.knowledge.hasher.content_hash``.
 - ``scanned_at`` is UTC ISO-8601 string.
@@ -291,10 +291,11 @@ class TestResilience:
         event_factory: Any,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Every handler catches backend.store() exceptions and logs WARNING.
+        """Every handler catches backend.store() exceptions and logs them loudly.
 
-        Sage D8.2: ``_store`` catches exceptions, logs WARNING — never crashes
-        the consumer. All four handlers route through ``_store``; this matrix
+        Sage D8.2: ``_store`` catches exceptions and narrates them via
+        ``logger.exception`` (traceback attached) — never crashes the
+        consumer. All four handlers route through ``_store``; this matrix
         asserts the resilience contract holds for each (BON-528).
         """
         backend = _ExplodingStoreBackend()
@@ -303,8 +304,8 @@ class TestResilience:
         with caplog.at_level(logging.WARNING):
             # Must NOT raise — a storage failure never crashes the consumer.
             await handler(event_factory())
-        # A warning should be emitted on the failure path.
-        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+        # The swallowed failure must be narrated on the failure path.
+        assert any(rec.levelno >= logging.WARNING for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------

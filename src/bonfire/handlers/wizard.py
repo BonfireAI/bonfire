@@ -400,6 +400,7 @@ class WizardHandler:
             return enriched_envelope
 
         except Exception as exc:
+            logger.exception("wizard.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

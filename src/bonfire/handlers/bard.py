@@ -29,6 +29,7 @@ hardcodes the gamified name in code.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -51,6 +52,8 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 ROLE: AgentRole = AgentRole.PUBLISHER
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-scope constants
@@ -254,6 +257,7 @@ class BardHandler:
             )
 
         except Exception as exc:
+            logger.exception("bard.handler_failed stage=%s", stage.name)
             partial_metadata: dict[str, Any] = {**envelope.metadata}
             if branch_name is not None:
                 partial_metadata[_META_BRANCH] = branch_name

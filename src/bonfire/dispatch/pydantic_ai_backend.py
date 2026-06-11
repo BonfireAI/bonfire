@@ -53,9 +53,9 @@ class PydanticAIBackend:
         module level so subsequent calls (and ``unittest.mock.patch``)
         see the same name.
         """
-        global Agent  # noqa: PLW0603
+        global Agent
         if Agent is None:
-            from pydantic_ai import Agent as _Agent  # noqa: PLC0415
+            from pydantic_ai import Agent as _Agent
 
             Agent = _Agent
 

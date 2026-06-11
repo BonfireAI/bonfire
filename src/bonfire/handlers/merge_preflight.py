@@ -356,12 +356,13 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
     PYTEST_COLLECTION_ERROR.
     """
     try:
-        tree = ET.parse(str(path))
+        tree = ET.parse(str(path))  # noqa: S314 — locally-generated junit.xml (registered)
     except (FileNotFoundError, OSError):
         return ()
     except ET.ParseError:
         return ()
     except Exception:  # pragma: no cover - belt-and-suspenders
+        logger.exception("merge_preflight.junit_parse_failed path=%s", path)
         return ()
 
     root = tree.getroot()
@@ -476,6 +477,7 @@ async def detect_sibling_prs(
     except RuntimeError:
         return ({}, "error")
     except Exception:  # pragma: no cover - defensive
+        logger.exception("merge_preflight.sibling_pr_list_failed base=%s", base)
         return ({}, "error")
 
     files_by_pr: dict[int, frozenset[str]] = {}
@@ -608,6 +610,7 @@ class MergePreflightHandler:
                 )
 
         except Exception as exc:
+            logger.exception("merge_preflight.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,
@@ -692,7 +695,7 @@ class MergePreflightHandler:
                     sibling_pr_n,
                 )
             except Exception:
-                logger.warning(
+                logger.exception(
                     "merge_preflight.sibling_diff_fetch_failed pr=%d",
                     sibling_pr_n,
                 )
@@ -901,7 +904,7 @@ class MergePreflightHandler:
                     failing = parse_pytest_stdout_fallback(result.stdout_tail)
                 baseline = frozenset(ft.file_path for ft in failing)
         except Exception:
-            logger.warning(
+            logger.exception(
                 "merge_preflight.baseline_compute_failed base_sha=%s",
                 base_sha[:12],
             )

@@ -52,7 +52,7 @@ except PackageNotFoundError:
 # (tests/test_verdict_parity.py) verifies identity not just equality so
 # the re-export must point at the SAME class objects.
 # ---------------------------------------------------------------------------
-from bonfire.protocols import (  # noqa: E402
+from bonfire.protocols import (
     SCHEMA_VERSION,
     ArtificerReport,
     AxiomVariantReceipt,

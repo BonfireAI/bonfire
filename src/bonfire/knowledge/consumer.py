@@ -133,4 +133,4 @@ class KnowledgeIngestConsumer:
             )
             await self.backend.store(entry)
         except Exception:
-            logger.warning("Vault store failed for %s event", entry_type, exc_info=True)
+            logger.exception("Vault store failed for %s event", entry_type)

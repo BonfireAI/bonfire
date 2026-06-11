@@ -57,7 +57,7 @@ class _NullBackend:
     """Minimal AgentBackend stand-in — never actually invoked because we
     monkeypatch ``_execute_stage``."""
 
-    async def execute(self, envelope: Envelope, *, options: object) -> Envelope:  # noqa: ARG002
+    async def execute(self, envelope: Envelope, *, options: object) -> Envelope:
         raise AssertionError("backend.execute must not be called in this test")
 
     async def health_check(self) -> bool:
@@ -69,7 +69,7 @@ class _PassGate:
     ``_handle_bounce`` returns the retry envelope (the success path where the
     target cost must already have been accounted for)."""
 
-    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:  # noqa: ARG002
+    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
         return GateResult(gate_name="g", passed=True, severity="error")
 
 
@@ -90,7 +90,7 @@ class _FailThenPassGate:
     def __init__(self) -> None:
         self._calls = 0
 
-    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:  # noqa: ARG002
+    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
         self._calls += 1
         if self._calls == 1:
             return GateResult(

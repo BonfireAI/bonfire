@@ -60,9 +60,9 @@ except ImportError:  # pragma: no cover
     _HAS_SDK_TYPES = False
 
 
-from bonfire.dispatch.sdk_backend import ClaudeSDKBackend  # noqa: E402
-from bonfire.models.envelope import Envelope  # noqa: E402
-from bonfire.protocols import DispatchOptions  # noqa: E402
+from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
+from bonfire.models.envelope import Envelope
+from bonfire.protocols import DispatchOptions
 
 
 def _mock_assistant_message(text: str) -> MagicMock:
@@ -104,7 +104,7 @@ def _envelope(task: str = "run something") -> Envelope:
 
 def _options(model: str = "claude-sonnet") -> DispatchOptions:
     return DispatchOptions(
-        model=model, max_turns=5, max_budget_usd=1.0, tools=["Read", "Write"], cwd="/tmp/test"
+        model=model, max_turns=5, max_budget_usd=1.0, tools=["Read", "Write"], cwd="/fake/cwd"
     )
 
 

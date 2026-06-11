@@ -44,7 +44,7 @@ class DisplayConsumer:
             else:
                 self._callback(message)
         except Exception:
-            logger.warning("Display callback failed", exc_info=True)
+            logger.exception("Display callback failed")
 
     async def _on_stage_completed(self, event: StageCompleted) -> None:
         if self._persona is not None:

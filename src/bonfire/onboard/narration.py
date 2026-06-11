@@ -22,6 +22,13 @@ from bonfire.onboard.protocol import FalcorMessage, ScanUpdate
 
 __all__ = ["NarrationEngine"]
 
+# Line picking is cosmetic, not cryptographic; SystemRandom keeps the picker
+# honest under the security battery without suppression (non-seedable).
+_rng = random.SystemRandom()
+
+# Panel-derived category keys (checked after tools/languages/labels).
+_PANEL_KEYS = {"claude_memory": "claude_memory", "git_state": "git", "vault_seed": "vault"}
+
 # ---------------------------------------------------------------------------
 # Tier classification sets
 # ---------------------------------------------------------------------------
@@ -189,14 +196,7 @@ def _category_key(event: ScanUpdate) -> str:
         return "mcp"
 
     # Panels
-    if event.panel == "claude_memory":
-        return "claude_memory"
-    if event.panel == "git_state":
-        return "git"
-    if event.panel == "vault_seed":
-        return "vault"
-
-    return "tool_common"
+    return _PANEL_KEYS.get(event.panel, "tool_common")
 
 
 class NarrationEngine:
@@ -299,4 +299,4 @@ class NarrationEngine:
         available = [line for line in pool if line not in self._used]
         if not available:
             return None
-        return random.choice(available)
+        return _rng.choice(available)

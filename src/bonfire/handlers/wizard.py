@@ -47,7 +47,7 @@ from bonfire.models.envelope import (
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
-    from bonfire.events.bus import EventBus  # noqa: TC004 -- only for type hints
+    from bonfire.events.bus import EventBus
     from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.models.plan import StageSpec
 
@@ -400,6 +400,7 @@ class WizardHandler:
             return enriched_envelope
 
         except Exception as exc:
+            logger.exception("wizard.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

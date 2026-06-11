@@ -185,12 +185,12 @@ class TestFrozenModels:
 
     def test_scan_start_frozen(self) -> None:
         msg = ScanStart(panels=["a"])
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             msg.panels = ["b"]  # type: ignore[misc]
 
     def test_user_message_frozen(self) -> None:
         msg = UserMessage(text="hi")
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             msg.text = "bye"  # type: ignore[misc]
 
 
@@ -248,7 +248,7 @@ class TestPydanticFrozenShape:
         # Field reassignment must raise (Pydantic ValidationError or AttributeError;
         # both are subclasses of Exception). v1 floor uses pytest.raises(Exception).
         first_field = next(iter(type(instance).model_fields))
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(Exception):
             setattr(instance, first_field, getattr(instance, first_field))
 
 

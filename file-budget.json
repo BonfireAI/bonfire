@@ -1,9 +1,9 @@
 {
   "files": {
-    "src/bonfire/dispatch/security_hooks.py": 873,
+    "src/bonfire/dispatch/security_hooks.py": 894,
     "src/bonfire/engine/pipeline.py": 835,
-    "src/bonfire/handlers/merge_preflight.py": 1034,
-    "src/bonfire/handlers/sage_correction_bounce.py": 872,
+    "src/bonfire/handlers/merge_preflight.py": 1037,
+    "src/bonfire/handlers/sage_correction_bounce.py": 897,
     "src/bonfire/onboard/conversation.py": 506,
     "src/bonfire/prompt/compiler.py": 520,
     "src/bonfire/protocols.py": 771,
@@ -34,7 +34,7 @@
     "tests/unit/test_plan.py": 677,
     "tests/unit/test_prompt_compiler.py": 1256,
     "tests/unit/test_protocols.py": 970,
-    "tests/unit/test_sage_correction_handler.py": 1294,
+    "tests/unit/test_sage_correction_handler.py": 1289,
     "tests/unit/test_sage_correction_resolved_gate.py": 550,
     "tests/unit/test_security_hooks_failsafe.py": 554,
     "tests/unit/test_steward_handler.py": 570,
@@ -44,12 +44,12 @@
     "tests/unit/test_xp_consumer.py": 587
   },
   "packages": {
-    "src/bonfire": 21543,
-    "src/bonfire/dispatch": 2101,
+    "src/bonfire": 21773,
+    "src/bonfire/dispatch": 2153,
     "src/bonfire/engine": 1999,
-    "src/bonfire/handlers": 3091,
-    "src/bonfire/onboard": 2952,
+    "src/bonfire/handlers": 3126,
+    "src/bonfire/onboard": 2973,
     "src/bonfire/prompt": 855,
-    "tests/unit": 58767
+    "tests/unit": 58858
   }
 }

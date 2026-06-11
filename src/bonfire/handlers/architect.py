@@ -21,6 +21,7 @@ and dataclass machinery until the stage runs.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from bonfire.models.envelope import Envelope
     from bonfire.models.plan import StageSpec
     from bonfire.protocols import VaultBackend
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level role binding (generic-vocabulary discipline)
@@ -179,20 +182,14 @@ class ArchitectHandler:
                 if not text.strip():
                     continue
 
-                if file_info.category == "markdown":
-                    chunks: list[Any] = chunk_markdown(
-                        text,
-                        source_path=str(file_info.path),
-                        project_name=self._project_name,
-                        git_hash=self._git_hash,
-                    )
-                else:
-                    chunks = chunk_source_file(
-                        text,
-                        source_path=str(file_info.path),
-                        project_name=self._project_name,
-                        git_hash=self._git_hash,
-                    )
+                # Markdown and source chunkers share one signature; pick by category.
+                chunker = chunk_markdown if file_info.category == "markdown" else chunk_source_file
+                chunks: list[Any] = chunker(
+                    text,
+                    source_path=str(file_info.path),
+                    project_name=self._project_name,
+                    git_hash=self._git_hash,
+                )
 
                 for chunk in chunks:
                     if not await self._vault.exists(chunk.content_hash):
@@ -212,6 +209,7 @@ class ArchitectHandler:
 
             return envelope.with_result(json.dumps(summary))
         except Exception as exc:
+            logger.exception("architect.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

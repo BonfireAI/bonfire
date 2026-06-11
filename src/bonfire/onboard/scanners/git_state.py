@@ -25,6 +25,7 @@ from bonfire.onboard.protocol import ScanCallback, ScanUpdate
 from bonfire.timeouts import resolve_timeout
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
 
 __all__ = ["sanitize_remote_url", "scan"]
@@ -120,6 +121,75 @@ def sanitize_remote_url(url: str) -> str:
 # Scanner
 # ---------------------------------------------------------------------------
 
+# Internal emit signature shared by the per-fact emitters below:
+# ``async (label, value, detail="") -> None``.
+type _EmitFn = Callable[..., Awaitable[None]]
+
+
+async def _emit_branch(project_path: Path, _emit: _EmitFn) -> None:
+    """Current branch."""
+    rc, branch = await _run_cmd(
+        ["git", "-C", str(project_path), "branch", "--show-current"],
+        cwd=project_path,
+    )
+    if rc == 0 and branch:
+        await _emit("branch", branch)
+
+
+async def _emit_branch_count(project_path: Path, _emit: _EmitFn) -> None:
+    """Branch count."""
+    rc, branch_list = await _run_cmd(
+        ["git", "-C", str(project_path), "branch", "--list"],
+        cwd=project_path,
+    )
+    if rc == 0:
+        branches = [line.strip() for line in branch_list.splitlines() if line.strip()]
+        if branches:
+            await _emit("branches", str(len(branches)))
+
+
+async def _emit_remotes(project_path: Path, _emit: _EmitFn) -> None:
+    """Remote hosts (one event per remote, deduped)."""
+    rc, remote_output = await _run_cmd(
+        ["git", "-C", str(project_path), "remote", "-v"],
+        cwd=project_path,
+    )
+    if rc == 0 and remote_output:
+        seen_remotes: set[str] = set()
+        for line in remote_output.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[0]
+                url = parts[1]
+                if name not in seen_remotes:
+                    seen_remotes.add(name)
+                    await _emit(name, sanitize_remote_url(url))
+
+
+async def _emit_working_tree(project_path: Path, _emit: _EmitFn) -> None:
+    """Uncommitted changes."""
+    rc, status_output = await _run_cmd(
+        ["git", "-C", str(project_path), "status", "--porcelain"],
+        cwd=project_path,
+    )
+    if rc == 0:
+        if status_output:
+            changed = len([line for line in status_output.splitlines() if line.strip()])
+            s = "s" if changed != 1 else ""
+            await _emit("working tree", "modified", f"{changed} file{s} changed")
+        else:
+            await _emit("working tree", "clean")
+
+
+async def _emit_last_commit(project_path: Path, _emit: _EmitFn) -> None:
+    """Last commit date."""
+    rc, commit_date = await _run_cmd(
+        ["git", "-C", str(project_path), "log", "-1", "--format=%ci"],
+        cwd=project_path,
+    )
+    if rc == 0 and commit_date:
+        await _emit("last commit", commit_date)
+
 
 async def scan(project_path: Path, emit: ScanCallback) -> int:
     """Scan git state and emit ScanUpdate events.
@@ -140,60 +210,11 @@ async def scan(project_path: Path, emit: ScanCallback) -> int:
 
     # 1. Repository exists
     await _emit("repository", "initialized")
-
-    # 2. Current branch
-    rc, branch = await _run_cmd(
-        ["git", "-C", str(project_path), "branch", "--show-current"],
-        cwd=project_path,
-    )
-    if rc == 0 and branch:
-        await _emit("branch", branch)
-
-    # 3. Branch count
-    rc, branch_list = await _run_cmd(
-        ["git", "-C", str(project_path), "branch", "--list"],
-        cwd=project_path,
-    )
-    if rc == 0:
-        branches = [line.strip() for line in branch_list.splitlines() if line.strip()]
-        if branches:
-            await _emit("branches", str(len(branches)))
-
-    # 4. Remote hosts (one event per remote, deduped)
-    rc, remote_output = await _run_cmd(
-        ["git", "-C", str(project_path), "remote", "-v"],
-        cwd=project_path,
-    )
-    if rc == 0 and remote_output:
-        seen_remotes: set[str] = set()
-        for line in remote_output.splitlines():
-            parts = line.split()
-            if len(parts) >= 2:
-                name = parts[0]
-                url = parts[1]
-                if name not in seen_remotes:
-                    seen_remotes.add(name)
-                    await _emit(name, sanitize_remote_url(url))
-
-    # 5. Uncommitted changes
-    rc, status_output = await _run_cmd(
-        ["git", "-C", str(project_path), "status", "--porcelain"],
-        cwd=project_path,
-    )
-    if rc == 0:
-        if status_output:
-            changed = len([line for line in status_output.splitlines() if line.strip()])
-            s = "s" if changed != 1 else ""
-            await _emit("working tree", "modified", f"{changed} file{s} changed")
-        else:
-            await _emit("working tree", "clean")
-
-    # 6. Last commit date
-    rc, commit_date = await _run_cmd(
-        ["git", "-C", str(project_path), "log", "-1", "--format=%ci"],
-        cwd=project_path,
-    )
-    if rc == 0 and commit_date:
-        await _emit("last commit", commit_date)
+    # 2-6. The git facts, one emitter per fact.
+    await _emit_branch(project_path, _emit)
+    await _emit_branch_count(project_path, _emit)
+    await _emit_remotes(project_path, _emit)
+    await _emit_working_tree(project_path, _emit)
+    await _emit_last_commit(project_path, _emit)
 
     return count

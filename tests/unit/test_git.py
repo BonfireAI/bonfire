@@ -165,11 +165,11 @@ class TestFindAbsolutePaths:
         assert result == ["/home/user/project/main.py"]
 
     def test_finds_multiple_unix_paths(self) -> None:
-        text = "Read /etc/bonfire/config.toml and write to /tmp/output.json"
+        text = "Read /etc/bonfire/config.toml and write to /srv/output.json"
         result = PathGuard.find_absolute_paths(text)
         assert len(result) == 2
         assert "/etc/bonfire/config.toml" in result
-        assert "/tmp/output.json" in result
+        assert "/srv/output.json" in result
 
     def test_finds_windows_path(self) -> None:
         text = r"Open C:\Users\dev\project\main.py"
@@ -190,19 +190,19 @@ class TestFindAbsolutePaths:
         assert PathGuard.find_absolute_paths("") == []
 
     def test_deduplicates_repeated_paths(self) -> None:
-        text = "cp /tmp/a.txt /tmp/b.txt && mv /tmp/a.txt /tmp/c.txt"
+        text = "cp /srv/a.txt /srv/b.txt && mv /srv/a.txt /srv/c.txt"
         result = PathGuard.find_absolute_paths(text)
-        assert result.count("/tmp/a.txt") == 1
+        assert result.count("/srv/a.txt") == 1
 
     def test_preserves_first_occurrence_order(self) -> None:
-        text = "first /home/a/x.py then /tmp/b/y.py"
+        text = "first /home/a/x.py then /srv/b/y.py"
         result = PathGuard.find_absolute_paths(text)
-        assert result.index("/home/a/x.py") < result.index("/tmp/b/y.py")
+        assert result.index("/home/a/x.py") < result.index("/srv/b/y.py")
 
     def test_many_duplicates_stable_order(self) -> None:
         """Under pathological repetition, first-occurrence order is preserved."""
-        text = " ".join(["/tmp/a.txt"] * 5 + ["/tmp/b.txt"] * 5 + ["/tmp/a.txt"])
-        assert PathGuard.find_absolute_paths(text) == ["/tmp/a.txt", "/tmp/b.txt"]
+        text = " ".join(["/srv/a.txt"] * 5 + ["/srv/b.txt"] * 5 + ["/srv/a.txt"])
+        assert PathGuard.find_absolute_paths(text) == ["/srv/a.txt", "/srv/b.txt"]
 
     def test_ignores_https_url(self) -> None:
         assert PathGuard.find_absolute_paths("https://github.com/foo/bar") == []
@@ -315,22 +315,22 @@ class TestIsolationViolation:
     """IsolationViolation is a frozen dataclass of violation metadata."""
 
     def test_frozen(self) -> None:
-        v = IsolationViolation(path="/tmp/x", line_number=1, severity="error")
+        v = IsolationViolation(path="/fake/x", line_number=1, severity="error")
         with pytest.raises((AttributeError, Exception)):
             v.path = "/other"  # type: ignore[misc]
 
     def test_fields(self) -> None:
-        v = IsolationViolation(path="/tmp/x", line_number=3, severity="warning")
-        assert v.path == "/tmp/x"
+        v = IsolationViolation(path="/fake/x", line_number=3, severity="warning")
+        assert v.path == "/fake/x"
         assert v.line_number == 3
         assert v.severity == "warning"
 
     def test_line_number_optional(self) -> None:
-        v = IsolationViolation(path="/tmp/x", line_number=None, severity="error")
+        v = IsolationViolation(path="/fake/x", line_number=None, severity="error")
         assert v.line_number is None
 
     def test_path_guard_error_carries_violations(self) -> None:
-        v = IsolationViolation(path="/tmp/x", line_number=None, severity="error")
+        v = IsolationViolation(path="/fake/x", line_number=None, severity="error")
         err = PathGuardError("blocked", [v])
         assert err.violations == [v]
         assert "blocked" in str(err)
@@ -531,13 +531,13 @@ class TestGitWorkflowRevParse:
 
 class TestWorktreeInfo:
     def test_frozen(self) -> None:
-        info = WorktreeInfo(path=Path("/tmp/wt"), branch="bonfire/x")
+        info = WorktreeInfo(path=Path("/fake/wt"), branch="bonfire/x")
         with pytest.raises((AttributeError, Exception)):
             info.path = Path("/other")  # type: ignore[misc]
 
     def test_fields(self) -> None:
-        info = WorktreeInfo(path=Path("/tmp/wt"), branch="bonfire/x")
-        assert info.path == Path("/tmp/wt")
+        info = WorktreeInfo(path=Path("/fake/wt"), branch="bonfire/x")
+        assert info.path == Path("/fake/wt")
         assert info.branch == "bonfire/x"
 
 

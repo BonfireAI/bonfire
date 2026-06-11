@@ -60,6 +60,58 @@ DEFAULT_EXCLUSIONS: set[str] = {
 }
 
 
+_DEP_SECTION_RE = re.compile(
+    r"\[(project\.dependencies|project\.optional-dependencies|tool\.poetry\.dependencies)",
+    re.IGNORECASE,
+)
+# Inline-table form on [project]: ``optional-dependencies = {...}`` or
+# inline-array form: ``dependencies = [...]``. These never produce a section
+# header matching _DEP_SECTION_RE, so they are detected independently.
+_INLINE_DEP_RE = re.compile(
+    r"(optional-dependencies|dependencies)\s*=\s*[\{\[]",
+    re.IGNORECASE,
+)
+
+
+def _pkg_from_spec(spec: str) -> str:
+    """Lowercased package name from a PEP 508-ish spec like ``pytest>=8.0``."""
+    return re.split(r"[><=!~\[; ]", spec)[0].strip().lower()
+
+
+def _pkgs_from_quoted_specs(line: str) -> set[str]:
+    """Harvest package names from every double-quoted spec on the line."""
+    names: set[str] = set()
+    for spec in re.findall(r'"([^"]+)"', line):
+        pkg = _pkg_from_spec(spec)
+        if pkg:
+            names.add(pkg)
+    return names
+
+
+def _pkgs_from_dep_line(stripped: str) -> set[str]:
+    """Harvest package names from one non-comment line inside a dep section."""
+    names: set[str] = set()
+    # TOML-style ``key = "value"`` (e.g. ``django = ">=5.0"``) — key is
+    # the package name. Capture the bare-identifier LHS before '='.
+    key_match = re.match(r"([A-Za-z0-9_.\-]+)\s*=", stripped)
+    if key_match:
+        pkg = key_match.group(1).strip().lower()
+        if pkg:
+            names.add(pkg)
+    # Extract all quoted strings that look like package specs
+    quoted_names = _pkgs_from_quoted_specs(stripped)
+    if quoted_names:
+        names.update(quoted_names)
+    elif not key_match:
+        # Bare line like "django>=5.0"
+        cleaned = stripped.strip('"').strip("'").strip(",").strip()
+        if cleaned:
+            pkg = _pkg_from_spec(cleaned)
+            if pkg:
+                names.add(pkg)
+    return names
+
+
 def _extract_pyproject_deps(text: str) -> set[str]:
     """Extract dependency package names from pyproject.toml text.
 
@@ -75,54 +127,18 @@ def _extract_pyproject_deps(text: str) -> set[str]:
     for line in text.splitlines():
         stripped = line.strip()
         # Detect dependency section headers
-        if re.match(
-            r"\[(project\.dependencies|project\.optional-dependencies|tool\.poetry\.dependencies)",
-            stripped,
-            re.IGNORECASE,
-        ):
+        if _DEP_SECTION_RE.match(stripped):
             in_deps = True
             continue
-        # Inline-table form on [project]: ``optional-dependencies = {...}`` or
-        # inline-array form: ``dependencies = [...]``. These never produce a
-        # section header that matches the regex above, so detect them
-        # independently of ``in_deps`` and harvest quoted package specs from
-        # the same line.
-        if not stripped.startswith("#") and re.match(
-            r"(optional-dependencies|dependencies)\s*=\s*[\{\[]",
-            stripped,
-            re.IGNORECASE,
-        ):
-            for spec in re.findall(r'"([^"]+)"', stripped):
-                pkg = re.split(r"[><=!~\[; ]", spec)[0].strip().lower()
-                if pkg:
-                    names.add(pkg)
+        if not stripped.startswith("#") and _INLINE_DEP_RE.match(stripped):
+            names.update(_pkgs_from_quoted_specs(stripped))
             continue
         # Any other section header ends the dep section
         if stripped.startswith("[") and in_deps:
             in_deps = False
             continue
         if in_deps and stripped and not stripped.startswith("#"):
-            # TOML-style ``key = "value"`` (e.g. ``django = ">=5.0"``) — key is
-            # the package name. Capture the bare-identifier LHS before '='.
-            key_match = re.match(r"([A-Za-z0-9_.\-]+)\s*=", stripped)
-            if key_match:
-                pkg = key_match.group(1).strip().lower()
-                if pkg:
-                    names.add(pkg)
-            # Extract all quoted strings that look like package specs
-            quoted = re.findall(r'"([^"]+)"', stripped)
-            if quoted:
-                for spec in quoted:
-                    pkg = re.split(r"[><=!~\[; ]", spec)[0].strip().lower()
-                    if pkg:
-                        names.add(pkg)
-            elif not key_match:
-                # Bare line like "django>=5.0"
-                cleaned = stripped.strip('"').strip("'").strip(",").strip()
-                if cleaned:
-                    pkg = re.split(r"[><=!~\[; ]", cleaned)[0].strip().lower()
-                    if pkg:
-                        names.add(pkg)
+            names.update(_pkgs_from_dep_line(stripped))
     return names
 
 
@@ -208,73 +224,89 @@ class TechScanner:
         """Detect frameworks from dependency files."""
         entries: list[VaultEntry] = []
         seen: set[str] = set()
+        entries.extend(self._frameworks_from_requirements(seen))
+        entries.extend(self._frameworks_from_pyproject(seen))
+        entries.extend(self._frameworks_from_package_json(seen))
+        return entries
 
-        # requirements.txt — line-based, extract package name before specifier
+    def _framework_entry(self, *, technology: str, category: str, source_file: str) -> VaultEntry:
+        """Build the dependency-file framework entry (shared shape)."""
+        return self._make_entry(
+            technology=technology,
+            category=category,
+            confidence="high",
+            detection_method="dependency_file",
+            source_file=source_file,
+        )
+
+    def _frameworks_from_requirements(self, seen: set[str]) -> list[VaultEntry]:
+        """requirements.txt — line-based, extract package name before specifier."""
         req_path = self._project_path / "requirements.txt"
-        if req_path.is_file():
-            text = req_path.read_text(encoding="utf-8")
-            for line in text.splitlines():
-                line_stripped = line.strip()
-                if not line_stripped or line_stripped.startswith("#"):
-                    continue
-                # Extract package name: split on version specifiers
-                pkg_name = re.split(r"[><=!~\[]", line_stripped)[0].strip().lower()
-                for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
-                    if pkg_name == pattern and tech not in seen:
-                        seen.add(tech)
-                        entries.append(
-                            self._make_entry(
-                                technology=tech,
-                                category=category,
-                                confidence="high",
-                                detection_method="dependency_file",
-                                source_file="requirements.txt",
-                            )
-                        )
-
-        # pyproject.toml — scan dependency lines only, not the whole file
-        pyproject_path = self._project_path / "pyproject.toml"
-        if pyproject_path.is_file():
-            text = pyproject_path.read_text(encoding="utf-8")
-            dep_names = _extract_pyproject_deps(text)
+        if not req_path.is_file():
+            return []
+        entries: list[VaultEntry] = []
+        for line in req_path.read_text(encoding="utf-8").splitlines():
+            line_stripped = line.strip()
+            if not line_stripped or line_stripped.startswith("#"):
+                continue
+            # Extract package name: split on version specifiers
+            pkg_name = re.split(r"[><=!~\[]", line_stripped)[0].strip().lower()
             for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
-                if tech not in seen and pattern in dep_names:
+                if pkg_name == pattern and tech not in seen:
                     seen.add(tech)
                     entries.append(
-                        self._make_entry(
+                        self._framework_entry(
                             technology=tech,
                             category=category,
-                            confidence="high",
-                            detection_method="dependency_file",
-                            source_file="pyproject.toml",
+                            source_file="requirements.txt",
                         )
                     )
+        return entries
 
-        # package.json — parse JSON dependencies
+    def _frameworks_from_pyproject(self, seen: set[str]) -> list[VaultEntry]:
+        """pyproject.toml — scan dependency lines only, not the whole file."""
+        pyproject_path = self._project_path / "pyproject.toml"
+        if not pyproject_path.is_file():
+            return []
+        entries: list[VaultEntry] = []
+        dep_names = _extract_pyproject_deps(pyproject_path.read_text(encoding="utf-8"))
+        for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
+            if tech not in seen and pattern in dep_names:
+                seen.add(tech)
+                entries.append(
+                    self._framework_entry(
+                        technology=tech,
+                        category=category,
+                        source_file="pyproject.toml",
+                    )
+                )
+        return entries
+
+    def _frameworks_from_package_json(self, seen: set[str]) -> list[VaultEntry]:
+        """package.json — parse JSON dependencies + devDependencies."""
         pkg_path = self._project_path / "package.json"
-        if pkg_path.is_file():
-            try:
-                data = json.loads(pkg_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                data = {}
-            all_deps: dict[str, Any] = {}
-            all_deps.update(data.get("dependencies", {}))
-            all_deps.update(data.get("devDependencies", {}))
-            for dep_name in all_deps:
-                dep_lower = dep_name.lower()
-                for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
-                    if dep_lower == pattern and tech not in seen:
-                        seen.add(tech)
-                        entries.append(
-                            self._make_entry(
-                                technology=tech,
-                                category=category,
-                                confidence="high",
-                                detection_method="dependency_file",
-                                source_file="package.json",
-                            )
+        if not pkg_path.is_file():
+            return []
+        try:
+            data = json.loads(pkg_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = {}
+        all_deps: dict[str, Any] = {}
+        all_deps.update(data.get("dependencies", {}))
+        all_deps.update(data.get("devDependencies", {}))
+        entries: list[VaultEntry] = []
+        for dep_name in all_deps:
+            dep_lower = dep_name.lower()
+            for pattern, (tech, category) in FRAMEWORK_PATTERNS.items():
+                if dep_lower == pattern and tech not in seen:
+                    seen.add(tech)
+                    entries.append(
+                        self._framework_entry(
+                            technology=tech,
+                            category=category,
+                            source_file="package.json",
                         )
-
+                    )
         return entries
 
     def _make_entry(

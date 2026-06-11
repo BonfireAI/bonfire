@@ -19,5 +19,5 @@ on:
 jobs:
   gate:
     # Pinned to a full commit SHA of the kit repo (sha-pin doctrine; Dependabot bumps it):
-    uses: BonfireAI/candyfactory-quality/.github/workflows/quality-gate.yml@8deca951981205f0bd1c38ed25e9bcf9c75348f6
+    uses: BonfireAI/candyfactory-quality/.github/workflows/quality-gate.yml@adaa4ebf429fd9ba49de6520d4636e0f8604c71d
     secrets: inherit

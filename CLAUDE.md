@@ -392,22 +392,23 @@ For the canonical vocabulary across the public Bonfire surfaces (Free / Website
 / Cyberdeck), see THE CANON:
 <https://linear.app/bonfire-codeforge/document/the-canon-source-of-truth-for-all-surfaces-331e401a0fbf>
 
-<!-- declared mirror of candyfactory-canon ADR 0029 · mounted by candyfactory-quality -->
+<!-- declared mirror of candyfactory-canon ADR 0029 + ADR 0030 · mounted by candyfactory-quality -->
 ## The BubbleGum Law (form)
 
-This repository is governed by **the BubbleGum Law** — CandyFactory's form law. It sticks:
-if you are reading this to write code here, you are now carrying it.
+**The BubbleGum Law** — CandyFactory's form law — governs this repository. It sticks:
+read it and you carry it.
 
-- **Budgets, not vibes:** functions stay ≤ CC 10 and ≤ 50 statements; new files stay ≤ 500
-  lines. Existing offenders are baselined and may only shrink (ratchet — never a world-refactor).
-- **Reuse before reinvention:** search this repo before writing. In-repo duplication fails the
-  gate; a cross-repo copy must declare its mirror ("mirrors <repo>'s <artifact>").
-- **Recursion is declared, not banned:** structurally-recursive data with a stated bound,
-  marked as such — or it fails.
-- **New code type-checks clean,** and failure speaks typed errors (the Elegance Law).
-- **Splitting a file is design, not evasion:** two incohesive 350-line halves satisfy nothing;
-  the gate measures, review judges.
+- **SOLID:** one responsibility per module (new files ≤ 500 lines); extend via registries,
+  not dispatch chains; overrides substitute cleanly; interfaces stay narrow (≤ 5 methods,
+  no NotImplementedError stubs); dependencies point inward — core never imports
+  adapters/packs/tenants; each repo commits its import contract.
+- **DRY:** search before writing; never paste what exists; cross-repo copies declare their mirror.
+- **KISS:** functions ≤ CC 10, ≤ 50 statements; recursion declares a bound or fails.
+- **The bench:** no dead code (YAGNI) · no import cycles (SoC) · compose, don't subclass ·
+  neighbors, not strangers (Demeter) · failure speaks typed errors (the Elegance Law).
 
-In CandyFactory CI — and inside Bonfire burns — this law is a **gate**: comply by design, not
-by suppression; any `# noqa` / `# nosec` carries a written reason and a human's blessing.
-Everywhere else, treat it as the strongest suggestion in the file.
+Budgets come from measurement; offenders baseline and only shrink — ratchet, never
+world-refactor. In CandyFactory CI and Bonfire burns the measured core runs as gates,
+each proven by a control rod; the rest is census and review. Comply by design: every
+suppression carries a written reason and a registered blessing. Elsewhere, this law is
+the strongest suggestion in the file.

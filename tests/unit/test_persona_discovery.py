@@ -17,7 +17,7 @@ rather than logging a warning and continuing.
 from __future__ import annotations
 
 import logging
-from pathlib import Path  # noqa: TC003 — runtime constructor type
+from pathlib import Path
 
 import pytest
 

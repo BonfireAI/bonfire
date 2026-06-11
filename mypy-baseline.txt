@@ -16,9 +16,6 @@ src/bonfire/onboard/scanners/git_state.py:0: error: Incompatible types in assign
 src/bonfire/onboard/scanners/git_state.py:0: error: Incompatible return value type (got "tuple[int | None, str]", expected "tuple[int, str]")  [return-value]
 src/bonfire/onboard/scanners/cli_toolchain.py:0: error: Dict entry 0 has incompatible type "str": "tuple[list[str], str, float | None]"; expected "str": "tuple[list[str], str, float]"  [dict-item]
 src/bonfire/onboard/scanners/cli_toolchain.py:0: error: Dict entry 1 has incompatible type "str": "tuple[list[str], str, float | None]"; expected "str": "tuple[list[str], str, float]"  [dict-item]
-src/bonfire/prompt/compiler.py:0: error: Library stubs not installed for "yaml"  [import-untyped]
-src/bonfire/prompt/compiler.py:0: note: Hint: "python3 -m pip install types-PyYAML"
-src/bonfire/prompt/compiler.py:0: note: (or run "mypy --install-types" to install all missing stub packages)
 src/bonfire/knowledge/ollama_embedder.py:0: error: Cannot find implementation or library stub for module named "ollama"  [import-not-found]
 src/bonfire/models/config.py:0: error: Unused "type: ignore" comment  [unused-ignore]
 src/bonfire/models/config.py:0: error: Incompatible types in assignment (expression has type "dict[str, Any]", base class "BaseSettings" defined the type as "SettingsConfigDict")  [assignment]

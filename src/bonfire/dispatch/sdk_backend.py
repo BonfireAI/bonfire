@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import aclosing
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from bonfire.dispatch._cost import safe_cost_from_attr
@@ -47,6 +48,75 @@ except ImportError:
     HookMatcher = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _StreamState:
+    """Accumulated facts from one ``query()`` message stream."""
+
+    text_parts: list[str] = field(default_factory=list)
+    cost_usd: float = 0.0
+    duration_seconds: float = 0.0
+    session_id: str | None = None
+    result_msg_text: str = ""
+    is_error: bool = False
+    errors: list[str] | None = None
+    rate_limit_detail: ErrorDetail | None = None
+
+
+def _ingest_assistant_message(
+    state: _StreamState,
+    msg: Any,
+    on_stream: Callable[[str], None] | None,
+) -> None:
+    """Collect assistant text blocks, forwarding each to the stream callback."""
+    for block in getattr(msg, "content", []):
+        block_text = getattr(block, "text", None)
+        if block_text:
+            state.text_parts.append(block_text)
+            if on_stream is not None:
+                on_stream(block_text)
+
+
+def _ingest_result_message(state: _StreamState, msg: Any) -> None:
+    """Capture cost/duration/session/result facts from the ResultMessage."""
+    state.cost_usd = safe_cost_from_attr(msg, "total_cost_usd")
+    duration_ms = getattr(msg, "duration_ms", 0) or 0
+    state.duration_seconds = duration_ms / 1000.0
+    state.session_id = getattr(msg, "session_id", None)
+    state.result_msg_text = getattr(msg, "result", None) or ""
+    state.is_error = getattr(msg, "is_error", False)
+    state.errors = getattr(msg, "errors", None)
+
+
+def _ingest_rate_limit_event(state: _StreamState, msg: Any) -> None:
+    """Translate a rejected rate-limit event into a typed ErrorDetail."""
+    status = getattr(msg, "status", "")
+    if status == "rejected":
+        # Source the failure from the typed vocabulary: raise the
+        # taxonomy class and capture it via from_exception so the
+        # detail is self-describing (populated traceback). The
+        # error_type string equals the class name unchanged.
+        try:
+            raise RateLimitError("Rate limit exceeded — request rejected by API")
+        except RateLimitError as exc:
+            state.rate_limit_detail = ErrorDetail.from_exception(exc)
+    elif status == "allowed_warning":
+        logger.warning("Rate limit warning: approaching limit")
+
+
+def _agent_error_detail(errors: list[str] | None, final_text: str) -> ErrorDetail:
+    """Typed ErrorDetail for a ResultMessage that carries ``is_error``."""
+    error_msgs = [str(e) for e in errors] if errors else []
+    agent_message = "; ".join(error_msgs) if error_msgs else (final_text or "Agent reported error")
+    # Source the failure from the typed vocabulary: raise the taxonomy
+    # class and capture it via from_exception so the detail is
+    # self-describing (populated traceback). The error_type string
+    # equals the class name unchanged.
+    try:
+        raise AgentError(agent_message)
+    except AgentError as exc:
+        return ErrorDetail.from_exception(exc)
 
 
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
@@ -90,6 +160,7 @@ class ClaudeSDKBackend:
         try:
             return await self._do_execute(envelope, options=options, on_stream=on_stream)
         except Exception as exc:
+            logger.exception("sdk_backend.execute_failed; returning FAILED envelope")
             return envelope.with_error(ErrorDetail.from_exception(exc))
 
     async def _do_execute(
@@ -127,75 +198,35 @@ class ClaudeSDKBackend:
         # Wrap in aclosing() to ensure cleanup on early return (e.g. rate limit).
         message_stream = query(prompt=envelope.task, options=agent_options)
 
-        text_parts: list[str] = []
-        cost_usd: float = 0.0
-        duration_seconds: float = 0.0
-        session_id: str | None = None
-        result_msg_text: str = ""
-        is_error: bool = False
-        errors: list[str] | None = None
-
+        state = _StreamState()
         async with aclosing(message_stream) as stream:
             async for msg in stream:
                 if AssistantMessage is not None and isinstance(msg, AssistantMessage):
-                    for block in getattr(msg, "content", []):
-                        block_text = getattr(block, "text", None)
-                        if block_text:
-                            text_parts.append(block_text)
-                            if on_stream is not None:
-                                on_stream(block_text)
-
+                    _ingest_assistant_message(state, msg, on_stream)
                 elif ResultMessage is not None and isinstance(msg, ResultMessage):
-                    cost_usd = safe_cost_from_attr(msg, "total_cost_usd")
-                    duration_ms = getattr(msg, "duration_ms", 0) or 0
-                    duration_seconds = duration_ms / 1000.0
-                    session_id = getattr(msg, "session_id", None)
-                    result_msg_text = getattr(msg, "result", None) or ""
-                    is_error = getattr(msg, "is_error", False)
-                    errors = getattr(msg, "errors", None)
-
+                    _ingest_result_message(state, msg)
                 elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
-                    status = getattr(msg, "status", "")
-                    if status == "rejected":
-                        # Source the failure from the typed vocabulary: raise the
-                        # taxonomy class and capture it via from_exception so the
-                        # detail is self-describing (populated traceback). The
-                        # error_type string equals the class name unchanged.
-                        try:
-                            raise RateLimitError("Rate limit exceeded — request rejected by API")
-                        except RateLimitError as exc:
-                            return envelope.with_error(ErrorDetail.from_exception(exc))
-                    elif status == "allowed_warning":
-                        logger.warning("Rate limit warning: approaching limit")
+                    _ingest_rate_limit_event(state, msg)
+                    if state.rate_limit_detail is not None:
+                        return envelope.with_error(state.rate_limit_detail)
 
-        final_text = "".join(text_parts)
+        final_text = "".join(state.text_parts)
         # Fallback: use ResultMessage.result if no text from assistant messages
-        if not final_text and result_msg_text:
-            final_text = result_msg_text
+        if not final_text and state.result_msg_text:
+            final_text = state.result_msg_text
 
         # Check is_error flag from ResultMessage
-        if is_error:
-            error_msgs = [str(e) for e in errors] if errors else []
-            agent_message = (
-                "; ".join(error_msgs) if error_msgs else (final_text or "Agent reported error")
-            )
-            # Source the failure from the typed vocabulary: raise the taxonomy
-            # class and capture it via from_exception so the detail is
-            # self-describing (populated traceback). The error_type string
-            # equals the class name unchanged.
-            try:
-                raise AgentError(agent_message)
-            except AgentError as exc:
-                return envelope.with_error(ErrorDetail.from_exception(exc))
+        if state.is_error:
+            return envelope.with_error(_agent_error_detail(state.errors, final_text))
 
         # Success path — set duration + session_id metadata then enrich with result.
-        enriched = envelope.with_result(result=final_text, cost_usd=cost_usd)
+        enriched = envelope.with_result(result=final_text, cost_usd=state.cost_usd)
         return enriched.model_copy(
             update={
                 "metadata": {
                     **enriched.metadata,
-                    "duration_seconds": duration_seconds,
-                    "session_id": session_id,
+                    "duration_seconds": state.duration_seconds,
+                    "session_id": state.session_id,
                 },
             },
         )

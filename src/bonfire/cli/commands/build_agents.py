@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.resources
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -66,12 +67,14 @@ def _default_output_dir() -> Path:
 
 
 def build_agents(
-    output_dir: Path = typer.Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Directory to write generated agent files (default: ./agents/).",
-    ),
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory to write generated agent files (default: ./agents/).",
+        ),
+    ] = None,
     check: bool = typer.Option(
         False,
         "--check",
@@ -95,12 +98,9 @@ def build_agents(
         path = target / f"{role['name']}.md"
 
         if check:
-            if not path.exists():
-                drift.append((role["name"], "missing"))
-                continue
-            current = path.read_text(encoding="utf-8")
-            if current != composed:
-                drift.append((role["name"], "drift"))
+            if not path.exists() or path.read_text(encoding="utf-8") != composed:
+                kind = "missing" if not path.exists() else "drift"
+                drift.append((role["name"], kind))
             continue
 
         if path.exists() and not force:

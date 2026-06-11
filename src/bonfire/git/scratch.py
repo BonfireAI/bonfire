@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 PREFLIGHT_DIR_NAME: str = "preflight"
 
 _RANDOM_SUFFIX_BYTES: int = 4  # 4 bytes -> 8 hex chars
-_NO_PR_NUMBER_TOKEN: str = "0"
+_NO_PR_NUMBER_SENTINEL: str = "0"
 
 
 def _new_random_suffix() -> str:
@@ -157,7 +157,7 @@ class ScratchWorktreeContext:
     def _pr_token(self) -> str:
         """PR number token used in branch and dir names."""
         if self._pr_number is None:
-            return _NO_PR_NUMBER_TOKEN
+            return _NO_PR_NUMBER_SENTINEL
         return str(self._pr_number)
 
     def _branch_name(self) -> str:

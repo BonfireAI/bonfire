@@ -179,20 +179,14 @@ class ArchitectHandler:
                 if not text.strip():
                     continue
 
-                if file_info.category == "markdown":
-                    chunks: list[Any] = chunk_markdown(
-                        text,
-                        source_path=str(file_info.path),
-                        project_name=self._project_name,
-                        git_hash=self._git_hash,
-                    )
-                else:
-                    chunks = chunk_source_file(
-                        text,
-                        source_path=str(file_info.path),
-                        project_name=self._project_name,
-                        git_hash=self._git_hash,
-                    )
+                # Markdown and source chunkers share one signature; pick by category.
+                chunker = chunk_markdown if file_info.category == "markdown" else chunk_source_file
+                chunks: list[Any] = chunker(
+                    text,
+                    source_path=str(file_info.path),
+                    project_name=self._project_name,
+                    git_hash=self._git_hash,
+                )
 
                 for chunk in chunks:
                     if not await self._vault.exists(chunk.content_hash):

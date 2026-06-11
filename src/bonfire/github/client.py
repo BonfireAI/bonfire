@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import subprocess
 from typing import TYPE_CHECKING, Literal
 
@@ -78,9 +79,14 @@ def detect_github_repo(repo_path: str | Path = ".") -> str:
 
     Returns an empty string if detection fails (no remote, not GitHub, etc.).
     """
+    git_exe = shutil.which("git")
+    if git_exe is None:
+        # No git executable on PATH — detection failure per the docstring
+        # contract (and a fully-resolved path keeps subprocess off PATH).
+        return ""
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
+            [git_exe, "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
             cwd=str(repo_path),

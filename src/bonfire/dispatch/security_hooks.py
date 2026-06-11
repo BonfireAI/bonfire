@@ -402,7 +402,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
         segments.extend(_split_chain(sub))
 
     work: list[str] = list(segments)
-    for depth in range(max_depth):
+    for _depth in range(max_depth):
         next_round: list[str] = []
         for seg in work:
             peeled = _peel_one(seg)
@@ -562,10 +562,10 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
     else:
         return ""
     if isinstance(cmd, bytes):
-        try:
-            cmd = cmd.decode("utf-8", errors="replace")
-        except Exception:
-            return ""
+        # ``errors="replace"`` makes the decode total — it cannot raise, so
+        # no defensive catch belongs here (the Elegance Law bans dead
+        # swallows into bare sentinels).
+        cmd = cmd.decode("utf-8", errors="replace")
     if not isinstance(cmd, str):
         return ""
     if tool_name in ("Write", "Edit"):

@@ -356,7 +356,7 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
     PYTEST_COLLECTION_ERROR.
     """
     try:
-        tree = ET.parse(str(path))
+        tree = ET.parse(str(path))  # noqa: S314 — locally-generated junit.xml (registered)
     except (FileNotFoundError, OSError):
         return ()
     except ET.ParseError:

@@ -85,7 +85,7 @@ def detect_github_repo(repo_path: str | Path = ".") -> str:
         # contract (and a fully-resolved path keeps subprocess off PATH).
         return ""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 — which-resolved git, fixed argv (registered)
             [git_exe, "remote", "get-url", "origin"],
             capture_output=True,
             text=True,

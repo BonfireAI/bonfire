@@ -101,7 +101,7 @@ class Severity(StrEnum):
 class VerdictStatus(StrEnum):
     """Tiered status of a quality verdict (PASS / CONCERNS / FAIL)."""
 
-    PASS = "PASS"
+    PASS = "PASS"  # noqa: S105 — enum wire value, not a credential (registered exemption)
     CONCERNS = "CONCERNS"
     FAIL = "FAIL"
 

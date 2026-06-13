@@ -130,8 +130,7 @@ class MockGitHubClient:
     def set_open_prs(self, *, base: str, prs: list[dict]) -> None:
         """Configure canned open-PR data for ``list_open_prs``.
 
-        Sage memo bon-519-sage-20260428T033101Z.md §D5 line 506: tests
-        pre-populate the mock with N synthetic PRs each with a
+        Tests pre-populate the mock with N synthetic PRs, each with a
         deterministic file set.
 
         Parameters

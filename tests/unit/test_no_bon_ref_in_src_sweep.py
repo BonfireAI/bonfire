@@ -42,10 +42,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = _REPO_ROOT / "src" / "bonfire"
 
-# Regex matching the canonical ticket-ref shape (e.g. ``BON-338``).
-# Note: ``BON-W5.3``-style refs do NOT match (W is not a digit) — those
-# are intentionally out of scope for this sweep.
-_BON_REF = re.compile(r"BON-\d+")
+# Regex matching the canonical ticket-ref shape (e.g. ``BON-338``). ``BON-W5.3``
+# refs do NOT match (W not a digit) — out of scope. IGNORECASE: tracker rot also
+# ships lowercase (``bon-NNN-...`` filenames) that a case-sensitive regex missed.
+_BON_REF = re.compile(r"BON-\d+", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Allowlist

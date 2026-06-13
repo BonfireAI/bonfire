@@ -120,8 +120,8 @@ class LanceDBBackend:
             )
             return [self._record_to_entry(r) for r in results]
         except Exception as exc:
-            logger.exception("Vault get_by_source failed: %s", exc)
-            return []
+            msg = f"Vault get_by_source failed: {exc}"
+            raise RetrievalError(msg, context={"source_path": source_path}) from exc
 
     def _ensure_connected(self) -> None:
         """Lazy connect. Runs migration if vault_v2 doesn't exist."""

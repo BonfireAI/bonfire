@@ -18,7 +18,7 @@ The project at /workspace/target has one deliberately broken test. Your job is t
 Append two JSONL lines (one JSON object per line, newline-terminated). Use today's unix timestamp for `timestamp` (call `date +%s.%N`). Use the SESSION_ID env var for `session_id`. Approximate the cost and duration based on what you observed.
 
 Line 1 (DispatchRecord — your work counts as one dispatch):
-{"type":"dispatch","timestamp":1714564800.123,"session_id":"<SESSION_ID>","agent_name":"claude-cli","cost_usd":0.42,"duration_seconds":187.5,"model":"claude-sonnet-4-7-20260101"}
+{"type":"dispatch","timestamp":1714564800.123,"session_id":"<SESSION_ID>","agent_name":"claude-cli","cost_usd":0.42,"duration_seconds":187.5,"model":"claude-sonnet-4-6"}
 
 Line 2 (PipelineRecord — your work counts as a one-stage pipeline):
 {"type":"pipeline","timestamp":1714564800.456,"session_id":"<SESSION_ID>","total_cost_usd":0.42,"duration_seconds":187.5,"stages_completed":1}

@@ -309,9 +309,9 @@ class TestMaxBudgetPassthroughToSDK:
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(
-                Envelope(task="t", agent_name="scout-agent", model="claude-opus-4-7"),
+                Envelope(task="t", agent_name="scout-agent", model="claude-opus-4-8"),
                 options=DispatchOptions(
-                    model="claude-opus-4-7",
+                    model="claude-opus-4-8",
                     max_budget_usd=3.14,
                     max_turns=7,
                 ),
@@ -334,7 +334,7 @@ class TestMaxBudgetPassthroughToSDK:
             # Default DispatchOptions.max_budget_usd is 0.0 per protocols.py:62.
             await backend.execute(
                 Envelope(task="t", agent_name="scout-agent"),
-                options=DispatchOptions(model="claude-opus-4-7"),
+                options=DispatchOptions(model="claude-opus-4-8"),
             )
 
         assert captured["max_budget_usd"] == pytest.approx(0.0)
@@ -359,9 +359,9 @@ class TestMaxTurnsPassthroughToSDK:
         ):
             backend = ClaudeSDKBackend()
             await backend.execute(
-                Envelope(task="t", agent_name="knight-agent", model="claude-opus-4-7"),
+                Envelope(task="t", agent_name="knight-agent", model="claude-opus-4-8"),
                 options=DispatchOptions(
-                    model="claude-opus-4-7",
+                    model="claude-opus-4-8",
                     max_turns=42,
                     max_budget_usd=1.0,
                 ),
@@ -381,7 +381,7 @@ class TestMaxTurnsPassthroughToSDK:
             backend = ClaudeSDKBackend()
             await backend.execute(
                 Envelope(task="t", agent_name="scout-agent"),
-                options=DispatchOptions(model="claude-opus-4-7"),
+                options=DispatchOptions(model="claude-opus-4-8"),
             )
 
         assert captured["max_turns"] == 10

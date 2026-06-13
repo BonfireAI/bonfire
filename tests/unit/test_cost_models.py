@@ -363,9 +363,9 @@ class TestDispatchRecordModel:
             agent_name="a",
             cost_usd=0.0,
             duration_seconds=0.0,
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
         )
-        assert record.model == "claude-opus-4-7"
+        assert record.model == "claude-opus-4-8"
 
     def test_legacy_jsonl_row_without_model_loads(self) -> None:
         """Sage memo D5 — pre-BON-351 ledger rows omit ``model`` entirely.
@@ -397,12 +397,12 @@ class TestModelCost:
     def test_model_cost_construction(self) -> None:
         """Sage memo D5 — four required fields, all positional-by-name."""
         m = ModelCost(
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
             total_cost_usd=1.0,
             dispatch_count=3,
             total_duration_seconds=12.5,
         )
-        assert m.model == "claude-opus-4-7"
+        assert m.model == "claude-opus-4-8"
         assert m.total_cost_usd == 1.0
         assert m.dispatch_count == 3
         assert m.total_duration_seconds == 12.5

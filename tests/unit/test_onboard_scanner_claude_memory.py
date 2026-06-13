@@ -145,7 +145,7 @@ async def test_panel_is_always_claude_memory(tmp_path):
 async def test_reads_settings_model(tmp_path):
     """Reports model override from settings.json."""
     home = tmp_path / "home"
-    _build_claude_dir(home, settings={"model": "claude-sonnet-4-20250514"})
+    _build_claude_dir(home, settings={"model": "claude-sonnet-4-6"})
     project = tmp_path / "project"
     project.mkdir()
 
@@ -157,7 +157,7 @@ async def test_reads_settings_model(tmp_path):
     events = _events(emit)
     model_events = [e for e in events if e.label == "model"]
     assert len(model_events) == 1
-    assert model_events[0].value == "claude-sonnet-4-20250514"
+    assert model_events[0].value == "claude-sonnet-4-6"
 
 
 async def test_reads_settings_permissions(tmp_path):

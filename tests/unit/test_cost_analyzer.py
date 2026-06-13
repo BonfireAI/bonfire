@@ -576,7 +576,7 @@ class TestModelCosts:
                 agent_name="a",
                 cost_usd=0.10,
                 duration_seconds=1.0,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             ),
             DispatchRecord(
                 timestamp=2.0,
@@ -584,7 +584,7 @@ class TestModelCosts:
                 agent_name="b",
                 cost_usd=0.05,
                 duration_seconds=2.0,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             ),
             DispatchRecord(
                 timestamp=3.0,
@@ -601,7 +601,7 @@ class TestModelCosts:
         assert len(results) == 2
         assert all(isinstance(r, ModelCost) for r in results)
         models_to_records = {r.model: r for r in results}
-        assert set(models_to_records) == {"claude-opus-4-7", "claude-haiku-4-5"}
+        assert set(models_to_records) == {"claude-opus-4-8", "claude-haiku-4-5"}
 
     def test_sort_descending_by_cost(self, ledger_path: Path) -> None:
         """Sage memo D8 — sort key is ``total_cost_usd``, descending. Same
@@ -659,7 +659,7 @@ class TestModelCosts:
                 agent_name="modern-b",
                 cost_usd=0.10,
                 duration_seconds=1.0,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             ),
         ]
         _write_records(ledger_path, recs)
@@ -668,7 +668,7 @@ class TestModelCosts:
         assert len(results) == 2
         models = {r.model for r in results}
         assert "" in models
-        assert "claude-opus-4-7" in models
+        assert "claude-opus-4-8" in models
 
     def test_dispatch_count_correct(self, ledger_path: Path) -> None:
         """Sage memo D8 — ``dispatch_count`` reflects the number of records
@@ -704,7 +704,7 @@ class TestModelCosts:
                 agent_name="a",
                 cost_usd=0.01,
                 duration_seconds=12.5,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             ),
             DispatchRecord(
                 timestamp=2.0,
@@ -712,7 +712,7 @@ class TestModelCosts:
                 agent_name="b",
                 cost_usd=0.02,
                 duration_seconds=7.5,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             ),
         ]
         _write_records(ledger_path, recs)
@@ -765,7 +765,7 @@ class TestModelCostsResilience:
         spec'd dict-based group, it stays fast.
 
         Cost layout (deterministic):
-            claude-opus-4-7   -> 4000 records * 0.04 = 160.00
+            claude-opus-4-8   -> 4000 records * 0.04 = 160.00
             claude-sonnet-4-6 -> 3000 records * 0.03 =  90.00
             claude-haiku-4-5  -> 2000 records * 0.02 =  40.00
             claude-extra-1    ->  900 records * 0.05 =  45.00
@@ -778,7 +778,7 @@ class TestModelCostsResilience:
 
         n_total = 10_000
         layout: list[tuple[str, int, float]] = [
-            ("claude-opus-4-7", 4000, 0.04),
+            ("claude-opus-4-8", 4000, 0.04),
             ("claude-sonnet-4-6", 3000, 0.03),
             ("claude-haiku-4-5", 2000, 0.02),
             ("claude-extra-1", 900, 0.05),
@@ -811,7 +811,7 @@ class TestModelCostsResilience:
         # Descending by total_cost_usd.
         names = [m.model for m in results]
         assert names == [
-            "claude-opus-4-7",
+            "claude-opus-4-8",
             "claude-sonnet-4-6",
             "claude-extra-1",
             "claude-haiku-4-5",
@@ -819,8 +819,8 @@ class TestModelCostsResilience:
         ]
         # Spot-check totals.
         by_name = {m.model: m for m in results}
-        assert by_name["claude-opus-4-7"].total_cost_usd == pytest.approx(160.0)
-        assert by_name["claude-opus-4-7"].dispatch_count == 4000
+        assert by_name["claude-opus-4-8"].total_cost_usd == pytest.approx(160.0)
+        assert by_name["claude-opus-4-8"].dispatch_count == 4000
         assert by_name["claude-haiku-4-5"].total_cost_usd == pytest.approx(40.0)
         assert by_name["claude-extra-2"].dispatch_count == 100
 
@@ -855,7 +855,7 @@ class TestModelCostsResilience:
                 agent_name="a",
                 cost_usd=0.30,
                 duration_seconds=2.0,
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
             )
             new_b = DispatchRecord(
                 timestamp=5.0,
@@ -873,7 +873,7 @@ class TestModelCostsResilience:
 
         # Three buckets: "", opus, haiku.
         by_name = {m.model: m for m in results}
-        assert set(by_name) == {"", "claude-opus-4-7", "claude-haiku-4-5"}
+        assert set(by_name) == {"", "claude-opus-4-8", "claude-haiku-4-5"}
 
         # Legacy bucket is preserved as a visible "" key with summed cost.
         legacy = by_name[""]
@@ -881,15 +881,15 @@ class TestModelCostsResilience:
         assert legacy.total_cost_usd == pytest.approx(0.85)
 
         # New rows attributed to their model strings.
-        assert by_name["claude-opus-4-7"].dispatch_count == 1
-        assert by_name["claude-opus-4-7"].total_cost_usd == pytest.approx(0.30)
+        assert by_name["claude-opus-4-8"].dispatch_count == 1
+        assert by_name["claude-opus-4-8"].total_cost_usd == pytest.approx(0.30)
         assert by_name["claude-haiku-4-5"].dispatch_count == 1
         assert by_name["claude-haiku-4-5"].total_cost_usd == pytest.approx(0.20)
 
         # Sort descending by cost: legacy (0.85) > opus (0.30) > haiku (0.20).
         assert [m.model for m in results] == [
             "",
-            "claude-opus-4-7",
+            "claude-opus-4-8",
             "claude-haiku-4-5",
         ]
 

@@ -35,7 +35,7 @@ class PydanticAIBackend:
     Parameters
     ----------
     model
-        The model identifier string (e.g. ``"claude-sonnet-4-20250514"``).
+        The model identifier string (e.g. ``"claude-sonnet-4-6"``).
     """
 
     def __init__(self, model: str = "") -> None:

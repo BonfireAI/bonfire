@@ -159,13 +159,13 @@ class TestRoleFieldValueAcceptance:
     def test_role_paired_with_tools_and_model(self) -> None:
         """Sage D4 + D7 — role travels alongside tools and model."""
         opts = DispatchOptions(
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
             tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
             role="warrior",
         )
         assert opts.role == "warrior"
         assert opts.tools == ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
-        assert opts.model == "claude-opus-4-7"
+        assert opts.model == "claude-opus-4-8"
 
 
 # ===========================================================================

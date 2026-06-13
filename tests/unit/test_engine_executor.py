@@ -1180,7 +1180,7 @@ class TestVocabularyParity:
         Locks Sage D1 line 55: ``AgentRole.REVIEWER.value == "reviewer"``,
         the gamified alias ``"wizard"`` ALSO maps to AgentRole.REVIEWER.
         Both routes resolve to ``DEFAULT_ROLE_TIER[REVIEWER] == REASONING``
-        -> ``settings.models.reasoning`` -> ``"claude-opus-4-7"`` by default.
+        -> ``settings.models.reasoning`` -> ``"claude-opus-4-8"`` by default.
 
         This is the dispatch-side guarantee that the wizard handler can
         safely pass the canonical string while workflow stages pass the

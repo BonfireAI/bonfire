@@ -224,7 +224,7 @@ max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
 persona = "falcor"                  # CLI output persona
 
 [models]                            # bring your own provider key — strings live here
-reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
+reasoning = "claude-opus-4-8"       # researcher, reviewer, synthesizer, analyst
 fast      = "claude-haiku-4-5"      # tester, implementer, verifier, publisher, closer
 balanced  = "claude-sonnet-4-6"     # fallback for unknown role strings
 

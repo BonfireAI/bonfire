@@ -279,10 +279,10 @@ class TestDispatchEvents:
             agent_name="x",
             cost_usd=0.0,
             duration_seconds=0.0,
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
             **SESSION,
         )
-        assert e.model == "claude-opus-4-7"
+        assert e.model == "claude-opus-4-8"
 
 
 # ---------------------------------------------------------------------------

@@ -802,12 +802,12 @@ class TestEventEmission:
         env = _envelope(agent_name="knight")
         backend = ScriptedBackend([env.with_result("ok", cost_usd=0.01)])
         await execute_with_retry(
-            backend, env, _options(model="claude-opus-4"), event_bus=bus, retry_delay=0.0
+            backend, env, _options(model="claude-opus-4-8"), event_bus=bus, retry_delay=0.0
         )
         started = capture.of_type(DispatchStarted)
         assert len(started) == 1
         assert started[0].agent_name == "knight"  # type: ignore[attr-defined]
-        assert started[0].model == "claude-opus-4"  # type: ignore[attr-defined]
+        assert started[0].model == "claude-opus-4-8"  # type: ignore[attr-defined]
 
     async def test_completed_event_carries_cost_and_duration(self):
         bus, capture = _bus_with_capture(DispatchCompleted)
@@ -974,7 +974,7 @@ class TestOptionsPassthrough:
 
         env = _envelope()
         opts = DispatchOptions(
-            model="claude-opus-4",
+            model="claude-opus-4-8",
             max_turns=7,
             max_budget_usd=2.5,
             thinking_depth="ultrathink",
@@ -982,7 +982,7 @@ class TestOptionsPassthrough:
         await execute_with_retry(ObservingBackend(), env, opts, retry_delay=0.0)
 
         assert observed["options"] is opts
-        assert observed["options"].model == "claude-opus-4"
+        assert observed["options"].model == "claude-opus-4-8"
         assert observed["options"].thinking_depth == "ultrathink"
 
     async def test_envelope_reaches_backend_unchanged(self):
@@ -1088,7 +1088,7 @@ class TestModelOnRetry:
             async def health_check(self) -> bool:
                 return True
 
-        opts = DispatchOptions(model="claude-opus-4-7", max_budget_usd=1.0)
+        opts = DispatchOptions(model="claude-opus-4-8", max_budget_usd=1.0)
         result = await execute_with_retry(
             _ObservingBackend(), env, opts, max_retries=3, retry_delay=0.0
         )
@@ -1097,7 +1097,7 @@ class TestModelOnRetry:
         assert result.retries == 2
         assert len(observed_models) == 3
         # Same model on every attempt — runner does NOT mutate options.model.
-        assert observed_models == ["claude-opus-4-7"] * 3
+        assert observed_models == ["claude-opus-4-8"] * 3
 
     async def test_completed_model_equals_started_model(self):
         """`DispatchCompleted.model` equals `DispatchStarted.model` for one dispatch.

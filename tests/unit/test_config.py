@@ -83,13 +83,13 @@ class TestPipelineConfig:
     def test_custom_values(self):
         p = PipelineConfig(
             tier="pro",
-            model="claude-opus-4",
+            model="claude-opus-4-8",
             max_turns=20,
             max_budget_usd=50.0,
             persona="anta",
         )
         assert p.tier == "pro"
-        assert p.model == "claude-opus-4"
+        assert p.model == "claude-opus-4-8"
         assert p.max_turns == 20
         assert p.max_budget_usd == 50.0
         assert p.persona == "anta"
@@ -380,7 +380,7 @@ class TestAgentsDict:
 # Locks the ``[models]`` TOML schema delivered by BON-350:
 #
 #   * §D5 — three string fields (``reasoning``/``fast``/``balanced``)
-#     defaulting to ``claude-opus-4-7``/``claude-haiku-4-5``/``claude-sonnet-4-6``.
+#     defaulting to ``claude-opus-4-8``/``claude-haiku-4-5``/``claude-sonnet-4-6``.
 #   * §D5 — TOML ``[models]`` section loads onto ``BonfireSettings.models``;
 #     missing section falls back to defaults (backward-compatible).
 #   * §D5 — Arbitrary strings accepted (BYOK passthrough).
@@ -399,7 +399,7 @@ class TestModelsConfig:
         from bonfire.models.config import ModelsConfig
 
         m = ModelsConfig()
-        assert m.reasoning == "claude-opus-4-7"
+        assert m.reasoning == "claude-opus-4-8"
         assert m.fast == "claude-haiku-4-5"
         assert m.balanced == "claude-sonnet-4-6"
 
@@ -453,13 +453,13 @@ class TestModelsConfigTomlPartialOverride:
             ),
             (
                 '[models]\nfast = "Y"\n',
-                "claude-opus-4-7",
+                "claude-opus-4-8",
                 "Y",
                 "claude-sonnet-4-6",
             ),
             (
                 '[models]\nbalanced = "Z"\n',
-                "claude-opus-4-7",
+                "claude-opus-4-8",
                 "claude-haiku-4-5",
                 "Z",
             ),

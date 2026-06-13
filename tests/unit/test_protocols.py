@@ -535,8 +535,8 @@ class TestDispatchOptions:
         assert isinstance(opts.max_budget_usd, float)
 
     def test_override_model(self):
-        opts = DispatchOptions(model="claude-sonnet-4-20250514")
-        assert opts.model == "claude-sonnet-4-20250514"
+        opts = DispatchOptions(model="claude-sonnet-4-6")
+        assert opts.model == "claude-sonnet-4-6"
 
     def test_override_max_turns(self):
         opts = DispatchOptions(max_turns=3)

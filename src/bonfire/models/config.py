@@ -90,7 +90,7 @@ class ModelsConfig(BaseModel):
     configured backend.
     """
 
-    reasoning: str = "claude-opus-4-7"
+    reasoning: str = "claude-opus-4-8"
     fast: str = "claude-haiku-4-5"
     balanced: str = "claude-sonnet-4-6"
 

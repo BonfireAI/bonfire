@@ -56,6 +56,14 @@ include = [
     "src/bonfire/py.typed",
 ]
 
+# The source distribution otherwise packages the whole VCS tree, including the
+# internal build-audit archive under docs/audit/. Those are development-process
+# artifacts, not shippable documentation, so keep them out of the published sdist.
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "docs/audit",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

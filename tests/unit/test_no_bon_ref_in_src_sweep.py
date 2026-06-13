@@ -1,34 +1,13 @@
-"""RED sweep test — no stale ``BON-NNN`` refs in ``src/bonfire/`` (BON-353).
+"""Sweep test — no internal tracker refs (``BON-NNN``) in ``src/bonfire/``.
 
-Locks in audit items **B1, B2, B3** from the BON-353 doc-polish audit
-(``docs/audit/scout-reports/bon-353-audit-20260427T164458Z.md``).
+This is a public tree, so internal tracker IDs must never ship in source.
+The sweep walks every ``.py`` file under ``src/bonfire/`` and scans for the
+regex ``BON-\\d+``; any hit is an offender.
 
-Walks every ``.py`` file under ``src/bonfire/`` and scans for the regex
-``BON-\\d+``. Any hit that is NOT in the explicit allowlist below is an
-offender — the Warrior must scrub it (or, if it's a legitimate citation
-of canonical decision authority, extend the allowlist with rationale).
-
-The allowlist is keyed by ``(relative_path, line_number,
-expected_substring_prefix)``. The substring prefix is matched against
-the START of the offending line (after stripping). Mismatch on any
-field causes the test to fail — i.e. if a code edit shifts a citation
-to a new line number, the allowlist must be re-confirmed too. That's
-the durability we want: every BON-NNN ref in source costs an explicit
-allowlist entry.
-
-Expected RED-state failures at HEAD (Warrior must scrub these):
-
-  * ``src/bonfire/protocols.py:74``                — ``BON-338`` (audit B1)
-  * ``src/bonfire/dispatch/security_hooks.py:1``    — ``BON-338`` (audit B2)
-  * ``src/bonfire/dispatch/security_patterns.py:1`` — ``BON-338`` (audit B3)
-
-Allowlisted (legitimate sweep-guard / decision-authority citations):
-
-  * ``src/bonfire/cli/app.py:16``                  — ``BON-345`` sweep-guard
-  * ``src/bonfire/cli/commands/persona.py:14``     — ``BON-345`` sweep-guard
-  * ``src/bonfire/analysis/models.py`` (BON-347)   — Sage decision/Wave
-    citations carried over from the BON-347 port; canonical authority
-    pointers, not task-pointer rot.
+The allowlist is empty by policy — there is no sanctioned exception. A
+tracker ID introduced into ``src/bonfire/`` therefore fails the gate
+outright; the fix is always to rewrite the comment or docstring into
+neutral prose that keeps the engineering intent and drops the ID.
 
 Reads files on disk only — no subprocess.
 """
@@ -42,63 +21,20 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = _REPO_ROOT / "src" / "bonfire"
 
-# Regex matching the canonical ticket-ref shape (e.g. ``BON-338``).
-# Note: ``BON-W5.3``-style refs do NOT match (W is not a digit) — those
-# are intentionally out of scope for this sweep.
+# Regex matching the internal tracker-ref shape: the ``BON-`` prefix
+# followed by one or more digits. Suffixes that are not pure digits (a
+# letter after the dash) do not match and are out of scope for this sweep.
 _BON_REF = re.compile(r"BON-\d+")
 
 # ---------------------------------------------------------------------------
 # Allowlist
 # ---------------------------------------------------------------------------
-# Each entry = (relative_path_from_src_bonfire, line_number, expected_line_prefix).
-# ``expected_line_prefix`` is matched with ``.lstrip().startswith(...)`` so
-# whitespace at line start is normalised. This couples the allowlist tightly
-# to the actual source — a legitimate edit elsewhere in the file is fine, but
-# a change to the ref-bearing line itself forces a fresh review.
-_ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
-    {
-        # --- BON-345 sweep-guards retired in v0.1.0a1 ----------------
-        # Falcor became the shipped default persona; the literal was no
-        # longer banned, so the obfuscation hack was removed and these
-        # allowlist entries with it.
-        # --- BON-347 analysis port (canonical Sage / Wave citations) --
-        (
-            "analysis/models.py",
-            47,
-            '"""Frozen budget of Cartographer tunables (BON-226 §5)."""',
-        ),
-        (
-            "analysis/models.py",
-            67,
-            "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
-        ),
-        (
-            "analysis/models.py",
-            97,
-            '"``min_length=1`` so an external caller (BON-231 composition root, "',
-        ),
-        (
-            "analysis/models.py",
-            109,
-            "# ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────",
-        ),
-        (
-            "analysis/models.py",
-            209,
-            "# BON-303 Wave 3a.4 — discovered gaps for DiscoveredIntentSource.",
-        ),
-        (
-            "analysis/models.py",
-            217,
-            "# BON-294 Wave 2c.1 A10 — reject v1 cache blobs so Wave 2b cache",
-        ),
-        (
-            "analysis/models.py",
-            225,
-            '"""Gzip-compressed JSON — BON-231 Wave 2b cache seam.',
-        ),
-    }
-)
+# Empty by policy: no internal tracker ID is sanctioned in shipped source on
+# this public tree. An entry would be keyed by
+# ``(relative_path_from_src_bonfire, line_number, expected_line_prefix)`` —
+# but the set is intentionally empty, so every ``BON-NNN`` in source is an
+# offender with no exception path.
+_ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset()
 
 
 def _iter_python_files(root: Path) -> list[Path]:
@@ -127,11 +63,12 @@ def _is_allowlisted(rel_path: str, lineno: int, line: str) -> bool:
 
 
 def test_no_bon_ref_in_src_outside_allowlist() -> None:
-    """No ``BON-\\d+`` ref may live in ``src/bonfire/`` outside the allowlist.
+    """No ``BON-\\d+`` ref may live in ``src/bonfire/``.
 
     Failure message lists every offender as ``(path, line_no, line_text)``
-    so the Warrior can navigate directly. Future legitimate citations
-    require explicitly extending ``_ALLOWLIST`` above with rationale.
+    so a contributor can navigate directly. The fix is always to rewrite
+    the offending comment or docstring into neutral prose; the allowlist
+    stays empty.
     """
     offenders: list[tuple[str, int, str]] = []
     for path in _iter_python_files(_SRC_DIR):

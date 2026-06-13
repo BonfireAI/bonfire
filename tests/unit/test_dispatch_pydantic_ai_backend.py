@@ -96,7 +96,7 @@ class TestPydanticAIBackendImports:
         assert _P is not None
 
     def test_construct_with_model_kwarg(self):
-        backend = PydanticAIBackend(model="claude-sonnet-4")
+        backend = PydanticAIBackend(model="claude-sonnet-4-6")
         assert backend is not None
 
     def test_construct_with_no_args(self):

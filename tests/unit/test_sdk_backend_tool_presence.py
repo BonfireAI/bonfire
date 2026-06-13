@@ -80,7 +80,7 @@ async def _empty_query(*, prompt: str = "", options: Any = None):  # type: ignor
 
 
 def _envelope(agent: str = "warrior-agent") -> Envelope:
-    return Envelope(task="do work", agent_name=agent, model="claude-opus-4-7")
+    return Envelope(task="do work", agent_name=agent, model="claude-opus-4-8")
 
 
 # ===========================================================================
@@ -101,7 +101,7 @@ class TestBothKwargsSet:
         ):
             backend = ClaudeSDKBackend()
             options = DispatchOptions(
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
                 tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
                 role="warrior",
             )
@@ -127,7 +127,7 @@ class TestBothKwargsSet:
         ):
             backend = ClaudeSDKBackend()
             options = DispatchOptions(
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
                 tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
             )
             await backend.execute(_envelope(), options=options)
@@ -295,10 +295,10 @@ class TestExistingKwargsPreserved:
             patch("bonfire.dispatch.sdk_backend.query", _empty_query),
         ):
             backend = ClaudeSDKBackend()
-            options = DispatchOptions(model="claude-opus-4-7", tools=["Read"])
+            options = DispatchOptions(model="claude-opus-4-8", tools=["Read"])
             await backend.execute(_envelope(), options=options)
 
-        assert captured.get("model") == "claude-opus-4-7"
+        assert captured.get("model") == "claude-opus-4-8"
 
     async def test_max_turns_preserved(self) -> None:
         captured, FakeOptions = _make_capture()
@@ -443,7 +443,7 @@ class TestRoleNotConsumedBySdkBackend:
         ):
             backend = ClaudeSDKBackend()
             options = DispatchOptions(
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
                 tools=["Read"],
                 role="warrior",
             )

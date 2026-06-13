@@ -107,7 +107,7 @@ class TestPersonaSet:
         """persona set preserves other keys in bonfire.toml."""
         monkeypatch.chdir(tmp_path)
         toml_path = tmp_path / "bonfire.toml"
-        toml_path.write_text('[bonfire]\nmodel = "claude-opus-4"\npersona = "falcor"\n')
+        toml_path.write_text('[bonfire]\nmodel = "claude-opus-4-8"\npersona = "falcor"\n')
 
         result = cli_runner.invoke(app, ["persona", "set", "minimal"])
         assert result.exit_code == 0
@@ -115,7 +115,7 @@ class TestPersonaSet:
         with toml_path.open("rb") as f:
             data = tomllib.load(f)
         assert data["bonfire"]["persona"] == "minimal"
-        assert data["bonfire"]["model"] == "claude-opus-4"
+        assert data["bonfire"]["model"] == "claude-opus-4-8"
 
     def test_set_only_replaces_bonfire_section(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

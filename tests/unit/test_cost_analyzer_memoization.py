@@ -156,7 +156,7 @@ class TestCacheInvalidatesOnMtimeChange:
             agent_name="warrior",
             cost_usd=0.50,
             duration_seconds=60.0,
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
         )
         _write_records(ledger_path, [*sample_records, new_record])
 
@@ -313,7 +313,7 @@ class TestCacheInvalidatesOnAtomicReplacement:
             agent_name="sage",
             cost_usd=0.77,
             duration_seconds=42.0,
-            model="claude-opus-4-7",
+            model="claude-opus-4-8",
         )
         _write_records(replacement, [*sample_records, extra_record])
         os.replace(replacement, ledger_path)

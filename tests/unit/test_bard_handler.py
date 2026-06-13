@@ -1151,7 +1151,7 @@ class TestConfigThreading:
         github_client,
     ) -> None:
         """slug_max_len + suffix_chars are module-scope constants, not config knobs."""
-        cfg = PipelineConfig(model="claude-opus-4-7")
+        cfg = PipelineConfig(model="claude-opus-4-8")
         handler = BardHandler(
             git_workflow=git_workflow,
             github_client=github_client,

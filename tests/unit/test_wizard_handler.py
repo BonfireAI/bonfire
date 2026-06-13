@@ -246,7 +246,7 @@ class _RecordingBus:
 
 def _make_config(
     *,
-    model: str = "claude-opus-4-7",
+    model: str = "claude-opus-4-8",
     max_turns: int = 10,
     max_budget_usd: float = 5.0,
     dispatch_timeout_seconds: float | None = None,
@@ -497,14 +497,14 @@ class TestDispatchOptionsPlumbing:
     @pytest.mark.asyncio
     async def test_model_uses_config_when_no_override(self) -> None:
         """model = config.model when stage.model_override is None."""
-        handler, backend, _ = _make_handler(config=_make_config(model="claude-opus-4-7"))
+        handler, backend, _ = _make_handler(config=_make_config(model="claude-opus-4-8"))
         await handler.handle(_make_stage(model_override=None), _make_envelope(), {})
-        assert backend.captured_options.model == "claude-opus-4-7"
+        assert backend.captured_options.model == "claude-opus-4-8"
 
     @pytest.mark.asyncio
     async def test_model_uses_override_when_set(self) -> None:
         """stage.model_override wins over config.model."""
-        handler, backend, _ = _make_handler(config=_make_config(model="claude-opus-4-7"))
+        handler, backend, _ = _make_handler(config=_make_config(model="claude-opus-4-8"))
         await handler.handle(
             _make_stage(model_override="claude-sonnet-4-6"),
             _make_envelope(),
@@ -694,10 +694,10 @@ class TestFailSafeBodyTemplate:
 
     @pytest.mark.asyncio
     async def test_shows_model_and_cost(self) -> None:
-        handler, _, gh = _make_handler(canned="", config=_make_config(model="claude-opus-4-7"))
+        handler, _, gh = _make_handler(canned="", config=_make_config(model="claude-opus-4-8"))
         await handler.handle(_make_stage(), _make_envelope(), {})
         body = gh.actions[-1]["body"]
-        assert "claude-opus-4-7" in body
+        assert "claude-opus-4-8" in body
         assert "$0." in body
 
     @pytest.mark.asyncio

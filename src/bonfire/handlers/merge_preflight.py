@@ -7,26 +7,21 @@ Runs full-suite pytest against a simulated merged tip BEFORE
 ``gh pr merge``. Detects cross-wave interactions between sibling PRs
 (the enum-widening incident from S007).
 
-Per Sage memo bon-519-sage-20260428T033101Z.md:
-    - §A Q1 Path β (lines 16-39): module at ``bonfire.handlers.merge_preflight``
-      with module-level ``ROLE: AgentRole = AgentRole.VERIFIER``. NOT in
-      ``HANDLER_ROLE_MAP`` (deterministic handler bypasses gamified-display map).
-    - §A Q4 (lines 79-122): 6-verdict deterministic classifier; first-match-wins
-      ordering (collection-error -> green -> pre-existing-debt -> cross-wave
-      -> pure-warrior-bug; merge-conflict produced by handler shell, not the
-      pure classifier).
-    - §A Q5 (lines 124-142): sibling-batch detection via
+Design contract:
+    - Module at ``bonfire.handlers.merge_preflight`` with module-level
+      ``ROLE: AgentRole = AgentRole.VERIFIER``. NOT in ``HANDLER_ROLE_MAP``
+      (deterministic handler bypasses the gamified-display map).
+    - Six-verdict deterministic classifier; first-match-wins ordering
+      (collection-error -> green -> pre-existing-debt -> cross-wave
+      -> pure-warrior-bug; merge-conflict produced by the handler shell, not
+      the pure classifier).
+    - Sibling-batch detection via
       ``client.list_open_prs(base, exclude=current_pr_number)``.
-    - §A Q6 (lines 144-156): ratified ALLOW-WITH-ANNOTATION for pre-existing
-      debt; classifier returns the verdict, handler downstream marks
-      ``META_PREFLIGHT_TEST_DEBT_NOTED``.
-    - §D1 (lines 196-225): module shape, public ``__all__``.
-    - §D2 (lines 229-294): handler signature + ``handle()`` flow pseudocode.
-    - §D4 (lines 383-470): classifier function signatures + edge case table.
-    - §D5 (lines 473-522): gh client extension + sibling detection.
-    - §D-CL.4 (lines 962-989): Warrior B fills the algorithmic body
-      (``classify_pytest_run``, ``parse_pytest_junit_xml``,
-      ``parse_pytest_stdout_fallback``, ``detect_sibling_prs``).
+    - Allow-with-annotation for pre-existing debt: the classifier returns the
+      verdict, the handler downstream marks ``META_PREFLIGHT_TEST_DEBT_NOTED``.
+    - The algorithmic body lives in ``classify_pytest_run``,
+      ``parse_pytest_junit_xml``, ``parse_pytest_stdout_fallback``, and
+      ``detect_sibling_prs``.
 
 The module exposes ``ROLE: AgentRole = AgentRole.VERIFIER`` for generic-
 vocabulary discipline. Display translation (verifier -> "Cleric") happens
@@ -631,24 +626,23 @@ class MergePreflightHandler:
     ) -> PreflightClassification:
         """Live body: apply diff, run pytest, classify.
 
-        Per Sage memo bon-519-sage-20260428T033101Z.md §D2 lines 273-291.
         Supersedes the prior v0.1 stub that returned GREEN unconditionally;
         this method now drives the full subprocess pipeline (current PR
         diff -> sibling diffs -> pytest -> JUnit parse -> baseline cache
         -> deterministic classifier).
 
-        Step ordering mirrors the §D2 pseudocode exactly:
+        Step ordering:
             5. Apply current PR diff in scratch (``git apply --3way``).
             6. Apply sibling-batch diffs in ascending PR-number order
-               (Sage §D-CL.7 #4: later PR's diff takes precedence on
-               conflict via ``--3way``).
-            7. Run pytest with ``--junit-xml=<known-path>`` (§D-CL.7 #3).
+               (a later PR's diff takes precedence on conflict via
+               ``--3way``).
+            7. Run pytest with ``--junit-xml=<known-path>``.
             8. Parse failures from JUnit XML; fall back to stdout regex
                if XML is empty AND returncode != 0.
             9. Compute / cache baseline failures on ``origin/<base>``.
-           10. Call :py:func:`classify_pytest_run` (Warrior B's pure fn).
+           10. Call :py:func:`classify_pytest_run` (the pure classifier).
 
-        Envelope-size discipline (§D-CL.7 #6):
+        Envelope-size discipline:
             - ``pytest_stdout_tail`` is truncated to 2KB.
             - ``failing_tests`` is truncated to 100 entries; on overflow
               a sentinel ``FailingTest`` with ``file_path='<overflow>'``

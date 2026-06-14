@@ -21,8 +21,7 @@ map. Today: ``MergePreflightHandler`` (verifier). The synthesizer-
 correction stage (``SageCorrectionBounceHandler``) IS in the map — it
 binds the ``sage_correction_bounce`` stage stem to
 ``AgentRole.SYNTHESIZER`` so the display layer can resolve its gamified
-name through the same path as the other handlers. See Sage memo
-``bon-519-sage-20260428T033101Z.md`` §A Q1 Path beta + §D10 line 745.
+name through the same path as the other handlers.
 """
 
 from __future__ import annotations

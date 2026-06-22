@@ -1,73 +1,164 @@
-# Bonfire
+<div align="center">
 
-**An installable Python pipeline runtime that enforces software-build discipline at the dispatch boundary.** Define agents. Wire stages. Ship quality.
+# 🔥 Bonfire
 
-[![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
-[![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg)](https://pypi.org/project/bonfire-ai/)
-[![License](https://img.shields.io/pypi/l/bonfire-ai.svg)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
+**Your Claude Code, opinionated.**
 
-> ### Alpha — `v0.1.0a2`
->
-> This is the first functional release of `bonfire-ai`. The pipeline
-> engine, the role-bound cadre, the quality gates, the persona system,
-> and the `bonfire scan` onboarding flow are wired and exercised by
-> the test suite. The CLI verb that drives the engine end-to-end
-> (`bonfire run`), the bundled prompt-template directory, and the
-> knowledge-graph ("the Vault") backend are deferred to later 0.1.x
-> releases. The frame is shipped; some operations are deliberately
-> not.
->
-> If you are an early adopter, run it against a throwaway repo, file
-> issues at [github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues),
-> and tell us where it bites. The vocabulary, the protocols, and the
-> config schema are stable for 0.1.x.
+*Pip-install a runtime and a Claude Code skill. Run `/bonfire scan` in chat.
+Name your assistant — your cadre wires itself around the name.*
 
----
+[![PyPI](https://img.shields.io/pypi/v/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://pypi.org/project/bonfire-ai/)
+[![Python](https://img.shields.io/pypi/pyversions/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://pypi.org/project/bonfire-ai/)
+[![License](https://img.shields.io/pypi/l/bonfire-ai.svg?style=for-the-badge&labelColor=000)](https://github.com/BonfireAI/bonfire/blob/main/LICENSE)
+
+**[Quickstart](#install-60-seconds)** · **[The Cadre](#the-cadre)** · **[Docs](docs/architecture.md)** · **[Issues](https://github.com/BonfireAI/bonfire/issues)**
+
+</div>
+
+## Install (60 seconds)
+
+```bash
+pip install bonfire-ai          # PyPI distribution; Python 3.12+
+bonfire install-skill           # registers ~/.claude/skills/bonfire/SKILL.md
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then in Claude Code, in any project:
+
+```
+> /bonfire scan
+> what do you want to call me?
+you: Cinder
+
+> what do you want to ship next?
+you: a tested refactor of the checkout endpoint
+```
+
+That naming gesture is the inception of your Lexicon — every decision after this becomes part of how Cinder understands you. See [Your First Scan](#your-first-scan) for the full conversation.
 
 ## What Bonfire Is
 
-Bonfire is a layer of good software-developing practices that wraps
-your already-AI-assisted workflow. You `pip install` it; your agents
-suddenly know they have nine roles talking to each other for quality.
+You don't start with Bonfire and stay the same. The first time you run
+`/bonfire scan`, it asks what you want to call it. You name it. From
+then on, every decision you make becomes part of how it understands
+you — your trade-offs captured in your `bonfire.toml`, your nine-role
+cadre under whatever names you give them, your priorities recorded in
+your persona. Like reading *The Neverending Story*: the more you
+engage, the more the narrative becomes yours.
 
-Each agent has a static axiom of rules and an injected handoff from
-the prior agent. That isolation is the whole point: every role gets
-the best of the LLM by being asked one focused thing at a time, with
-exactly the context it needs and nothing else.
+For flow coders — people who think in systems, who understand craft —
+the point is to stay in the deep state. Nine role-bound voices (your
+researcher, your tester, your implementer, your reviewer, and five
+others) dispatch as Claude Code subagents while you talk. Conversation
+is the interface. Configuration is what the conversation produces.
+No external surfaces, no context switching, no friction between
+thinking and shipping.
 
 The discipline is structural, not advisory. The role that writes
 failing tests cannot edit implementation. The role that writes
-implementation cannot edit tests. The reviewer is read-only. A typed
-envelope passes between stages; a quality gate decides whether each
-handoff moves forward, retries once, or stops the pipeline. Source
+implementation cannot edit tests. The reviewer is read-only. Source
 code is the deliverable.
+
+## What's in v1.0.0
+
+`pip install bonfire-ai` drops a Python runtime plus a Claude Code
+skill. A one-time `bonfire install-skill` registers the skill so your
+Claude Code session learns `/bonfire scan` and the rest of the
+conversational surface. Bring your own provider key
+(`ANTHROPIC_API_KEY`). File issues at
+[github.com/BonfireAI/bonfire/issues](https://github.com/BonfireAI/bonfire/issues).
 
 ## Quick Start
 
+Three things to do before your first scan:
+
 ```bash
+# 1. Install the package. The PyPI distribution is `bonfire-ai`;
+#    the installed console script is `bonfire`. Python 3.12+.
 pip install bonfire-ai
+
+# 2. Set your provider key. Bonfire dispatches to Claude via the
+#    Anthropic SDK — without ANTHROPIC_API_KEY the first scan fails
+#    with a cryptic SDK error. Set it in your shell before you scan.
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. Install the Claude Code skill. This copies the bundled
+#    SKILL.md to ~/.claude/skills/bonfire/ so Claude Code learns
+#    `/bonfire scan` and the rest of the in-chat surface. Re-running
+#    is safe; it refuses to overwrite a divergent local copy
+#    without `--force`.
+bonfire install-skill
 ```
 
-The PyPI package is `bonfire-ai`; the installed console script is
-`bonfire`. Python 3.12+ is required.
+Now open Claude Code in your project and ask it:
+
+```
+> /bonfire scan
+```
+
+Bonfire reads your repo, asks you a handful of questions, and writes
+the config. See [Your First Scan](#your-first-scan) below for the
+shape of the conversation.
+
+### Shell-side companion verbs
+
+A small set of subcommands also work directly from the shell — useful
+in CI, scripts, or when you want to peek at state without opening a
+Claude Code session.
 
 ```bash
-# Initialize a project (creates bonfire.toml and .bonfire/)
+# Scaffold a project from the shell (Claude-Code-free path). Creates
+# four artefacts under the target directory:
+#   - bonfire.toml (project config; minimal stub `[bonfire]`)
+#   - .bonfire/ (per-project state directory)
+#   - agents/ (role-local prompt + identity-block overrides; see
+#     Extension Points)
+#   - .gitignore entry: `.bonfire/tools.local.toml` (appended if
+#     missing; idempotent — re-running does not duplicate the line)
 bonfire init .
 
-# Launch the browser-based onboarding scan
-bonfire scan
-
-# Inspect cumulative cost across all sessions
+# Inspect cumulative cost and recent sessions.
 bonfire cost
 
-# List installed personas
+# List installed personas.
 bonfire persona list
+
+# Switch the active persona for this project (writes to bonfire.toml).
+bonfire persona set default
 ```
 
-Available subcommands in `v0.1.0a2`: `init`, `scan`, `status`, `resume`,
-`handoff`, `persona`, `cost`. Run `bonfire --help` for the full surface
-or `bonfire <command> --help` for any single command.
+Available subcommands in v1.0.0: `init`, `scan`, `install-skill`,
+`status`, `resume`, `handoff`, `persona`, `cost`. Run `bonfire --help`
+for the full surface or `bonfire <command> --help` for any single
+command.
+
+## Your First Scan
+
+From inside Claude Code:
+
+```
+> /bonfire scan
+```
+
+Bonfire reads your repo first — language, frameworks, what's already
+in `.bonfire/` if anything — then starts asking.
+
+```
+> what do you want to call me?
+you: Cinder
+
+> what do you want to ship next?
+you: a tested refactor of the checkout endpoint
+
+> what should your researcher focus on first?
+you: the data path, then the error handling
+
+> anything off-limits? credentials, secrets, prod databases?
+you: yes — never touch the live db
+```
+
+When the conversation completes, `bonfire.toml` and `.bonfire/` are
+written. Your cadre is configured.
 
 ## Architecture Overview
 
@@ -77,12 +168,12 @@ implementer, verifier, publisher, reviewer, closer, synthesizer,
 analyst). Between stages, `QualityGate` instances inspect the
 envelope and decide whether to proceed, retry once, or stop.
 
-The TDD contract is enforced at the role boundary: the **tester**
-writes failing tests that define the contract (RED), the
-**implementer** writes code to pass them (GREEN), and the
-**verifier** runs an independent quality check before the
-**publisher** opens a PR. The **reviewer** can bounce work back
-into the loop until it passes or the budget is exhausted. The
+The TDD contract is enforced at the role boundary: your **tester**
+writes failing tests that define the contract (RED), your
+**implementer** writes code to pass them (GREEN), and your
+**verifier** runs an independent quality check before your
+**publisher** opens a PR. Your **reviewer** can bounce work back
+into the loop until it passes or the budget is exhausted. Your
 **closer** seals the work — merges the PR, posts the completion,
 closes the ticket — only after every gate has cleared.
 
@@ -101,7 +192,9 @@ LLM call at all; one combines synthesis with a bounded correction
 step; one is opt-in pre-pipeline architectural analysis. The cadre is
 fixed in source as a `StrEnum` and rendered through three name
 layers — the generic identifier, the professional display name, and
-the gamified display name.
+the gamified display name. The persona you pick chooses how each role
+is named in your CLI output; if you author a custom persona, every
+role can wear whatever name you give it.
 
 ### Naming Glossary
 
@@ -133,75 +226,18 @@ persona-emitted role names in CLI output.
 > roles above. The persona is what speaks for them at the CLI surface.
 > See [Personality](#personality-optional) below.
 
-### Cadre as Claude Code Subagents
-
-Bonfire ships the cadre as Claude Code subagent definitions so dispatches
-surface with named role discipline instead of the generic
-`subagent_type: "general-purpose"` label. Two install rails ship from the
-same `bonfire-public` repo:
-
-**Plugin (canonical · colon-namespaced `bonfire:<role>`).** Install via
-Claude Code:
-
-```bash
-/plugin install bonfire@<marketplace>
-```
-
-After install, dispatches surface as `bonfire:scout-innovative`,
-`bonfire:knight`, `bonfire:warrior`, etc. — the cadre's identity at the
-most visible API boundary. The v1 plugin ships six roles:
-`scout-innovative`, `scout-conservative`, `knight`, `warrior`, `sage`,
-`wizard`.
-
-**Raw-files CLI (fallback · flat-named `bonfire-<role>`).** For
-environments that can't enable Claude Code plugins (Cursor, Codex, raw
-SDK) — and as a user-customization "fork" lane (raw-file user-scope
-shadows the plugin copy):
-
-```bash
-# Drop the cadre into ~/.claude/agents/bonfire/
-bonfire install-agents --scope user
-
-# Or pin into a project repo (./.claude/agents/bonfire/)
-bonfire install-agents --scope project
-
-# Inspect what's installed
-bonfire list-agents
-
-# Paired removal — only touches files the install recorded
-bonfire uninstall-agents
-```
-
-The CLI rail also installs the **`bonfire-powered`** catch-all — a
-Bonfire-flavored general-purpose agent that sits next to `general-purpose`
-in the picker for users who want the cadre's discipline without picking a
-specific role. (The catch-all does NOT ship via the plugin; it's
-CLI-rail-only by design.)
-
-**Warrior Bash note.** The Warrior subagent ships with `Bash` in its
-`tools:` frontmatter, but background-dispatched subagents auto-deny
-Bash calls outside cached permission rules. See
-`.claude/settings.local.json.example` for the recommended allow-list
-pattern; copy to your `.claude/settings.local.json` (project scope) or
-merge into `~/.claude/settings.json` (user scope), tightened to whatever
-subset you actually run.
-
-**Versioning.** Three orthogonal pins: `bonfire-ai.__version__`
-(library, advances on releases), plugin `version` in `plugin.json`
-(advances on prompt-text changes), and `CADRE_CONTRACT_VERSION` in
-`bonfire.cadre` (advances ONLY on dispatch-boundary breaking changes;
-stamped into each subagent's `cadre_contract` frontmatter field for
-drift detection).
-
 ## The Vault
 
 Alongside the cadre, the **Vault** is the named knowledge store of
 Bonfire's world — capitalized, personified in display vocabulary,
 narrated by the persona at lifecycle moments (*The Vault remembers*,
 *The Vault gives back*). The Vault is not an agent; it is never
-dispatched and has no role. The full knowledge-graph backend lands
-in a later 0.1.x release; today the protocol is published and the
-default backend is in progress.
+dispatched and has no role. Today the `VaultBackend` Protocol is
+published and an **in-memory default backend** ships (substring
+matching, no embeddings, no external dependencies — suitable for
+tests and small projects). A LanceDB-backed implementation is
+available behind the `bonfire-ai[knowledge]` extra; the persistent
+knowledge-graph storage layer lands in a later 0.1.x release.
 
 ## Config Reference
 
@@ -222,6 +258,7 @@ model = "claude-sonnet-4-6"         # default model when no role match
 max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
 persona = "falcor"                  # CLI output persona
+trust_project_settings = false      # opt-in: ingest CLAUDE.md / .claude/ (see Security)
 
 [models]                            # bring your own provider key — strings live here
 reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
@@ -243,8 +280,23 @@ the agent backend. To use a different provider, swap the strings to
 that provider's model identifiers and plug in a matching
 `AgentBackend` (see Extension Points below).
 
-See [`docs/adr/ADR-005-open-core.md`](docs/adr/ADR-005-open-core.md) for the
-open-core commercial model and what the `tier` key means.
+### Trusting Project Settings (security)
+
+Bonfire dispatches agents with the Claude Agent SDK, which can ingest
+the project's `CLAUDE.md` and `.claude/settings.json` into the agent's
+system prompt and hook table. Bonfire defaults to **deny**: a foreign
+repo's project settings are NOT loaded unless one of these holds:
+
+- `bonfire.toml` contains `[bonfire] trust_project_settings = true`
+  (literal boolean — strings and ints are ignored).
+- The environment variable `BONFIRE_TRUST_PROJECT_SETTINGS=1` is set
+  (operator escape hatch, strict equality on the value `"1"`).
+- The dispatch `cwd` is empty / `None` (in-tree dogfood path).
+
+Why this matters: a malicious clone could otherwise plant instructions
+in its `CLAUDE.md` or wire hostile hooks in `.claude/settings.json`
+that would silently land in any agent you dispatch from inside that
+repo. Opt-in is required.
 
 ## Per-Role Model Routing
 
@@ -281,10 +333,10 @@ Bonfire ships persona-driven CLI output. The persona affects
 quality standards. The cadre is what runs; the persona is what
 speaks.
 
-The default persona for `v0.1.0a2` is **Falcor** — gentle,
-encouraging, warm. The friend who tells you not to let it
-end.[^falcor] Falcor narrates pipeline events, greets you on
-`bonfire scan`, and names lifecycle moments of the Vault.
+The default persona for v1.0.0 is **Falcor** — gentle, encouraging,
+warm. The friend who tells you not to let it end.[^falcor] Falcor
+narrates pipeline events, greets you on `/bonfire scan`, and names
+lifecycle moments of the Vault.
 
 Two other personas ship for users who want neutral output:
 `default` (professional) and `minimal` (terse, CI-friendly).
@@ -295,10 +347,12 @@ bonfire persona list
 
 # Switch the default for this project (writes to bonfire.toml)
 bonfire persona set default
-
-# Override per command without changing config
-bonfire scan --persona minimal
 ```
+
+The persona is configured per project via `bonfire persona set <name>`;
+there is no per-command override flag in v1.0.0. A per-command
+override lands when the narration/output layer grows persona awareness
+in a later 0.1.x release.
 
 Custom personas live in `~/.bonfire/personas/`. The persona slot is
 user-extensible: name your own assistant, write a phrase bank, drop
@@ -381,50 +435,67 @@ class StageHandler(Protocol):
     ) -> Envelope: ...
 ```
 
-The full Vault knowledge-graph implementation lands in a later
-0.1.x release. The protocol is stable today; the default backend
-ships once the schema is locked.
+The full persistent Vault knowledge-graph implementation lands in a
+later 0.1.x release. The protocol is stable today; the in-memory
+default backend ships today and a LanceDB-backed implementation is
+available behind the `bonfire-ai[knowledge]` extra.
 
 ## What's Not There Yet
 
-Honest list, because alpha means alpha:
+Honest list:
 
 - **There is no `bonfire run` command.** The library works —
   `from bonfire.engine import PipelineEngine` and `await engine.run(plan)`
   drives a real pipeline against a real backend — but the CLI verb
-  that wires the engine end-to-end is deferred to `v0.1.1`. The
-  shipped subcommands (`init`, `scan`, `status`, `resume`,
-  `handoff`, `persona`, `cost`) cover onboarding, persona, and cost;
-  `status` / `resume` / `handoff` print one-line stubs for now.
+  that wires the engine end-to-end is deferred to a 0.1.x release.
+  The shipped subcommands (`init`, `scan`, `install-skill`,
+  `status`, `resume`, `handoff`, `persona`, `cost`) cover onboarding,
+  skill install, persona, and cost; `status` / `resume` / `handoff`
+  print one-line stubs for now.
+- **`bonfire status`, `bonfire resume`, and `bonfire handoff` are
+  one-line stubs in v1.0.0.** The full implementations land in a
+  later 0.1.x release. Use them as placeholders only — they print a
+  marker and exit.
+- **Legacy onboarding path.** `bonfire scan` from a shell still
+  launches the alpha-era Front Door (a local browser auto-opens by
+  default; pass `--no-browser` for headless). That path is the
+  deprecated alpha onboarding surface and is preserved for users who
+  have not yet installed the Claude Code skill. The opinionated
+  v1.0.0 front door is `/bonfire scan` from inside Claude Code; see
+  [`docs/scan-front-door-protocol.md`](docs/scan-front-door-protocol.md)
+  for the legacy protocol if you need it.
 - **The bundled prompt-template directory ships a `.gitkeep` and
   nothing else.** The cadre's prompt-layer identity is
   contributor-supplied today. Default identity blocks for the
   LLM-dispatching roles (Scout, Knight, Warrior, Wizard) come in a
   later 0.1.x release.
-- **The Vault default backend is not yet shipped.** The
-  `VaultBackend` Protocol is stable; the knowledge-graph storage and
-  query implementation land once the schema is locked. It is the stable
-  interface future memory tiers will implement, so today's
-  in-memory/LanceDB backends are swappable without touching callers.
+- **The persistent Vault knowledge-graph is not yet shipped.** The
+  `VaultBackend` Protocol is stable and an in-memory default backend
+  ships today (substring matching, no embeddings); the
+  knowledge-graph storage and query implementation lands once the
+  schema is locked.
 - **No downstream surface imports the package today.** Wrappers and
   vertical surfaces are designed against the engine but not yet
   wired to it. The release-gate Box validates the artifact contract,
   not the orchestration capability.
 
-`v0.1.0a2` reserves the name on PyPI and ships the frame. Later
-0.1.x releases ship the verb, the templates, and the Vault. The
-under-claim is the feature.
+Later 0.1.x releases ship the verb, the bundled prompt templates, and
+the persistent Vault knowledge-graph. The under-claim is the feature.
 
 ## Roadmap
 
 What's coming next, in rough order:
 
 - **`bonfire run`** — the CLI verb that drives the engine end-to-end.
-  Deferred to `v0.1.1`.
+- **In-chat parity for every CLI verb.** v1.0.0 ships `/bonfire scan`
+  as the primary conversational surface; the other verbs gain
+  in-chat skill mappings in later 0.1.x releases.
 - **Bundled prompt-template identity blocks** for the four
   LLM-dispatching cadre roles.
-- **Default Vault backend** — the knowledge-graph implementation
-  behind the `VaultBackend` Protocol.
+- **Persistent Vault knowledge-graph** — the durable storage and
+  query implementation behind the `VaultBackend` Protocol (today's
+  default is in-memory; LanceDB is available behind the
+  `bonfire-ai[knowledge]` extra).
 - **Multi-forge support** via the Instruction Set Markup (ISM) seam —
   declarative third-party tool integrations replacing today's
   hard-coded `gh`-only forge calls.

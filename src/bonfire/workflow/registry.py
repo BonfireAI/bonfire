@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bonfire.models.plan import WorkflowSpec
+    from bonfire.models.plan import WorkflowPlan
 
 
 class WorkflowRegistry:
@@ -25,9 +25,9 @@ class WorkflowRegistry:
     """
 
     def __init__(self) -> None:
-        self._factories: dict[str, Callable[..., WorkflowSpec]] = {}
+        self._factories: dict[str, Callable[..., WorkflowPlan]] = {}
 
-    def register(self, name: str, factory: Callable[..., WorkflowSpec]) -> None:
+    def register(self, name: str, factory: Callable[..., WorkflowPlan]) -> None:
         """Register a workflow factory under *name*.
 
         Raises:
@@ -40,7 +40,7 @@ class WorkflowRegistry:
             )
         self._factories[name] = factory
 
-    def get(self, name: str) -> Callable[..., WorkflowSpec]:
+    def get(self, name: str) -> Callable[..., WorkflowPlan]:
         """Retrieve the factory registered under *name*.
 
         Raises:

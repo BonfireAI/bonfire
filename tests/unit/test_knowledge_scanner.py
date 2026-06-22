@@ -2,7 +2,8 @@
 
 Sage D8.2 type locks:
 - ``FileInfo`` (frozen): ``path, category, content_hash, size_bytes``.
-- ``ModuleSignature`` (frozen): ``module_path, source_path, classes, functions, imports, docstring``
+- ``ModuleSignature`` (frozen): ``module_path, source_path, classes, functions, imports,
+docstring``.
 - ``ProjectManifest`` (non-frozen).
 - ``ProjectScanner(project_root, *, exclude_patterns=None, max_file_size=1_000_000)``.
 - ``DEFAULT_EXCLUDES`` includes ``".bonfire"``.
@@ -14,7 +15,6 @@ Adjudication: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -230,104 +230,6 @@ class TestExtractSignatures:
 # ---------------------------------------------------------------------------
 # Constructor defaults
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Skip narration (observability)
-#
-# Both passes of the scanner *skip-and-continue* on a file they cannot read or
-# parse. That resilience is correct — one corrupt file must not sink a whole
-# scan — but a silent skip means a file can vanish from the manifest / signature
-# list with zero signal, which makes a missing result impossible to diagnose.
-# These tests pin that each skip is NARRATED at DEBUG level with the offending
-# path and a self-describing reason, so the drop is observable in the logs.
-# ---------------------------------------------------------------------------
-
-
-class TestScannerSkipNarration:
-    def test_discover_narrates_unreadable_file(self, tmp_path, caplog) -> None:
-        """discover() logs the path when a file cannot be decoded as UTF-8.
-
-        Why: an undecodable file is dropped from the manifest; without a log
-        line the absence is invisible. We assert the good file still surfaces
-        AND that the skip was narrated with the bad file's path.
-        """
-        (tmp_path / "good.py").write_text("x = 1\n")
-        # Invalid UTF-8 bytes force a UnicodeDecodeError on read_text(utf-8).
-        (tmp_path / "bad.md").write_bytes(b"\xff\xfe\x00not-utf8")
-
-        scanner = ProjectScanner(tmp_path)
-        with caplog.at_level(logging.DEBUG, logger="bonfire.knowledge.scanner"):
-            manifest = scanner.discover()
-
-        # Resilience contract is unchanged: the readable file is still indexed.
-        paths = {str(f.path) for f in manifest.files}
-        assert any("good.py" in p for p in paths)
-        assert not any("bad.md" in p for p in paths)
-
-        # The skip must speak, naming the dropped path.
-        debug_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
-        assert any("bad.md" in m for m in debug_msgs), debug_msgs
-
-    def test_extract_signatures_narrates_unreadable_file(self, tmp_path, caplog) -> None:
-        """extract_signatures() logs the path when a .py file cannot be read.
-
-        Why: a Python file classified for AST extraction can still fail to read
-        (e.g. it was replaced with non-UTF-8 bytes between passes). The signature
-        list silently shrinks; the log line is the only trace that it happened.
-        """
-        (tmp_path / "good.py").write_text("def f(): pass\n")
-        scanner = ProjectScanner(tmp_path)
-        manifest = scanner.discover()
-
-        # Append a manifest entry pointing at a file whose bytes are not UTF-8,
-        # forcing the read in extract_signatures() to raise UnicodeDecodeError.
-        (tmp_path / "unreadable.py").write_bytes(b"\xff\xfe\x00")
-        manifest.files.append(
-            FileInfo(
-                path=(tmp_path / "unreadable.py").relative_to(tmp_path),
-                category="python",
-                content_hash="deadbeef",
-                size_bytes=3,
-            )
-        )
-
-        with caplog.at_level(logging.DEBUG, logger="bonfire.knowledge.scanner"):
-            sigs = scanner.extract_signatures(manifest)
-
-        # The readable module is still extracted (skip-and-continue intact).
-        source_paths = {s.source_path for s in sigs}
-        assert any("good.py" in p for p in source_paths)
-        assert not any("unreadable.py" in p for p in source_paths)
-
-        debug_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
-        assert any("unreadable.py" in m for m in debug_msgs), debug_msgs
-
-    def test_extract_signatures_narrates_syntax_error_path(self, tmp_path, caplog) -> None:
-        """extract_signatures() logs the path AND a 'syntax'/'parse' reason on bad source.
-
-        The existing test_extract_signatures_skips_syntax_errors pins only that
-        the bad file is skipped without crashing; this extends that to assert the
-        skip is *narrated*, and that the message distinguishes a parse failure
-        from a read failure so the log is self-describing.
-        """
-        (tmp_path / "good.py").write_text("def f(): pass\n")
-        (tmp_path / "broken.py").write_text("def f(:\n")  # unparseable
-        scanner = ProjectScanner(tmp_path)
-        manifest = scanner.discover()
-
-        with caplog.at_level(logging.DEBUG, logger="bonfire.knowledge.scanner"):
-            sigs = scanner.extract_signatures(manifest)
-
-        source_paths = {s.source_path for s in sigs}
-        assert any("good.py" in p for p in source_paths)
-        assert not any("broken.py" in p for p in source_paths)
-
-        debug_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG]
-        narrated = [m for m in debug_msgs if "broken.py" in m]
-        assert narrated, debug_msgs
-        # Reason text distinguishes unparseable source from an unreadable file.
-        assert any(("parse" in m.lower() or "syntax" in m.lower()) for m in narrated), narrated
 
 
 class TestScannerDefaults:

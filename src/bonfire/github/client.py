@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import shutil
 import subprocess
 from typing import TYPE_CHECKING, Literal
 
@@ -39,8 +38,8 @@ class PRSummary(BaseModel, frozen=True, extra="forbid"):
     """Lightweight open-PR summary used by the merge-preflight stage.
 
     Returned by :py:meth:`GitHubClient.list_open_prs`. Frozen so the
-    sibling-batch detector can store instances inside ``frozenset`` keys
-    without worry.
+    sibling-batch detector can store instances inside ``frozenset``
+    keys without worry.
 
     Fields map to ``gh pr list --json number,headRefName,title,files``:
         ``headRefName -> head_branch`` and ``files[].path -> file_paths``.
@@ -79,14 +78,9 @@ def detect_github_repo(repo_path: str | Path = ".") -> str:
 
     Returns an empty string if detection fails (no remote, not GitHub, etc.).
     """
-    git_exe = shutil.which("git")
-    if git_exe is None:
-        # No git executable on PATH — detection failure per the docstring
-        # contract (and a fully-resolved path keeps subprocess off PATH).
-        return ""
     try:
-        result = subprocess.run(  # noqa: S603 — which-resolved git, fixed argv (registered)
-            [git_exe, "remote", "get-url", "origin"],
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],  # noqa: S607
             capture_output=True,
             text=True,
             cwd=str(repo_path),

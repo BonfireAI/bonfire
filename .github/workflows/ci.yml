@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v0.1]
   pull_request:
-    branches: [main]
+    branches: [main, v0.1]
 
 jobs:
   test:
@@ -30,6 +30,9 @@ jobs:
         run: |
           ruff check src/ tests/
           ruff format --check src/ tests/
+
+      - name: Protocol-doc citation drift check
+        run: python scripts/check_protocol_doc_citations.py
 
       - name: Test
         run: pytest tests/ -x --tb=short

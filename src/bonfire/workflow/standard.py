@@ -3,13 +3,13 @@
 
 """Standard workflow factories — the bread and butter of Bonfire pipelines.
 
-These factories produce immutable WorkflowSpecs for common build patterns.
+These factories produce immutable WorkflowPlans for common build patterns.
 Each factory returns a DAG-validated, frozen plan ready for the engine.
 """
 
 from __future__ import annotations
 
-from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 
 
 def _stage(
@@ -37,7 +37,7 @@ def _stage(
     )
 
 
-def standard_build() -> WorkflowSpec:
+def standard_build() -> WorkflowPlan:
     """The reference 9-stage TDD build pipeline.
 
     Flow: scout -> knight -> warrior -> prover -> sage_correction_bounce ->
@@ -45,9 +45,10 @@ def standard_build() -> WorkflowSpec:
 
     Three on_gate_failure bounces target the warrior (from prover,
     sage_correction_bounce, and wizard). MergePreflight runs full-suite
-    pytest against the simulated merged tip before the merge button.
+    pytest against the simulated merged tip before the merge button so
+    cross-PR interaction defects are caught before merge, not after.
     """
-    return WorkflowSpec(
+    return WorkflowPlan(
         name="standard_build",
         workflow_type=WorkflowType.STANDARD,
         description="Full TDD build pipeline: scout through steward with quality gates.",
@@ -107,7 +108,7 @@ def standard_build() -> WorkflowSpec:
     )
 
 
-def debug() -> WorkflowSpec:
+def debug() -> WorkflowPlan:
     """Minimal 2-stage workflow for quick iteration.
 
     Flow: scout -> warrior
@@ -115,7 +116,7 @@ def debug() -> WorkflowSpec:
     No gates, no bounce-back. Useful for debugging and rapid prototyping
     where the full ceremony of the standard pipeline is overkill.
     """
-    return WorkflowSpec(
+    return WorkflowPlan(
         name="debug",
         workflow_type=WorkflowType.DEBUG,
         description="Minimal scout-warrior pipeline for rapid iteration.",

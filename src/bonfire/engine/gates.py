@@ -157,14 +157,15 @@ class CostLimitGate:
 class MergePreflightGate:
     """Gate adapter for :class:`MergePreflightHandler` envelopes.
 
-    Implements the ratified allow-with-annotation policy for pre-existing
-    test debt.
+    Maps the four ``MergePreflightHandler`` envelope shapes onto the
+    standard ``passed`` / ``severity`` gate vocabulary.
 
     Severity table:
         - COMPLETED + clean metadata
               -> ``passed=True, severity="info"``
         - COMPLETED + ``META_PREFLIGHT_TEST_DEBT_NOTED is True``
-              -> ``passed=True, severity="warning"`` (allow-with-annotation)
+              -> ``passed=True, severity="warning"`` (allow-with-annotation
+              path for pre-existing test debt)
         - FAILED with ``error_type`` ∈ {cross_wave_interaction,
           pure_warrior_bug, pytest_collection_error, merge_conflict}
               -> ``passed=False, severity="error"``
@@ -184,8 +185,7 @@ class MergePreflightGate:
                     passed=True,
                     severity="warning",
                     message=(
-                        "Preflight passed with pre-existing test debt "
-                        "(allow-with-annotation per Q6)."
+                        "Preflight passed with pre-existing test debt (allow-with-annotation path)."
                     ),
                 )
             return GateResult(

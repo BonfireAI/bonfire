@@ -243,10 +243,15 @@ class TestRoleFieldNonInterference:
         opts = DispatchOptions()
         assert opts.tools == []
 
-    def test_permission_mode_still_defaults_to_dontAsk(self) -> None:
-        """Pre-existing default preserved."""
+    def test_permission_mode_still_defaults_to_default(self) -> None:
+        """CONTRACT-CHANGE: default flipped from 'dontAsk' to 'default'.
+
+        Per the CLI / scanner / session hardening contract, the SDK-level
+        ask-mode is the new ship-safe default. Explicit ``dontAsk``
+        opt-ins in ``handlers/`` are unchanged.
+        """
         opts = DispatchOptions()
-        assert opts.permission_mode == "dontAsk"
+        assert opts.permission_mode == "default"
 
     def test_tools_and_role_coexist(self) -> None:
         """Both fields coexist independently."""

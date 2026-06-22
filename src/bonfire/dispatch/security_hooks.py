@@ -26,10 +26,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import posixpath
 import re
+import sys
 import unicodedata
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -57,6 +56,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SecurityHooksConfig",
+    "WRITE_EDIT_SENSITIVE_PATH_DENY",
     "build_preexec_hook",
 ]
 
@@ -105,6 +105,11 @@ _PREFILTER_KEYWORDS: tuple[str, ...] = (
     "usermod",
     "alias",
     "cat",
+    # ``head`` and ``tail`` are reading verbs that leak secrets just as
+    # readily as ``cat`` — C4.1/4.2/4.3 alternations match all three, so
+    # the prefilter must let them through to the regex pool.
+    "head",
+    "tail",
     "bash",
     "sh ",
     "zsh",
@@ -122,6 +127,491 @@ _PREFILTER_KEYWORDS: tuple[str, ...] = (
     # Continuation escapes.
     "\\",
 )
+
+
+# ---------------------------------------------------------------------------
+# Write/Edit sensitive-path deny family
+#
+# The DEFAULT_DENY_PATTERNS catalogue (C1-C7) is bash-shape: rules require
+# tokens like ``\bcat\s+`` or ``>>?\s*`` as prefixes, so a Write/Edit of
+# ``~/.ssh/authorized_keys`` or ``/etc/sudoers`` never matched. This family
+# closes that gap with a path-prefix matcher gated to ``Write`` / ``Edit``
+# tool calls only; Bash continues to flow through the existing regex pool.
+#
+# Each entry is a literal prefix matched after the ``file_path`` is
+# canonicalized (``$HOME`` / ``/home/<user>`` collapsed to a leading ``~``
+# tilde-form, leading ``./`` stripped). The list MUST stay small enough that
+# auditors can read it in one screen.
+# ---------------------------------------------------------------------------
+
+
+# Path prefixes that are deny-by-default for Write/Edit. Order does not
+# matter — first match wins, but the matcher is O(N) over a short list so
+# the order is for human readability.
+WRITE_EDIT_SENSITIVE_PATH_DENY: tuple[str, ...] = (
+    # SSH material
+    "~/.ssh/id_",
+    "~/.ssh/authorized_keys",
+    "~/.ssh/known_hosts",
+    # ``~/.ssh/config`` carries Host aliases and ProxyCommand directives —
+    # a Write here can hijack ``ssh <host>`` to a different endpoint or
+    # inject a command-execution proxy.
+    "~/.ssh/config",
+    # AWS
+    "~/.aws/credentials",
+    # GPG
+    "~/.gnupg/",
+    # Docker
+    "~/.docker/config.json",
+    # Kubernetes
+    "~/.kube/config",
+    # netrc
+    "~/.netrc",
+    # GitHub CLI — ``~/.config/gh/hosts.yml`` carries oauth tokens.
+    "~/.config/gh/hosts.yml",
+    # npm auth — ``~/.npmrc`` stores the ``_authToken`` for publish + scoped
+    # registries.
+    "~/.npmrc",
+    # PyPI upload — ``~/.pypirc`` carries the token for ``twine upload``.
+    "~/.pypirc",
+    # Rust registry — ``~/.cargo/credentials`` (legacy plain) and
+    # ``~/.cargo/credentials.toml`` (modern) both store cargo publish tokens.
+    "~/.cargo/credentials",
+    "~/.cargo/credentials.toml",
+    # Azure CLI — entire credentials directory is sensitive (tokens,
+    # service-principal secrets). Match as a prefix so any file under
+    # ``~/.azure/`` is denied.
+    "~/.azure/",
+    # GCP / gcloud — credentials live under ``~/.config/gcloud/`` on Linux
+    # and ``~/.gcloud/`` historically. Match both prefixes.
+    "~/.config/gcloud/",
+    "~/.gcloud/",
+    # git global config — may contain ``[credential]`` helpers or embed an
+    # OAuth token in URL rewrites. Treat as deny.
+    "~/.gitconfig",
+    # XDG location for the global git config — modern git installs read
+    # ``~/.config/git/config`` in addition to ``~/.gitconfig`` and the
+    # same credential-helper / URL-rewrite vectors apply.
+    "~/.config/git/config",
+    # Shell-rc persistence vectors. A write or append (``>>``) to any of
+    # these establishes session-survival code. Match each rc file exactly
+    # so neighboring docs / examples are not caught.
+    "~/.bashrc",
+    "~/.bash_profile",
+    "~/.bash_logout",
+    "~/.bash_aliases",
+    "~/.profile",
+    "~/.zshrc",
+    "~/.zprofile",
+    "~/.zshenv",
+    "~/.zlogin",
+    "~/.zlogout",
+    "~/.config/fish/config.fish",
+    # PowerShell profiles on Windows resolve under either
+    # ``~/Documents/PowerShell/`` (PowerShell Core) or
+    # ``~/Documents/WindowsPowerShell/`` (legacy). Match the directory
+    # prefix so profile.ps1 + Microsoft.PowerShell_profile.ps1 + module
+    # auto-loads are all denied.
+    "~/Documents/PowerShell/",
+    "~/Documents/WindowsPowerShell/",
+    # Root home
+    "/root/",
+    # System state
+    "/etc/sudoers",
+    "/etc/sudoers.d/",
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/gshadow",
+    # System cron drop-in directory — a Write into ``/etc/cron.d/`` plants
+    # a scheduled command that runs as root.
+    "/etc/cron.d/",
+    # systemd unit drop-in directory — a Write into
+    # ``/etc/systemd/system/`` plants a service the next ``daemon-reload``
+    # picks up; standard persistence vector.
+    "/etc/systemd/system/",
+    # ``/usr/local/bin/`` is the standard local-binary directory on the
+    # default ``$PATH`` — a Write here plants an executable that
+    # subsequent shell sessions invoke.
+    "/usr/local/bin/",
+    # ``/etc/ld.so.preload`` injects a shared object into every dynamically
+    # linked process at startup — classic LD_PRELOAD persistence vector.
+    "/etc/ld.so.preload",
+    # /proc/<pid>/cwd and /proc/<pid>/root are kernel symlinks the
+    # kernel resolves at ``open()`` time to the target process's cwd
+    # / root — Writes through them bypass the home-prefix canonicalizer
+    # entirely. The matcher cannot see through the symlink, so any
+    # Write/Edit into /proc/<pid>/{cwd,root}/ is refused regardless of
+    # the suffix. ``self`` is the alias for the calling process.
+    # Matching is done via a literal prefix for the ``self`` form plus
+    # a regex for the numeric-pid form — see _match_write_edit_proc_bypass.
+    "/proc/self/cwd/",
+    "/proc/self/root/",
+)
+
+
+# /proc/<pid>/cwd/ and /proc/<pid>/root/ — numeric-pid variants of the
+# symlink-bypass family. The literal ``self`` aliases are handled via the
+# prefix list above; the numeric-pid forms need a regex match.
+_PROC_NUMERIC_BYPASS_RE = re.compile(r"^/proc/[0-9]+/(?:cwd|root)/")
+
+
+# Windows UNC: ``\\server\share\<rest>`` — after backslash normalization
+# arrives as ``//server/share/<rest>``. The kernel resolves UNC to a remote
+# share; if ``<rest>`` matches a credential path on that share
+# (``Users/<u>/.ssh/id_rsa``, etc.) the deny floor must still fire.
+_WIN_UNC_RE = re.compile(r"^//([^/]+)/([^/]+)(/.*)?$")
+# Windows extended-length: ``\\?\C:\<rest>`` → ``//?/C:/<rest>``; the
+# ``\\?\`` prefix is a syntactic device that disables Win32 path-length
+# limits and silently bypasses prefix-shape matchers that expect
+# ``C:/Users/<u>/...``. Extended-length UNC: ``\\?\UNC\server\share\<rest>``
+# → ``//?/UNC/server/share/<rest>``.
+_WIN_EXTLEN_RE = re.compile(r"^//\?/(?:UNC/)?(.*)$")
+
+
+def _strip_windows_unc_or_extlen(file_path: str) -> str | None:
+    r"""Detect Windows UNC + extended-length shapes and return the underlying
+    POSIX-style path for re-canonicalization.
+
+    Returns:
+        The stripped/rewritten path (still a string with forward slashes) if
+        ``file_path`` matched UNC or extended-length, else ``None``.
+
+    Behavior:
+        - Extended-length UNC ``\\?\UNC\server\share\Users\u\.ssh\id_rsa``
+          -> ``/Users/u/.ssh/id_rsa`` (drop ``\\?\UNC\server\share``; the
+          tail is what the kernel actually opens on the remote share).
+        - Extended-length ``\\?\C:\Users\u\.ssh\id_rsa`` ->
+          ``C:/Users/u/.ssh/id_rsa`` (drop ``\\?\``; the underlying form is
+          a normal drive path that downstream canonicalization handles).
+        - UNC ``\\server\share\Users\u\.ssh\id_rsa`` ->
+          ``/Users/u/.ssh/id_rsa`` (drop ``\\server\share``; treat the tail
+          as a normal POSIX path so the home-prefix collapse fires).
+
+    The double-slash detection is performed BEFORE the multi-slash collapse
+    that ``_canonicalize_write_edit_path_with_underflow`` runs - by the time
+    that collapse fires the UNC marker is destroyed.
+    """
+    if "\\" not in file_path and not file_path.startswith("//"):
+        return None
+    # Normalize backslashes so the regex can be authored in POSIX form.
+    s = file_path.replace("\\", "/") if "\\" in file_path else file_path
+    # Extended-length first (``\\?\``) — it has a more specific prefix than
+    # generic UNC (``\\server``). Both UNC + extended-length-UNC are
+    # rewritten so the tail re-enters canonicalization as a clean path.
+    m = _WIN_EXTLEN_RE.match(s)
+    if m is not None:
+        tail = m.group(1)
+        # ``\\?\UNC\server\share\<rest>`` lands here with tail
+        # ``server/share/<rest>`` — strip the share prefix so ``<rest>``
+        # alone is canonicalized. If the input was the non-UNC variant
+        # (``\\?\C:\...``) the tail is ``C:/<rest>`` and is left as-is
+        # for the normal drive-path canonicalization to consume.
+        if s.startswith("//?/UNC/"):
+            unc_parts = tail.split("/", 2)
+            if len(unc_parts) < 3:
+                # Malformed extended-length UNC (no share or no tail) —
+                # refuse: nothing meaningful to scan.
+                return ""
+            return "/" + unc_parts[2]
+        return tail
+    m = _WIN_UNC_RE.match(s)
+    if m is not None:
+        tail = m.group(3) or ""
+        # ``\\server\share`` with no tail → an empty stripped form.
+        # Canonicalization will land on ``""``; the matcher treats that
+        # as a non-match (no credential reference) and the original
+        # would not reach a credential file anyway.
+        return tail
+    return None
+
+
+# Sentinel returned by ``_strip_windows_unc_or_extlen`` for malformed
+# UNC/extended-length inputs that should be refused outright.
+_MALFORMED_UNC = ""
+
+
+# Public exported reasons keep the SecurityDenied pattern_id slug stable
+# across versions. The slug is internal to this hook (not part of the
+# C1-C7 canonical catalogue) and namespaced under ``_infra.`` for the
+# same reason ``_infra.control-byte`` / ``_infra.error`` are.
+_WRITE_EDIT_SENSITIVE_PATH_PATTERN_ID = "_infra.write-edit-sensitive-path"
+_WRITE_EDIT_SENSITIVE_PATH_REASON = (
+    "Write/Edit of a credential or system-state path is denied. "
+    "If intended, edit the file manually outside the agent dispatch."
+)
+
+
+# Regex that recognizes a ``$HOME/`` or ``/home/<user>/`` (Linux) or
+# ``/Users/<user>/`` (macOS) or ``[A-Za-z]:/Users/<user>/`` (Windows, after
+# backslash → forward-slash normalization) prefix so we can canonicalize
+# file_path to a ``~`` form before the prefix scan. ``/root/`` itself is one
+# of the deny prefixes — for ``/root/...`` inputs we keep the literal form
+# (the ``/root/`` rule matches it directly).
+#
+# Cross-platform extension: macOS ``/Users/<u>/`` and Windows
+# ``[A-Za-z]:/Users/<u>/`` are first-class home-prefix forms. Windows
+# backslash separators are normalized to forward slashes BEFORE this regex
+# is applied (see ``_canonicalize_write_edit_path``) so the alternation only
+# needs the forward-slash form.
+#
+# Defense — Probe N+7 C1: the negative lookaheads ``(?!\.\.?/)`` and
+# ``(?!\.\.?$)`` refuse the literal ``.`` and ``..`` segments as the
+# ``[^/]+`` username slot. Without them, an input like
+# ``/home/../etc/sudoers`` had its ``..`` greedily consumed as a valid
+# username, the substitution collapsed to ``~/etc/sudoers``, no
+# underflow signal fired, and the canonical form matched no deny
+# prefix — voiding the ENTIRE WRITE/EDIT deny floor via any
+# ``/home/../``, ``/Users/../``, or ``[A-Za-z]:/Users/../`` shape. The
+# lookaheads refuse to match on those shapes; dot-segment resolution
+# then collapses ``../`` correctly and the matcher's second
+# home-prefix pass (see ``_canonicalize_write_edit_path_with_underflow``)
+# re-collapses any newly-revealed ``/home/<realuser>/...`` form so the
+# credential deny scan still fires.
+_HOME_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"\$HOME"
+    r"|/home/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r"|/Users/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r"|[A-Za-z]:/Users/(?!\.\.?/)(?!\.\.?$)[^/]+"
+    r")(/|$)"
+)
+
+
+_MULTI_SLASH_RE = re.compile(r"/{2,}")
+
+
+def _resolve_dot_segments(path: str) -> tuple[str, bool]:
+    """Resolve ``.`` and ``..`` segments in ``path``.
+
+    Walks ``path`` segment-wise, dropping ``.`` and popping the predecessor
+    on ``..``. The anchor (``~/``, ``/``, or none for relative paths) is
+    preserved and acts as a floor — a ``..`` that would pop past the anchor
+    is dropped (clamped) and the underflow is reported via the second
+    return value. Adversarial inputs like
+    ``/home/alice/Documents/../.ssh/id_rsa`` collapse to ``~/.ssh/id_rsa``
+    after the home substitution (no underflow), while
+    ``/etc/sudoers/../passwd`` collapses to ``/etc/passwd`` (no
+    underflow) — both reach the deny-prefix scan in their canonical form.
+
+    Returns ``(canonical_path, underflowed)`` where ``underflowed`` is
+    True if any ``..`` segment would have popped past the anchor floor.
+    Cross-user escapes like ``/home/alice/../bob/.ssh/id_rsa`` substitute
+    to ``~/../bob/.ssh/id_rsa`` and trip the underflow flag — the caller
+    must treat underflow as deny because the kernel resolves the original
+    path to a different user's home, defeating the alice-anchored deny
+    scan.
+
+    Empty segments (from accidental trailing slashes) are also dropped.
+    """
+    if path.startswith("~/"):
+        anchor = "~/"
+        tail = path[2:]
+    elif path == "~":
+        return "~", False
+    elif path.startswith("/"):
+        anchor = "/"
+        tail = path[1:]
+    else:
+        anchor = ""
+        tail = path
+    if "/" not in tail and tail not in (".", ".."):
+        # Fast path: a single segment that is not itself a dot-segment.
+        return anchor + tail, False
+    resolved: list[str] = []
+    underflowed = False
+    for seg in tail.split("/"):
+        if seg == "" or seg == ".":
+            continue
+        if seg == "..":
+            if resolved:
+                resolved.pop()
+            else:
+                # ``..`` underflows past the anchor — clamp by dropping
+                # but flag the escape so the caller can refuse.
+                underflowed = True
+            continue
+        resolved.append(seg)
+    return anchor + "/".join(resolved), underflowed
+
+
+def _canonicalize_write_edit_path(file_path: str) -> str:
+    """Collapse home-equivalent prefixes to ``~`` so the prefix matcher
+    is straightforward.
+
+    Order:
+        1. Strip leading ``./`` (one round; bash doesn't repeat it).
+        2. Normalize Windows backslash separators to forward slashes — both
+           raw (``C:\\Users\\alice``) and escaped (``C:\\\\Users\\\\alice``)
+           collapse to ``C:/Users/alice``.
+        3. Collapse any run of two or more forward slashes to a single
+           slash — unconditional so pure-POSIX ``//`` / ``///`` shapes
+           don't bypass the prefix scan.
+        4. Replace ``$HOME/`` or ``/home/<user>/`` or ``/Users/<user>/`` or
+           ``[A-Za-z]:/Users/<user>/`` with ``~/``.
+        5. Resolve ``.`` / ``..`` segments in the path tail, clamped at the
+           anchor (``~/`` or ``/``) so ``..`` cannot escape past the home
+           or filesystem root.
+
+    Backslash normalization MUST happen BEFORE both the regex substitution
+    AND the rsplit-on-``/`` tail-segment match (``rsplit("/", 1)``) so a
+    Windows path bearing only backslashes does not arrive at the tail match
+    as a single segment.
+
+    Slash-collapse MUST run unconditionally (not gated behind a backslash
+    check): pure-POSIX inputs like ``/home/alice//.ssh/id_rsa`` would
+    otherwise leave a ``//`` artifact that bypasses ``_HOME_PREFIX_RE``'s
+    ``[^/]+`` greedy match and silently slip past the deny floor.
+
+    Dot-segment resolution MUST run AFTER the home substitution so the
+    ``~/`` anchor (rather than the literal ``/home/<user>/``) is the
+    clamp boundary — this keeps adversarial ``../`` traversal inside the
+    home prefix scope of the deny matcher. ``..`` segments that would
+    escape past the anchor are flagged as underflow; the matcher
+    (``_match_write_edit_sensitive_path``) treats underflow as a
+    cross-user / cross-root escape attempt and denies. See
+    ``_resolve_dot_segments`` for details.
+
+    /root/ is NOT canonicalized — it has its own dedicated deny prefix.
+
+    Returns the canonical path string. Underflow information is lost on
+    this return path; callers that need to refuse on underflow must use
+    ``_canonicalize_write_edit_path_with_underflow`` instead.
+    """
+    canonical, _ = _canonicalize_write_edit_path_with_underflow(file_path)
+    return canonical
+
+
+def _canonicalize_write_edit_path_with_underflow(file_path: str) -> tuple[str, bool]:
+    """Internal variant that also reports anchor underflow.
+
+    Returns ``(canonical, underflowed)``. ``underflowed`` is True when
+    the dot-segment walk would have escaped past the home (or filesystem
+    root) anchor — a cross-user / cross-root traversal attempt. The
+    matcher uses this to refuse adversarial inputs whose kernel resolution
+    would land in a DIFFERENT user's home (e.g.
+    ``/home/alice/../bob/.ssh/id_rsa``).
+    """
+    s = file_path
+    if s.startswith("./"):
+        s = s[2:]
+    # Windows separator normalization — only fires when backslashes are
+    # present (no-op on pure-POSIX inputs).
+    if "\\" in s:
+        s = s.replace("\\", "/")
+    # Unconditional slash-collapse: handles BOTH backslash-derived runs
+    # (``C:\\\\Users\\\\alice`` → ``C:////Users////alice`` after step 1)
+    # AND pure-POSIX adversarial runs (``/home/alice//.ssh/id_rsa``),
+    # each of which would otherwise leave ``//`` artifacts that bypass
+    # ``_HOME_PREFIX_RE`` and silently slip past the deny floor.
+    s = _MULTI_SLASH_RE.sub("/", s)
+    s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
+    s, underflowed = _resolve_dot_segments(s)
+    # Second home-prefix pass (Probe N+7 C1): when the first pass refused
+    # to collapse a dot-segment username (``/home/../``,
+    # ``C:/Users/../Users/<u>/...``, etc.), dot-segment resolution then
+    # cleans the ``../`` and may reveal a legitimate
+    # ``/home/<realuser>/...`` or ``[A-Za-z]:/Users/<realuser>/...`` form
+    # that still belongs under the ``~/`` home anchor. Re-running the
+    # collapse here ensures those cleaned-up paths reach the credential
+    # deny scan in canonical ``~/...`` form. The pass is a no-op for
+    # inputs the first pass already collapsed (``$HOME/`` →  ``~/``,
+    # ``/home/alice/`` → ``~/``) because the substituted ``~/`` no
+    # longer matches ``_HOME_PREFIX_RE``'s alternation. Underflow state
+    # from the first dot-segment walk is preserved — a cross-user
+    # ``..`` escape stays flagged regardless of whether the second pass
+    # re-anchors the result.
+    s = _HOME_PREFIX_RE.sub(lambda m: "~" + m.group(1), s, count=1)
+    return s, underflowed
+
+
+def _is_case_insensitive_fs() -> bool:
+    """Return True when the local filesystem is case-insensitive.
+
+    macOS HFS+ / APFS (default) and Windows NTFS resolve ``~/.SSH/id_rsa``
+    and ``~/.ssh/id_rsa`` to the same inode. The deny matcher must
+    case-fold both sides on those platforms; pure-POSIX Linux stays
+    case-sensitive (the correct semantics).
+    """
+    return sys.platform == "darwin" or sys.platform == "win32"
+
+
+# recursion: bounded by finite path-prefix strips (one marker per call)
+def _match_write_edit_sensitive_path(file_path: str) -> bool:  # noqa: C901
+    r"""Return True if ``file_path`` resolves under any deny prefix.
+
+    Also covers the ``.env`` family and the ``..`` cross-user / cross-root
+    escape family. The matcher runs the following passes:
+
+    1. Numeric-pid /proc symlink-bypass match on the post-backslash-normalize
+       form (``/proc/<pid>/cwd/`` or ``/proc/<pid>/root/``). The literal
+       ``/proc/self/...`` aliases are in the prefix list below.
+    2. Windows UNC + extended-length detection: ``\\server\share\<rest>``
+       and ``\\?\<rest>`` bypass the home-prefix collapse because the
+       slash-collapse step destroys the leading ``//`` marker. Detect
+       these shapes early and re-run the matcher on the stripped tail.
+    3. Canonicalize the path. If dot-segment resolution underflowed past the
+       anchor (cross-user / cross-root traversal attempt), refuse — the
+       kernel resolves the original path to a DIFFERENT user's home or to
+       a path outside any deny prefix entirely.
+    4. Canonical prefix match against ``WRITE_EDIT_SENSITIVE_PATH_DENY``.
+       On case-insensitive filesystems (macOS, Windows) the comparison is
+       case-folded; POSIX Linux stays case-sensitive.
+    5. Tail-name match against ``.env`` / ``.env.*`` (case-sensitive,
+       segment-anchored — ``/path/to/.env`` matches, ``/path/env.txt``
+       does not, ``/path/.env_example.txt`` does not). The tail match
+       is ALSO case-folded on case-insensitive filesystems.
+    """
+    if not file_path:
+        return False
+    # Numeric-pid /proc symlink bypass — the prefix list catches the
+    # literal ``self`` aliases; the numeric forms need a regex. Run on a
+    # backslash-normalized form so a Windows-shape input bearing
+    # ``\\proc\\12345\\cwd\\...`` still matches. Pure-POSIX inputs are
+    # unaffected.
+    proc_probe = file_path.replace("\\", "/") if "\\" in file_path else file_path
+    proc_probe = _MULTI_SLASH_RE.sub("/", proc_probe)
+    if _PROC_NUMERIC_BYPASS_RE.match(proc_probe):
+        return True
+    # Windows UNC + extended-length: detect BEFORE main canonicalization so
+    # the slash-collapse does not destroy the ``//`` UNC marker. If the
+    # strip helper returns a tail, re-evaluate that tail through the full
+    # matcher (one level of recursion — the stripped tail is normal POSIX
+    # or drive-letter form and cannot recurse again).
+    stripped = _strip_windows_unc_or_extlen(file_path)
+    if stripped is not None:
+        if stripped == _MALFORMED_UNC:
+            # Malformed extended-length UNC (no share or no tail) → refuse.
+            return True
+        # Recurse on the stripped form. The stripped form starts with ``/``
+        # or with a drive letter (``C:/...``) — neither path re-triggers
+        # the UNC strip, so recursion is bounded at depth 1.
+        return _match_write_edit_sensitive_path(stripped)
+    canonical, underflowed = _canonicalize_write_edit_path_with_underflow(file_path)
+    if underflowed:
+        # Cross-user / cross-root escape attempt — kernel resolves the
+        # original path to a target the alice-anchored deny scan can't see.
+        # Refuse outright. Fail-CLOSED is the v0.1 contract.
+        return True
+    case_fold = _is_case_insensitive_fs()
+    canonical_cmp = canonical.casefold() if case_fold else canonical
+    for prefix in WRITE_EDIT_SENSITIVE_PATH_DENY:
+        prefix_cmp = prefix.casefold() if case_fold else prefix
+        if canonical_cmp.startswith(prefix_cmp):
+            return True
+    # Last segment match for .env / .env.* (segment-anchored).
+    # Get the final path segment.
+    segment = canonical.rsplit("/", 1)[-1]
+    segment_cmp = segment.casefold() if case_fold else segment
+    if segment_cmp == ".env":
+        return True
+    if segment_cmp.startswith(".env."):
+        # ``.env.example`` is whitelisted because it's documentation, not
+        # secrets; everything else under ``.env.<suffix>`` is treated as a
+        # real dotenv file.
+        if segment_cmp == ".env.example":
+            return False
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -154,16 +644,43 @@ _IFS_RE = re.compile(r"\$\{IFS\}|\$IFS\$[0-9]|\$IFS")
 # Backslash-newline continuation → space.
 _BACKSLASH_NEWLINE_RE = re.compile(r"\\\n")
 
+# ASCII control bytes EXCEPT tab (\x09), newline (\x0a), and carriage return
+# (\x0d). Closes the NUL-byte bypass: a payload
+# like ``rm\x00-rf /`` sneaks past the C1.1 ``\s+``-separator deny rule
+# because ``\s`` does not match ``\x00``. Strip these BEFORE downstream
+# matching so the deny regex sees the rejoined token.
+_CONTROL_BYTE_CLASS = r"[\x00-\x08\x0b\x0c\x0e-\x1f]"
+_CONTROL_BYTE_RE = re.compile(_CONTROL_BYTE_CLASS)
+# Control-byte runs sandwiched between two ASCII letters: drop entirely so
+# attacker-injected ``r\x00m`` rejoins into ``rm`` and the deny regex sees
+# the canonical token. Other control-byte runs collapse to a single space
+# so ``rm\x00-rf`` becomes ``rm -rf`` and C1.1's ``\s+`` separator matches.
+_CONTROL_BYTE_BETWEEN_LETTERS_RE = re.compile(
+    r"(?<=[A-Za-z])" + _CONTROL_BYTE_CLASS + r"+(?=[A-Za-z])"
+)
+_CONTROL_BYTE_RUN_RE = re.compile(_CONTROL_BYTE_CLASS + r"+")
+
 
 def _normalize(command: str) -> str:
-    """Stage 1: NFKC + expand $IFS + collapse backslash-newline.
+    """Stage 1: strip bypass control bytes + NFKC + expand $IFS + collapse
+    backslash-newline.
 
     Deliberately NOT doing an shlex round-trip here — shlex chokes on
     partial quotes which is a common agent output; we prefer "best effort
     normalize without raising." Structural unwrap (Stage 2) performs its
     own shlex-based tokenization on the segments where it matters.
+
+    Control-byte handling preserves \\t, \\n, \\r (legitimate shell
+    whitespace). Other U+0000–U+001F bytes are removed via two passes:
+    first, runs sandwiched between two ASCII letters are dropped so split
+    tokens (``r\\x00m``) rejoin into recognizable commands (``rm``); then
+    any remaining runs collapse to a single space so injected
+    pseudo-separators (``rm\\x00-rf``) yield the canonical ``rm -rf`` shape
+    that deny regexes expect.
     """
-    s = unicodedata.normalize("NFKC", command)
+    s = _CONTROL_BYTE_BETWEEN_LETTERS_RE.sub("", command)
+    s = _CONTROL_BYTE_RUN_RE.sub(" ", s)
+    s = unicodedata.normalize("NFKC", s)
     s = _BACKSLASH_NEWLINE_RE.sub(" ", s)
     s = _IFS_RE.sub(" ", s)
     return s
@@ -277,8 +794,7 @@ def _split_chain(segment: str) -> list[str]:
     return [p for p in parts if p]
 
 
-# recursion: bounded by the $()/backtick nesting depth of ``segment`` — each
-# recursive call receives a strictly shorter inner body, so depth shrinks to 0.
+# recursion: bounded by substitution nesting of a finite segment
 def _extract_substitutions(segment: str) -> list[str]:
     """Return the inner bodies of $(...) and `...` in ``segment``.
 
@@ -324,42 +840,59 @@ def _extract_substitutions(segment: str) -> list[str]:
     return out
 
 
-# Peel table: (required prefixes — empty means "always try", pattern,
-# capture-group index, strip the captured body). Order is load-bearing:
-# the bash/sh -c form is tried first, exactly as the original chain did.
-_PEEL_RULES: tuple[tuple[tuple[str, ...], re.Pattern[str], int, bool], ...] = (
-    ((), _BASH_SH_C_RE, 2, False),
-    (("sudo ",), _SUDO_RE, 1, True),
-    (("timeout ",), _TIMEOUT_RE, 1, True),
-    (("nohup ",), _NOHUP_RE, 1, True),
-    (("watch ",), _WATCH_RE, 1, True),
-    (("env ",), _ENV_RE, 1, True),
-    (("xargs ",), _XARGS_RE, 1, True),
-    (("find ", "fd "), _FIND_EXEC_RE, 1, True),
-)
-
-
-def _peel_one(segment: str) -> str | None:
+def _peel_one(segment: str) -> str | None:  # noqa: C901
     """Try to peel a single unwrapper off ``segment``.
 
     Returns the inner body, or ``None`` if nothing was peeled.
     """
     s = segment.strip()
-    for prefixes, pattern, group_index, strip_body in _PEEL_RULES:
-        if prefixes and not s.startswith(prefixes):
-            continue
-        m = pattern.match(s)
-        if m is None:
-            continue
-        body = m.group(group_index)
-        return body.strip() if strip_body else body
+
+    m = _BASH_SH_C_RE.match(s)
+    if m is not None:
+        return m.group(2)
+
+    if s.startswith("sudo "):
+        m = _SUDO_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("timeout "):
+        m = _TIMEOUT_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("nohup "):
+        m = _NOHUP_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("watch "):
+        m = _WATCH_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("env "):
+        m = _ENV_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("xargs "):
+        m = _XARGS_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
+    if s.startswith("find ") or s.startswith("fd "):
+        m = _FIND_EXEC_RE.match(s)
+        if m is not None:
+            return m.group(1).strip()
+
     return None
 
 
 _UNWRAP_EXHAUSTED_SENTINEL = "\x00__BONFIRE_UNWRAP_EXHAUSTED__\x00"
 
 
-def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
+def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:  # noqa: C901
     """Stage 2: recursively peel wrappers up to ``max_depth`` rounds.
 
     Returns a list of segments to be matched. The original command is
@@ -373,12 +906,20 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
     DENY via the ``_infra.unwrap-exhausted`` slug.
     """
     segments: list[str] = [command]
-    # Seed with the chain-split of the top-level command + its
-    # command-substitution bodies — each gets independently inspected.
-    segments.extend(_expand_segment(command))
+
+    # Seed with the chain-split of the top-level command too — each split
+    # segment gets independently inspected / unwrapped.
+    seeds = _split_chain(command)
+    if seeds != [command]:
+        segments.extend(seeds)
+
+    # Also seed with command-substitution bodies.
+    for sub in _extract_substitutions(command):
+        segments.append(sub)
+        segments.extend(_split_chain(sub))
 
     work: list[str] = list(segments)
-    for _depth in range(max_depth):
+    for depth in range(max_depth):  # noqa: B007
         next_round: list[str] = []
         for seg in work:
             peeled = _peel_one(seg)
@@ -386,7 +927,12 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
                 continue
             next_round.append(peeled)
             # Chain-split + substitution-extract the peeled body too.
-            next_round.extend(_expand_segment(peeled))
+            chained = _split_chain(peeled)
+            if chained != [peeled]:
+                next_round.extend(chained)
+            for sub in _extract_substitutions(peeled):
+                next_round.append(sub)
+                next_round.extend(_split_chain(sub))
         if not next_round:
             break
         segments.extend(next_round)
@@ -400,23 +946,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
                 segments.append(_UNWRAP_EXHAUSTED_SENTINEL)
                 break
 
-    return _dedup_preserving_order(segments)
-
-
-def _expand_segment(segment: str) -> list[str]:
-    """Chain-split + substitution bodies (and their chain-splits) for one segment."""
-    out: list[str] = []
-    chained = _split_chain(segment)
-    if chained != [segment]:
-        out.extend(chained)
-    for sub in _extract_substitutions(segment):
-        out.append(sub)
-        out.extend(_split_chain(sub))
-    return out
-
-
-def _dedup_preserving_order(segments: list[str]) -> list[str]:
-    """Drop empties + duplicates while preserving first-seen order."""
+    # Dedup while preserving order.
     seen: set[str] = set()
     unique: list[str] = []
     for seg in segments:
@@ -427,118 +957,15 @@ def _dedup_preserving_order(segments: list[str]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Sensitive Write/Edit path rules
-#
-# The shared DEFAULT_DENY_PATTERNS catalogue is Sage-locked (its rule-id set
-# and counts are frozen). These credential / system-state file rules are a
-# Write/Edit-specific concern — they only make sense against a canonicalized
-# file_path, never against a Bash command string — so they live HERE, beside
-# the canonicalizer, rather than in the locked catalogue.
-#
-# Each pattern anchors on path-SEGMENT boundaries: ``(?:^|/)`` before the
-# credential filename and a ``(?=/|$)`` lookahead after it. Run against the
-# canonicalized path (``//`` collapsed, ``..``/``.`` resolved), this makes
-# ``/home/u/.npmrc`` DENY while ``/home/u/xnpmrc`` (shares the suffix but not
-# at a boundary) stays ALLOWED. The rules are home-prefix agnostic — they fire
-# on ``/home/<u>/``, ``/Users/<u>/`` (macOS, mandatory), ``~/``
-# and ``$HOME/`` forms alike, because the segment anchor matches the trailing
-# credential filename wherever it sits. Scope is macOS + Linux ONLY; Windows
-# analogues are explicitly DEFERRED per the ticket.
-# ---------------------------------------------------------------------------
-
-
-_SENSITIVE_WRITE_PATH_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
-    (
-        "W1.1-write-npmrc",
-        re.compile(r"(?:^|/)\.npmrc(?=/|$)"),
-        "Writing ~/.npmrc (npm auth token store) — denied.",
-    ),
-    (
-        "W1.2-write-pypirc",
-        re.compile(r"(?:^|/)\.pypirc(?=/|$)"),
-        "Writing ~/.pypirc (PyPI upload credentials) — denied.",
-    ),
-    (
-        "W1.3-write-gcloud-adc",
-        re.compile(r"(?:^|/)application_default_credentials\.json(?=/|$)"),
-        "Writing gcloud application_default_credentials.json — denied.",
-    ),
-    (
-        "W1.4-write-gcloud-legacy",
-        re.compile(r"(?:^|/)legacy_credentials/.+/adc\.json(?=/|$)"),
-        "Writing a gcloud legacy_credentials adc.json — denied.",
-    ),
-    (
-        "W1.5-write-git-credentials",
-        re.compile(r"(?:^|/)\.git-credentials(?=/|$)"),
-        "Writing ~/.git-credentials (git credential store) — denied.",
-    ),
-    (
-        "W1.6-write-gh-hosts",
-        re.compile(r"(?:^|/)\.config/gh/hosts\.yml(?=/|$)"),
-        "Writing ~/.config/gh/hosts.yml (gh CLI token file) — denied.",
-    ),
-    (
-        "W1.7-write-bash-history",
-        re.compile(r"(?:^|/)\.bash_history(?=/|$)"),
-        "Writing ~/.bash_history (shell history) — denied.",
-    ),
-    (
-        "W1.8-write-zsh-history",
-        re.compile(r"(?:^|/)\.zsh_history(?=/|$)"),
-        "Writing ~/.zsh_history (shell history) — denied.",
-    ),
-)
-
-
-def _match_sensitive_write_path(path: str) -> tuple[str, str] | None:
-    """Return (rule_id, message) for the first sensitive-path rule that hits.
-
-    ``path`` is the already-canonicalized Write/Edit file_path. Returns
-    ``None`` when nothing matches.
-    """
-    for rule_id, pattern, message in _SENSITIVE_WRITE_PATH_RULES:
-        if pattern.search(path):
-            return rule_id, message
-    return None
-
-
-# ---------------------------------------------------------------------------
 # Stage 3 — prefilter + extract
 # ---------------------------------------------------------------------------
-
-
-def _canonicalize_path(file_path: str) -> str:
-    """Canonicalize a Write/Edit ``file_path`` before the deny rules run.
-
-    Collapses repeated separators (``//``, ``///``), resolves relative
-    traversal (``../`` and ``./``), and strips trailing separators — so a
-    credential path dressed up with segment juggling
-    (``/home/u/.config/gh/../gh/hosts.yml``) canonicalizes to its true target
-    (``/home/u/.config/gh/hosts.yml``) and the segment-anchored C8 rules fire.
-
-    Uses ``posixpath`` deliberately (NOT ``os.path``): this is scoped to
-    macOS + Linux only, and ``posixpath`` keeps ``/`` separators on every host
-    so the rule regexes match deterministically regardless of where the hook
-    runs. The ``~`` and ``$HOME`` prefixes have no separators of their own, so
-    normalization leaves them intact and the segment anchor still matches the
-    credential filename that follows.
-
-    Returns the path unchanged when it is empty or has no normalizable
-    structure; ``posixpath.normpath`` never raises on a string input.
-    """
-    if not file_path:
-        return file_path
-    return posixpath.normpath(file_path)
 
 
 def _extract_command(tool_name: str, tool_input: Any) -> str:
     """Extract the string payload to scan for a given tool.
 
     Bash → ``command``. Write/Edit → ``file_path`` (and optionally
-    ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12). The
-    Write/Edit ``file_path`` is canonicalized so separator and
-    traversal evasions cannot slip past the segment-anchored deny rules.
+    ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12).
     """
     if not isinstance(tool_input, dict):
         return ""
@@ -549,14 +976,12 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
     else:
         return ""
     if isinstance(cmd, bytes):
-        # ``errors="replace"`` makes the decode total — it cannot raise, so
-        # no defensive catch belongs here (the Elegance Law bans dead
-        # swallows into bare sentinels).
-        cmd = cmd.decode("utf-8", errors="replace")
+        try:
+            return cmd.decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            return ""
     if not isinstance(cmd, str):
         return ""
-    if tool_name in ("Write", "Edit"):
-        return _canonicalize_path(cmd)
     return cmd
 
 
@@ -656,176 +1081,7 @@ async def _safe_emit(
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class _HookBinding:
-    """Per-dispatch bindings shared by one preexec hook closure."""
-
-    bus: EventBus | None
-    sid: str
-    aname: str
-    user_patterns_source: tuple[str, ...]
-    emit: bool
-
-    async def emit_denied(self, *, tool_name: str, reason: str, pattern_id: str) -> None:
-        """Emit a SecurityDenied event when event emission is configured."""
-        if self.emit:
-            await _safe_emit(
-                self.bus,
-                SecurityDenied(
-                    session_id=self.sid,
-                    sequence=0,
-                    tool_name=tool_name,
-                    reason=reason,
-                    pattern_id=pattern_id,
-                    agent_name=self.aname,
-                ),
-            )
-
-    async def deny(self, *, tool_name: str, reason: str, pattern_id: str) -> dict[str, Any]:
-        """Emit (when configured) and return the DENY envelope."""
-        await self.emit_denied(tool_name=tool_name, reason=reason, pattern_id=pattern_id)
-        return _deny_envelope(reason)
-
-
-def _extract_pre_tool_command(input_data: dict) -> tuple[str, str] | None:
-    """``(tool_name, command)`` for a guarded PreToolUse call, else ``None``."""
-    if not isinstance(input_data, dict):
-        return None
-    if input_data.get("hook_event_name") != "PreToolUse":
-        return None
-
-    tool_name = input_data.get("tool_name", "")
-    if tool_name not in ("Bash", "Write", "Edit"):
-        return None
-
-    tool_input = input_data.get("tool_input", {}) or {}
-    command = _extract_command(tool_name, tool_input)
-    if not command:
-        return None
-    return tool_name, command
-
-
-async def _decide_deny(
-    binding: _HookBinding,
-    tool_name: str,
-    segments: list[str],
-    user_patterns: tuple[tuple[str, re.Pattern[str]], ...],
-) -> dict[str, Any] | None:
-    """First DENY hit across segments -> DENY envelope; ``None`` when clean."""
-    for seg in segments:
-        deny_hit = _match_deny(seg, user_patterns=user_patterns)
-        if deny_hit is not None:
-            rule_id, message = deny_hit
-            return await binding.deny(tool_name=tool_name, reason=message, pattern_id=rule_id)
-    return None
-
-
-async def _decide_warn(
-    binding: _HookBinding,
-    tool_name: str,
-    segments: list[str],
-) -> dict[str, Any]:
-    """First WARN hit -> allow-with-warning envelope; ``{}`` when clean."""
-    warn_hits: list[tuple[str, str]] = []
-    for seg in segments:
-        warn_hit = _match_warn(seg)
-        if warn_hit is not None:
-            warn_hits.append(warn_hit)
-
-    if not warn_hits:
-        return {}
-
-    rule_id, message = warn_hits[0]
-    warn_reason = f"WARN: {message}"
-    await binding.emit_denied(tool_name=tool_name, reason=warn_reason, pattern_id=rule_id)
-    return _allow_envelope(warn_reason)
-
-
-async def _evaluate_pre_tool_use(binding: _HookBinding, input_data: dict) -> dict[str, Any]:
-    """The hook decision pipeline; may raise (caller owns the _infra.error path)."""
-    command_info = _extract_pre_tool_command(input_data)
-    if command_info is None:
-        return {}
-    tool_name, command = command_info
-
-    # Compile user patterns FIRST — a broken pattern must DENY
-    # even for benign commands that would otherwise skip via the
-    # keyword prefilter. Failure here lands in the caller's except,
-    # which is the adjudicated _infra.error DENY path.
-    user_patterns = _compile_user_patterns(list(binding.user_patterns_source))
-
-    normalized = _normalize(command)
-
-    segments = _unwrap(normalized, max_depth=5)
-
-    # Exhaustion sentinel from _unwrap → DENY.
-    if _UNWRAP_EXHAUSTED_SENTINEL in segments:
-        reason = (
-            "security-hook-error: unwrap depth exceeded; command nesting beyond safe scan depth"
-        )
-        return await binding.deny(
-            tool_name=tool_name, reason=reason, pattern_id="_infra.unwrap-exhausted"
-        )
-
-    # Sensitive Write/Edit path check. ``command`` is the
-    # canonicalized file_path for Write/Edit; match the credential /
-    # system-state rules directly, BEFORE the Bash-oriented keyword
-    # prefilter (a credential path carries none of those verbs, so
-    # the prefilter would otherwise wrongly skip it).
-    if tool_name in ("Write", "Edit"):
-        write_hit = _match_sensitive_write_path(command)
-        if write_hit is not None:
-            rule_id, message = write_hit
-            return await binding.deny(tool_name=tool_name, reason=message, pattern_id=rule_id)
-
-    # Prefilter skips the expensive regex pool unless the command
-    # carries a "dangerous-looking" token OR the user supplied
-    # extras (we can't keyword-prefilter for arbitrary user
-    # patterns).
-    if not user_patterns and not _keyword_hit(segments):
-        return {}
-
-    # Match DENY first, then WARN.
-    deny_decision = await _decide_deny(binding, tool_name, segments, user_patterns)
-    if deny_decision is not None:
-        return deny_decision
-
-    # No DENY hits — scan for WARN.
-    return await _decide_warn(binding, tool_name, segments)
-
-
-async def _handle_hook_error(
-    binding: _HookBinding,
-    input_data: dict,
-    exc: Exception,
-) -> dict[str, Any]:
-    """The adjudicated _infra.error DENY path for internal hook failures.
-
-    The caller has already narrated the failure via ``logger.exception``;
-    this path emits the ``_infra.error`` event and fails CLOSED.
-    """
-    reason = f"security-hook-error: {exc!r}"
-    if binding.emit:
-        try:
-            await _safe_emit(
-                binding.bus,
-                SecurityDenied(
-                    session_id=binding.sid,
-                    sequence=0,
-                    tool_name=str(input_data.get("tool_name", ""))
-                    if isinstance(input_data, dict)
-                    else "",
-                    reason=reason,
-                    pattern_id="_infra.error",
-                    agent_name=binding.aname,
-                ),
-            )
-        except Exception:
-            logger.exception("security_hooks: failed to emit _infra.error event")
-    return _deny_envelope(reason)
-
-
-def build_preexec_hook(
+def build_preexec_hook(  # noqa: C901,PLR0915
     config: SecurityHooksConfig,
     *,
     bus: EventBus | None = None,
@@ -836,29 +1092,208 @@ def build_preexec_hook(
 
     Each call produces a distinct callable so that concurrent dispatches
     (different agents, different sessions) don't share state.
-    """
-    binding = _HookBinding(
-        bus=bus,
-        sid=session_id or "",
-        aname=agent_name or "",
-        user_patterns_source=tuple(config.extra_deny_patterns),
-        emit=bool(config.emit_denial_events),
-    )
 
-    async def _hook(
+    User-supplied ``extra_deny_patterns`` are compiled ONCE here at
+    factory time: on a long agent dispatch the compile result is stable
+    (config is frozen, patterns are captured) so per-call ``re.compile``
+    would be wasted work. A broken user pattern is captured as an
+    exception and re-raised inside the hook body, where the outer
+    try/except turns it into the Sage-mandated DENY + ``_infra.error``
+    event — preserving the existing fail-safe contract.
+    """
+    sid = session_id or ""
+    aname = agent_name or ""
+    user_patterns_source = tuple(config.extra_deny_patterns)
+    emit = bool(config.emit_denial_events)
+
+    # Compile user patterns once at factory time. Defer any compile
+    # error to the hook body so it lands in the existing outer-except
+    # DENY path (fail-safe semantics preserved).
+    _user_patterns_compiled: tuple[tuple[str, re.Pattern[str]], ...] | None
+    _user_patterns_error: Exception | None
+    try:
+        _user_patterns_compiled = _compile_user_patterns(list(user_patterns_source))
+        _user_patterns_error = None
+    except Exception as exc:  # noqa: BLE001 — surface as DENY in hook body
+        _user_patterns_compiled = None
+        _user_patterns_error = exc
+
+    async def _hook(  # noqa: C901,PLR0915
         input_data: dict,
         tool_use_id: str,
         context: dict,
     ) -> dict[str, Any]:
         try:
-            return await _evaluate_pre_tool_use(binding, input_data)
+            if not isinstance(input_data, dict):
+                return {}
+            if input_data.get("hook_event_name") != "PreToolUse":
+                return {}
+
+            tool_name = input_data.get("tool_name", "")
+            if tool_name not in ("Bash", "Write", "Edit"):
+                return {}
+
+            tool_input = input_data.get("tool_input", {}) or {}
+            command = _extract_command(tool_name, tool_input)
+            if not command:
+                return {}
+
+            # User patterns were compiled at factory time. If any
+            # pattern was invalid, raise here so the outer except turns
+            # it into the Sage-mandated _infra.error DENY path — this
+            # preserves the fail-CLOSED contract even for benign commands
+            # that would otherwise skip via the keyword prefilter.
+            if _user_patterns_error is not None:
+                raise _user_patterns_error
+            user_patterns = _user_patterns_compiled
+            assert user_patterns is not None  # narrow for type-checker  # noqa: S101
+
+            # Write/Edit sensitive-path family: gate path-shape inputs that
+            # the bash-shape C1-C7 catalogue would never match. Runs BEFORE
+            # the prefilter so a benign-looking file_path (no shell keywords)
+            # cannot skate past the scan.
+            if tool_name in ("Write", "Edit") and _match_write_edit_sensitive_path(command):
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=_WRITE_EDIT_SENSITIVE_PATH_REASON,
+                            pattern_id=_WRITE_EDIT_SENSITIVE_PATH_PATTERN_ID,
+                            agent_name=aname,
+                        ),
+                    )
+                return _deny_envelope(_WRITE_EDIT_SENSITIVE_PATH_REASON)
+
+            # Pre-strip detection: a Bash command bearing ASCII control bytes
+            # (anywhere outside \t / \n / \r) is bypass-shaped. The Stage-1
+            # _normalize strip rebuilds the token for downstream matching, but
+            # well-crafted payloads can still smuggle through dangerous-path
+            # exclusions on the rebuilt form (e.g. ``rm\x01-rf /tmp/`` would
+            # otherwise inherit C1.1's ``/tmp/`` exclusion). Treat control-byte
+            # presence as its own deny signal for Bash; Write/Edit accept
+            # arbitrary file content, so this gate applies only to Bash.
+            if tool_name == "Bash" and _CONTROL_BYTE_RE.search(command):
+                reason = "ASCII control byte in Bash command — bypass-shaped payload denied."
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=reason,
+                            pattern_id="_infra.control-byte",
+                            agent_name=aname,
+                        ),
+                    )
+                return _deny_envelope(reason)
+
+            normalized = _normalize(command)
+
+            segments = _unwrap(normalized, max_depth=5)
+
+            # Exhaustion sentinel from _unwrap → DENY.
+            if _UNWRAP_EXHAUSTED_SENTINEL in segments:
+                reason = (
+                    "security-hook-error: unwrap depth exceeded; "
+                    "command nesting beyond safe scan depth"
+                )
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=reason,
+                            pattern_id="_infra.unwrap-exhausted",
+                            agent_name=aname,
+                        ),
+                    )
+                return _deny_envelope(reason)
+
+            # Prefilter skips the expensive regex pool unless the command
+            # carries a "dangerous-looking" token OR the user supplied
+            # extras (we can't keyword-prefilter for arbitrary user
+            # patterns).
+            if not user_patterns and not _keyword_hit(segments):
+                return {}
+
+            # Match DENY first, then WARN.
+            for seg in segments:
+                deny_hit = _match_deny(seg, user_patterns=user_patterns)
+                if deny_hit is not None:
+                    rule_id, message = deny_hit
+                    if emit:
+                        await _safe_emit(
+                            bus,
+                            SecurityDenied(
+                                session_id=sid,
+                                sequence=0,
+                                tool_name=tool_name,
+                                reason=message,
+                                pattern_id=rule_id,
+                                agent_name=aname,
+                            ),
+                        )
+                    return _deny_envelope(message)
+
+            # No DENY hits — scan for WARN.
+            warn_hits: list[tuple[str, str]] = []
+            for seg in segments:
+                warn_hit = _match_warn(seg)
+                if warn_hit is not None:
+                    warn_hits.append(warn_hit)
+
+            if warn_hits:
+                rule_id, message = warn_hits[0]
+                warn_reason = f"WARN: {message}"
+                if emit:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=tool_name,
+                            reason=warn_reason,
+                            pattern_id=rule_id,
+                            agent_name=aname,
+                        ),
+                    )
+                return _allow_envelope(warn_reason)
+
+            return {}
+
         except asyncio.CancelledError:
             # CancelledError is a BaseException in Py3.8+ but to be safe on
             # older runtimes we explicitly re-raise.
             raise
         except Exception as exc:
-            logger.exception("security_hooks: internal error during PreToolUse evaluation")
-            return await _handle_hook_error(binding, input_data, exc)
+            reason = f"security-hook-error: {exc!r}"
+            logger.exception(
+                "security_hooks: internal error during PreToolUse evaluation",
+            )
+            if emit:
+                try:
+                    await _safe_emit(
+                        bus,
+                        SecurityDenied(
+                            session_id=sid,
+                            sequence=0,
+                            tool_name=str(input_data.get("tool_name", ""))
+                            if isinstance(input_data, dict)
+                            else "",
+                            reason=reason,
+                            pattern_id="_infra.error",
+                            agent_name=aname,
+                        ),
+                    )
+                except Exception:
+                    logger.exception("security_hooks: failed to emit _infra.error event")
+            return _deny_envelope(reason)
 
     return _hook
 

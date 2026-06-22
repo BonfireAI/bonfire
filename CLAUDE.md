@@ -21,7 +21,6 @@ Supporting files:
 - [`docs/architecture.md`](docs/architecture.md) — module map and pipeline flow (read first)
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records, with ADR-001 binding the naming vocabulary
 - [`docs/release-policy.md`](docs/release-policy.md) + [`docs/release-gates.md`](docs/release-gates.md) — what blocks a v0.1.0 tag
-- [`docs/audit/sage-decisions/`](docs/audit/sage-decisions/) — design decisions that produced today's contracts
 
 ## Tech Stack
 
@@ -119,10 +118,7 @@ leaving this file.
 
 ## Canon Awareness
 
-Before any commit that touches canonical vocabulary — tier names, agent roles, claim counts (the Four Claims), palette names, mascot names (CHUNK), voice rules — consult **THE CANON**:
-<https://linear.app/bonfire-codeforge/document/the-canon-source-of-truth-for-all-surfaces-331e401a0fbf>
-
-bonfire-public is a customer-facing PyPI ship surface; canonical drift here propagates to every install. The Canon wins on contradiction — consult it before any change to canonical vocabulary, and never paraphrase or rename without amending Canon first. ADR-001's three-layer naming vocabulary (`knowledge/`, `cost/`, `workflow/`) is part of the Canon's surface-level vocabulary.
+Canonical vocabulary in this repo (tier names, agent roles, claim counts like the Four Claims, palette names, mascot names like CHUNK, voice rules) must remain stable. ADR-001's three-layer naming vocabulary (`knowledge/`, `cost/`, `workflow/`) is part of the public canon surface here. Don't paraphrase or rename without amending the relevant ADR first. bonfire-public is a customer-facing PyPI ship surface; canonical drift here propagates to every install.
 
 ## Agent Commit Protocol
 
@@ -220,6 +216,8 @@ release flips public, the integration branch for v0.2 is cut from `main`.
 - `tests/unit/` — flat test files (`test_<module>.py`)
 - `tests/integration/` — broader tests; deterministic, no network
 - `tests/e2e/` — fixture-driven box runs; LOCAL ONLY, never in CI
+- `tests/smoke/` — fast import/CLI smoke checks; runs in CI via `smoke.yml`
+- `tests/scripts/` — driver-adjacent tests and ad-hoc characterization scripts (some files are pytest-collected, others run directly)
 - `docs/` — architecture, ADRs, release policy, audit trail
 - Envelope + Payload handoff protocol between stages (see
   [`docs/architecture.md`](docs/architecture.md))
@@ -262,8 +260,10 @@ A `v0.1.0` tag is BLOCKED until ALL of:
    ([`docs/release-policy.md`](docs/release-policy.md) line 40).
 3. Trust-triangle components on `main`: the four `@runtime_checkable` extension
    protocols (`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`),
-   the per-role tool allow-lists with default floor (W4.1), and the default
-   security hook set (W4.2). See [`docs/release-policy.md`](docs/release-policy.md).
+   the default allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+   the Protocol seam IS the user-configurable surface; no TOML loader ships in
+   v0.1), and the default security hook set (W4.2). See
+   [`docs/release-policy.md`](docs/release-policy.md).
 4. Box E2E PASS verdict on the v0.1.0 tag commit
    ([`docs/release-gates.md`](docs/release-gates.md) line 105).
 5. Every README example executable in a fresh box
@@ -368,29 +368,6 @@ If a rule in `CONTRIBUTING.md` and a rule in this CLAUDE.md disagree:
 agent-runtime concerns. If they disagree on something fundamental, file an
 issue.
 
-## Links Upward
-
-This repo is one of several in the Bonfire constellation. The constellation has
-three governance layers above this file:
-
-- **Workspace coordinator:** `/home/ishtar/Projects/CLAUDE.md` (operator-local;
-  not in this repo). Defines the multi-repo path-resolution protocol and the
-  boot sequence every session runs before this file is read.
-- **Forge constitution:** `ishtar/CLAUDE.md` (operator-local; in the `ishtar/`
-  repo). Defines the prompt-architect role, the dual-workflow pattern, and the
-  Canon Awareness framing this file mirrors.
-- **Internal v1 codebase:** `bonfire/CLAUDE.md` (operator-local; in the
-  private `bonfire/` repo). The v1 source that this public tree ports from.
-  **Module names differ** (per ADR-001 § Module Renames above) — the public
-  tree is the source of truth for module naming inside this repo.
-
-External contributors are not expected to read the operator-local files. They
-exist for the maintainer's multi-repo workflow. This section documents them so
-a fresh-boot agent session knows where its parents are.
-
-For the canonical vocabulary across the public Bonfire surfaces (Free / Website
-/ Cyberdeck), see THE CANON:
-<https://linear.app/bonfire-codeforge/document/the-canon-source-of-truth-for-all-surfaces-331e401a0fbf>
 
 <!-- declared mirror of candyfactory-canon ADR 0029 + ADR 0030 · mounted by candyfactory-quality -->
 ## The BubbleGum Law (form)

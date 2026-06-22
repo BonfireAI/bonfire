@@ -97,7 +97,7 @@ from bonfire.models.events import (
     StageSkipped,
     StageStarted,
 )
-from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowSpec, WorkflowType
+from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowPlan, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -221,20 +221,20 @@ class _EventCollector:
 # ---------------------------------------------------------------------------
 
 
-def _single_plan(agent_name: str = "s1") -> WorkflowSpec:
-    return WorkflowSpec(
+def _single_plan(agent_name: str = "s1") -> WorkflowPlan:
+    return WorkflowPlan(
         name="single",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name="s1", agent_name=agent_name)],
     )
 
 
-def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowSpec:
+def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowPlan:
     stages = []
     for i, name in enumerate(names):
         deps = [names[i - 1]] if i > 0 else []
         stages.append(StageSpec(name=name, agent_name=name, depends_on=deps))
-    return WorkflowSpec(
+    return WorkflowPlan(
         name="linear",
         workflow_type=WorkflowType.STANDARD,
         stages=stages,
@@ -242,17 +242,17 @@ def _linear_plan(*names: str, budget: float = 10.0) -> WorkflowSpec:
     )
 
 
-def _parallel_plan(group: str, *names: str) -> WorkflowSpec:
-    return WorkflowSpec(
+def _parallel_plan(group: str, *names: str) -> WorkflowPlan:
+    return WorkflowPlan(
         name="parallel",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name=n, agent_name=n, parallel_group=group) for n in names],
     )
 
 
-def _diamond_plan() -> WorkflowSpec:
+def _diamond_plan() -> WorkflowPlan:
     """A -> B,C -> D."""
-    return WorkflowSpec(
+    return WorkflowPlan(
         name="diamond",
         workflow_type=WorkflowType.STANDARD,
         stages=[
@@ -317,15 +317,10 @@ class TestImports:
 
 
 class TestPipelineResult:
-    """PipelineResult: frozen Pydantic model with the locked field shape (Sage D8).
-
-    Phase 4 (failure architecture) additively extended the V1 8-field set with
-    ``error_detail: ErrorDetail | None`` -- the structured, traceback-bearing
-    failure companion to the back-compat ``error: str`` field (Elegance Law).
-    """
+    """PipelineResult: frozen Pydantic model with the V1 8-field shape (Sage D8)."""
 
     def test_field_list_matches_v1(self) -> None:
-        """Locked field set: V1 8 fields + the additive ``error_detail``."""
+        """Locked 8-field set."""
         from bonfire.engine.pipeline import PipelineResult
 
         expected = {
@@ -335,19 +330,10 @@ class TestPipelineResult:
             "total_cost_usd",
             "duration_seconds",
             "error",
-            "error_detail",
             "failed_stage",
             "gate_failure",
         }
         assert set(PipelineResult.model_fields.keys()) == expected
-
-    def test_error_detail_defaults_none_and_error_str_back_compat(self) -> None:
-        """``error`` (str) stays for back-compat; ``error_detail`` defaults None."""
-        from bonfire.engine.pipeline import PipelineResult
-
-        r = PipelineResult(success=False, session_id="s1", error="boom")
-        assert r.error == "boom"
-        assert r.error_detail is None
 
     def test_is_frozen(self) -> None:
         from bonfire.engine.pipeline import PipelineResult
@@ -456,7 +442,7 @@ class TestPipelineEngineConstructor:
             backend=_MockBackend(),
             bus=EventBus(),
             config=PipelineConfig(),
-            project_root="/fake/proj",
+            project_root="/tmp/proj",  # noqa: S108
         )
         assert engine is not None
 
@@ -591,6 +577,68 @@ class TestParallelExecution:
         result = await engine.run(_parallel_plan("g", "p1", "p2"))
         assert result.success is False
 
+    async def test_parallel_group_failure_preserves_sibling_costs(self) -> None:
+        """A FAILED sibling must NOT erase later siblings' cost or envelope.
+
+        Both parallel tasks are awaited by ``asyncio.TaskGroup`` before
+        any short-circuit decision. Previously, the post-await loop
+        short-circuited on the first FAILED result in dict-iteration
+        order; every subsequent sibling lost its envelope (not added
+        to ``stages_done``) AND its cost (not added to ``total_cost``).
+        With three siblings where the FIRST (in iteration order) fails,
+        both the bug AND the fix produce success=False -- the
+        regression-canary signal is ``total_cost_usd`` and the presence
+        of EVERY sibling's envelope in ``result.stages``.
+        """
+
+        class _PerAgentCostBackend:
+            def __init__(self, costs: dict[str, float], fail: set[str]) -> None:
+                self._costs = costs
+                self._fail = fail
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                if envelope.agent_name in self._fail:
+                    return envelope.model_copy(
+                        update={
+                            "status": TaskStatus.FAILED,
+                            "error": ErrorDetail(error_type="agent", message="boom"),
+                            "cost_usd": self._costs[envelope.agent_name],
+                        }
+                    )
+                return envelope.with_result(
+                    f"{envelope.agent_name} done",
+                    cost_usd=self._costs[envelope.agent_name],
+                )
+
+            async def health_check(self) -> bool:
+                return True
+
+        # p1 fails, p2 and p3 succeed -- but the buggy iteration short-
+        # circuits on p1 and drops p2 + p3 from accounting.
+        backend = _PerAgentCostBackend(
+            costs={"p1": 0.10, "p2": 0.20, "p3": 0.30},
+            fail={"p1"},
+        )
+        engine = _make_engine(backend=backend)
+        result = await engine.run(_parallel_plan("g", "p1", "p2", "p3"))
+
+        # All three ran (TaskGroup awaits all before short-circuit).
+        agents_called = {c.agent_name for c in backend.calls}
+        assert agents_called == {"p1", "p2", "p3"}
+
+        # Contract: every sibling's cost MUST be in total_cost_usd.
+        expected_total = 0.10 + 0.20 + 0.30
+        assert result.success is False
+        assert result.total_cost_usd == pytest.approx(expected_total), (
+            f"parallel-group short-circuit dropped sibling costs: "
+            f"expected {expected_total}, got {result.total_cost_usd}"
+        )
+
+        # Contract: every sibling's envelope MUST be in result.stages.
+        assert set(result.stages.keys()) == {"p1", "p2", "p3"}
+
 
 # ===========================================================================
 # 7. DAG — diamond & dependency ordering
@@ -619,7 +667,7 @@ class TestDAGExecution:
     async def test_root_runs_before_child(self) -> None:
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="t",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -671,7 +719,7 @@ class TestResume:
         pre = Envelope(
             task="t", agent_name="s1-agent", status=TaskStatus.COMPLETED, result="cached"
         )
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="resume",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -681,6 +729,62 @@ class TestResume:
         )
         result = await engine.run(plan, completed={"s1": pre})
         assert result.stages["s1"].result == "cached"
+
+    async def test_resume_path_sums_completed_stage_costs(self) -> None:
+        """Resume must seed total_cost from pre-completed stages' cost_usd.
+
+        Previously, ``_run_inner`` initialized ``total_cost = 0.0``
+        unconditionally, dropping every dollar already charged by the
+        original run. The downstream budget watchdog then saw an
+        artificially low total -- a resumed run could overspend its
+        configured cap silently.
+        """
+        backend = _MockBackend(cost=0.10)
+        engine = _make_engine(backend=backend)
+        pre_a = Envelope(
+            task="t",
+            agent_name="A",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.50,
+        )
+        pre_b = Envelope(
+            task="t",
+            agent_name="B",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.30,
+        )
+        plan = _linear_plan("A", "B", "C", budget=10.0)
+        result = await engine.run(plan, completed={"A": pre_a, "B": pre_b})
+
+        # A=0.50 + B=0.30 + C=0.10 = 0.90 (was 0.10 under the bug).
+        assert result.success is True
+        assert result.total_cost_usd == pytest.approx(0.90)
+
+    async def test_resume_budget_check_respects_pre_completed_cost(self) -> None:
+        """Pre-completed cost must count toward budget on resume.
+
+        If the prior run already spent $0.80 and the budget is $1.00,
+        a resumed run that costs $0.50 more should HALT (total $1.30 >
+        budget $1.00). The bug let it succeed because total_cost
+        re-started at 0.
+        """
+        backend = _MockBackend(cost=0.50)
+        engine = _make_engine(backend=backend)
+        pre = Envelope(
+            task="t",
+            agent_name="A",
+            status=TaskStatus.COMPLETED,
+            result="done",
+            cost_usd=0.80,
+        )
+        plan = _linear_plan("A", "B", budget=1.00)
+        result = await engine.run(plan, completed={"A": pre})
+
+        assert result.success is False
+        assert "budget" in result.error.lower()
+        assert result.total_cost_usd == pytest.approx(1.30)
 
 
 # ===========================================================================
@@ -694,7 +798,7 @@ class TestGateEvaluation:
     async def test_passing_gate_continues(self) -> None:
         gate = _MockGate(passed=True)
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -709,7 +813,7 @@ class TestGateEvaluation:
     async def test_failing_error_gate_halts(self) -> None:
         gate = _MockGate(passed=False, severity="error", message="bad")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["check"])],
@@ -722,7 +826,7 @@ class TestGateEvaluation:
     async def test_warning_gate_does_not_halt(self) -> None:
         gate = _MockGate(passed=False, severity="warning", message="minor")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["check"])],
@@ -735,7 +839,7 @@ class TestGateEvaluation:
         bus = EventBus()
         bus.subscribe_all(collector)
         engine = _make_engine(bus=bus, gate_registry={})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["nonexistent"])],
@@ -748,7 +852,7 @@ class TestGateEvaluation:
         pass_gate = _MockGate(passed=True)
         fail_gate = _MockGate(passed=False, severity="error")
         engine = _make_engine(gate_registry={"pass": pass_gate, "fail": fail_gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["pass", "fail"])],
@@ -770,7 +874,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -793,7 +897,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -812,11 +916,18 @@ class TestBounceBack:
         assert len(s1_calls) >= 2
 
     async def test_bounce_recovers_when_second_gate_eval_passes(self) -> None:
-        """When the re-evaluated gate passes, the pipeline continues."""
+        """When the re-evaluated gate passes, the pipeline continues.
+
+        ``_MockBackend`` charges ``cost=0.01`` per call. With the bounce,
+        the backend is called four times (fixer initial, s1 initial,
+        fixer bounce-target, s1 retry) so ``total_cost_usd`` must
+        equal ``4 * 0.01 == 0.04`` -- locks the cost-accumulation
+        contract on the bounce path even with the default backend.
+        """
         gate = _EventualPassGate()
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -832,11 +943,13 @@ class TestBounceBack:
         )
         result = await engine.run(plan)
         assert result.success is True
+        assert len(backend.calls) == 4
+        assert result.total_cost_usd == pytest.approx(0.04)
 
     async def test_bounce_without_target_halts(self) -> None:
         gate = _MockGate(passed=False, severity="error")
         engine = _make_engine(gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -856,7 +969,7 @@ class TestBounceBack:
         gate = _MockGate(passed=False, severity="error", message="forever broken")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, gate_registry={"check": gate})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="b",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -873,6 +986,144 @@ class TestBounceBack:
         result = await engine.run(plan)
         assert result.success is False
 
+    async def test_bounce_total_cost_includes_bounce_target_cost(self) -> None:
+        """Successful bounce must NOT drop the bounce-target's cost from
+        ``result.total_cost_usd``.
+
+        ``_handle_bounce`` runs the bounce target then re-runs the original
+        stage. Today, ``_handle_gate_result`` returns only the re-executed
+        original's cost as ``cost_delta``; the bounce-target's cost is
+        accumulated into a local variable inside ``_handle_bounce`` and
+        silently discarded. ``CostLimitGate`` reads the same float, so a
+        successful bounce can carry the run over the configured budget cap
+        without being detected.
+
+        Pre-bounce cost:        s1 first run  = 0.10  (recorded by
+                                                       _run_single_stage_group)
+        Bounce target cost:     fixer re-run  = 0.50  (DROPPED by current code)
+        Post-bounce cost:       s1 retry      = 0.10  (returned as cost_delta)
+
+        Expected total:         0.70
+        Bug-induced total:      0.20  (0.10 + 0.10 — fixer's 0.50 lost)
+        """
+
+        class _PerAgentCostBackend:
+            """Backend that returns a distinct cost per agent_name."""
+
+            def __init__(self, costs: dict[str, float]) -> None:
+                self._costs = costs
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                cost = self._costs[envelope.agent_name]
+                return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        gate = _EventualPassGate()  # fails first eval, passes on re-eval
+        backend = _PerAgentCostBackend(costs={"fixer": 0.50, "s1": 0.10})
+        engine = _make_engine(backend=backend, gate_registry={"check": gate})
+        plan = WorkflowPlan(
+            name="bounce-cost",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(name="fixer", agent_name="fixer"),
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    gates=["check"],
+                    on_gate_failure="fixer",
+                    depends_on=["fixer"],
+                ),
+            ],
+            budget_usd=10.0,  # well above any real total so budget can't halt
+        )
+
+        result = await engine.run(plan)
+
+        # Sanity: the bounce succeeded -- both stages ran (fixer twice, s1 twice)
+        assert result.success is True
+        fixer_calls = [c for c in backend.calls if c.agent_name == "fixer"]
+        s1_calls = [c for c in backend.calls if c.agent_name == "s1"]
+        assert len(fixer_calls) == 2, f"expected fixer to run twice, got {len(fixer_calls)}"
+        assert len(s1_calls) == 2, f"expected s1 to run twice, got {len(s1_calls)}"
+
+        # Contract: every executed-stage cost must show up in total_cost_usd.
+        # Costs charged across the run:
+        #   fixer initial (DAG):   0.50
+        #   s1 initial (DAG):      0.10
+        #   fixer bounce-target:   0.50  <-- silently dropped today
+        #   s1 retry:              0.10
+        expected_total = 0.50 + 0.10 + 0.50 + 0.10
+        assert result.total_cost_usd == pytest.approx(expected_total), (
+            f"total_cost_usd dropped the bounce-target's cost: "
+            f"expected {expected_total}, got {result.total_cost_usd}"
+        )
+
+    async def test_bounce_target_cost_counted_against_budget(self) -> None:
+        """Successful bounce must NOT bypass ``budget_usd`` by dropping the
+        bounce-target's cost from accounting.
+
+        Because ``_handle_bounce`` drops the bounce-target's cost, the
+        post-bounce group-boundary budget check (pipeline.py line 227) sees
+        an undercounted total and incorrectly lets the run succeed when its
+        true cost overruns the cap. This pins the "silent bypass" framing of
+        the bug: the gate-equivalent halt never fires.
+
+        Costs (same backend wiring as the cost-accounting test above):
+            true total     = 0.50 + 0.10 + 0.50 + 0.10 = 1.20
+            buggy total    = 0.50 + 0.10 + 0.10        = 0.70 (fixer drop)
+            budget_usd     = 1.00
+
+        true > budget  -> pipeline MUST halt with success=False, "budget" err.
+        buggy <= budget -> pipeline incorrectly returns success=True (today).
+        """
+
+        class _PerAgentCostBackend:
+            def __init__(self, costs: dict[str, float]) -> None:
+                self._costs = costs
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                cost = self._costs[envelope.agent_name]
+                return envelope.with_result(f"{envelope.agent_name} done", cost_usd=cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        gate = _EventualPassGate()
+        backend = _PerAgentCostBackend(costs={"fixer": 0.50, "s1": 0.10})
+        engine = _make_engine(backend=backend, gate_registry={"check": gate})
+        plan = WorkflowPlan(
+            name="bounce-budget-bypass",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[
+                StageSpec(name="fixer", agent_name="fixer"),
+                StageSpec(
+                    name="s1",
+                    agent_name="s1",
+                    gates=["check"],
+                    on_gate_failure="fixer",
+                    depends_on=["fixer"],
+                ),
+            ],
+            budget_usd=1.00,  # true 1.20 > 1.00 ; buggy 0.70 < 1.00
+        )
+
+        result = await engine.run(plan)
+
+        # With correct accounting, the bounce pushes total above the cap and
+        # the group-boundary budget watchdog must halt the pipeline. The bug
+        # lets it slip through with success=True.
+        assert result.success is False, (
+            "budget bypass: real total (1.20) exceeds budget (1.00) but pipeline "
+            f"reported success=True with total_cost_usd={result.total_cost_usd}"
+        )
+        assert "budget" in result.error.lower(), f"expected budget halt, got error={result.error!r}"
+
 
 # ===========================================================================
 # 11. Iteration — retry at pipeline level
@@ -885,7 +1136,7 @@ class TestIteration:
     async def test_stage_retries_up_to_max(self) -> None:
         backend = _MockBackend(fail_agents={"s1"})
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="i",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
@@ -897,13 +1148,108 @@ class TestIteration:
     async def test_exhausted_iterations_yields_failure(self) -> None:
         backend = _MockBackend(fail_agents={"s1"})
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="i",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", max_iterations=2)],
         )
         result = await engine.run(plan)
         assert result.success is False
+
+    async def test_execute_stage_sums_iteration_costs(self) -> None:
+        """Cost from each iteration must accumulate into total_cost_usd.
+
+        Previously, ``_execute_stage`` returned only the final envelope's
+        ``cost_usd`` -- intermediate failed iterations charged real
+        dollars but their cost vanished. With max_iterations=3 and two
+        failed-then-one-successful iterations, total_cost_usd must
+        equal the sum of all three iteration costs, not just the last.
+        """
+
+        class _FailTwiceThenSucceedBackend:
+            """Charges cost on every call; fails the first 2, succeeds on the 3rd."""
+
+            def __init__(self, cost_per_call: float) -> None:
+                self._cost = cost_per_call
+                self._calls: int = 0
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                self._calls += 1
+                if self._calls < 3:
+                    return envelope.model_copy(
+                        update={
+                            "status": TaskStatus.FAILED,
+                            "error": ErrorDetail(error_type="agent", message="flake"),
+                            "cost_usd": self._cost,
+                        }
+                    )
+                return envelope.with_result("ok", cost_usd=self._cost)
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _FailTwiceThenSucceedBackend(cost_per_call=0.20)
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="i",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
+            budget_usd=10.0,
+        )
+        result = await engine.run(plan)
+
+        # All three iterations ran (fail, fail, succeed).
+        assert len(backend.calls) == 3
+        assert result.success is True
+
+        # Contract: every iteration's cost must show up in total_cost_usd.
+        # Bug: only the last iteration's $0.20 survived. Fix: $0.60 total.
+        assert result.total_cost_usd == pytest.approx(0.60), (
+            f"iteration costs dropped: expected 0.60, got {result.total_cost_usd}"
+        )
+
+    async def test_exhausted_iterations_total_cost_sums_all_iterations(self) -> None:
+        """When all iterations fail, total_cost_usd must STILL sum them.
+
+        The failed-exit branch of ``_execute_stage`` returned ``last_envelope``
+        whose ``cost_usd`` was only the final iteration's slice. Real
+        production cost leaked.
+        """
+
+        class _AlwaysFailWithCostBackend:
+            def __init__(self, cost: float) -> None:
+                self._cost = cost
+                self.calls: list[Envelope] = []
+
+            async def execute(self, envelope: Envelope, *, options: DispatchOptions) -> Envelope:
+                self.calls.append(envelope)
+                return envelope.model_copy(
+                    update={
+                        "status": TaskStatus.FAILED,
+                        "error": ErrorDetail(error_type="agent", message="always-fail"),
+                        "cost_usd": self._cost,
+                    }
+                )
+
+            async def health_check(self) -> bool:
+                return True
+
+        backend = _AlwaysFailWithCostBackend(cost=0.15)
+        engine = _make_engine(backend=backend)
+        plan = WorkflowPlan(
+            name="i",
+            workflow_type=WorkflowType.STANDARD,
+            stages=[StageSpec(name="s1", agent_name="s1", max_iterations=3)],
+            budget_usd=10.0,
+        )
+        result = await engine.run(plan)
+
+        assert len(backend.calls) == 3
+        assert result.success is False
+        # 3 iterations * $0.15 = $0.45 (was $0.15 under the bug).
+        assert result.total_cost_usd == pytest.approx(0.45)
 
 
 # ===========================================================================
@@ -916,7 +1262,7 @@ class TestBudget:
 
     async def test_within_budget_succeeds(self) -> None:
         engine = _make_engine()
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="ok",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -928,7 +1274,7 @@ class TestBudget:
     async def test_over_budget_halts(self) -> None:
         backend = _MockBackend(cost=5.0)
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="over",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -947,7 +1293,7 @@ class TestBudget:
 
         backend = _MockBackend(cost=100.0)
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1027,7 +1373,7 @@ class TestEventEmission:
         bus = EventBus()
         bus.subscribe_all(collector)
         engine = _make_engine(bus=bus)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="test-plan",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -1049,7 +1395,7 @@ class TestNeverRaise:
 
     async def test_handler_exception_returns_failed_result(self) -> None:
         engine = _make_engine(handlers={"boom": _RaisingHandler()})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="boom")],
@@ -1075,7 +1421,7 @@ class TestNeverRaise:
 
     async def test_unknown_handler_does_not_raise(self) -> None:
         engine = _make_engine(handlers={})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="x",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="nope")],
@@ -1092,7 +1438,7 @@ class TestNeverRaise:
                 raise RuntimeError("gate exploded")
 
         engine = _make_engine(gate_registry={"boom": _ExplodingGate()})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["boom"])],
@@ -1114,7 +1460,7 @@ class TestHandlers:
         handler = _MockHandler(result="custom-result")
         backend = _MockBackend()
         engine = _make_engine(backend=backend, handlers={"custom": handler})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="h",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="custom")],
@@ -1126,7 +1472,7 @@ class TestHandlers:
 
     async def test_unknown_handler_fails_gracefully(self) -> None:
         engine = _make_engine(handlers={})
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="h",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", handler_name="missing")],
@@ -1175,7 +1521,7 @@ class TestInitialEnvelope:
     async def test_initial_metadata_propagates_to_stages(self) -> None:
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="meta",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1")],
@@ -1190,7 +1536,7 @@ class TestInitialEnvelope:
         """Stage-level role wins on key collision (last-write)."""
         backend = _MockBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="meta",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="stage-role")],
@@ -1261,7 +1607,7 @@ class TestModelResolution:
 
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="role-pass",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
@@ -1282,7 +1628,7 @@ class TestModelResolution:
 
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="override-wins",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1314,7 +1660,7 @@ class TestModelResolution:
         cfg = PipelineConfig(model="pipeline-config-fallback")
         backend = _OptionsRecordingPipelineBackend()
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="config-fallback",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="")],
@@ -1391,7 +1737,7 @@ class TestPipelineEnvelopeInternalSentinel:
         # the config value into envelope.model and FAIL this assertion.
         cfg = PipelineConfig(model="pipeline-config-default")
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="envelope-sentinel",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", role="warrior")],
@@ -1457,7 +1803,7 @@ class TestPipelineUsesResolveDispatchModel:
         backend = _EnvelopeAndOptionsRecordingPipelineBackend()
         cfg = PipelineConfig(model="pipeline-config-default")
         engine = _make_engine(backend=backend, config=cfg)
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="helper-call",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -1523,7 +1869,7 @@ class TestPipelineLastResortFallbackUnnamedTask:
         the literal ``"<unnamed>"`` at the call site.
         """
         engine = _make_engine()
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="last-resort-empty-name",
             workflow_type=WorkflowType.STANDARD,
             stages=[

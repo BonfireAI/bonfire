@@ -7,11 +7,8 @@ Listens for StageCompleted, StageFailed, DispatchFailed, and SessionEnded
 events on the EventBus. Each event is transformed into a VaultEntry and
 stored via the configured VaultBackend.
 
-Dedup: a per-event hash (event_id + content) is computed before store();
-if the backend already contains that hash, the entry is silently skipped.
-Scoping the key by event_id ensures two distinct events that happen to
-produce identical content text are both stored, while a re-fired event
-(same event_id) is still suppressed as a true duplicate.
+Dedup: content_hash is computed before store(); if the backend already
+contains that hash, the entry is silently skipped.
 
 Resilience: all handlers catch exceptions from the backend so that a
 storage failure never crashes the pipeline.
@@ -111,12 +108,7 @@ class KnowledgeIngestConsumer:
     ) -> None:
         """Build a VaultEntry and persist it, with dedup and error resilience."""
         try:
-            # Dedup is scoped to (event_id, content), not content alone. Two
-            # distinct events that produce identical content text are genuinely
-            # distinct knowledge and must both be stored; only a re-fired event
-            # (same event_id + same content) is a true duplicate. Folding the
-            # event_id into the hash makes the dedup key per-event.
-            c_hash = content_hash(f"{event.event_id}\n{content}")
+            c_hash = content_hash(content)
             if await self.backend.exists(c_hash):
                 return
 
@@ -132,5 +124,5 @@ class KnowledgeIngestConsumer:
                 },
             )
             await self.backend.store(entry)
-        except Exception:
-            logger.exception("Vault store failed for %s event", entry_type)
+        except Exception:  # noqa: BLE001
+            logger.warning("Vault store failed for %s event", entry_type, exc_info=True)

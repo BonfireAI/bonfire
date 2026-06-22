@@ -15,7 +15,6 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from bonfire.errors import RetrievalError
 from bonfire.knowledge.hasher import content_hash as compute_hash
 
 if TYPE_CHECKING:
@@ -76,34 +75,30 @@ class LanceDBBackend:
 
         try:
             results = search.to_list()
-        except Exception as exc:
-            # Elegance Law: a real backend failure must SPEAK in the one typed
-            # vocabulary, not masquerade as a zero-hit ``[]``. A
-            # genuine empty result is still a success (handled above and by an
-            # empty ``to_list()``); only a *thrown* lookup becomes a typed,
-            # retryable RetrievalError carrying the originating exception.
-            raise RetrievalError(
-                f"Vault query failed: {exc}",
-                context={"query": query, "limit": limit, "entry_type": entry_type},
-            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Vault query failed: %s", exc)
+            return []
 
         return [self._record_to_entry(r) for r in results]
 
     async def exists(self, content_hash: str) -> bool:
+        """Return True when a row with this content_hash is stored.
+
+        Uses LanceDB's filter-only search path -- no query vector is
+        supplied, so the answer is determined entirely by the where-clause
+        on the indexed ``content_hash`` column. The earlier implementation
+        routed the lookup through ``search([0.0]*dim)``, scoring a zero
+        vector against the ANN index even though the answer was fully
+        determined by the filter. The ``count_rows()`` short-circuit is
+        also removed -- the empty-table case naturally returns an empty
+        result set.
+        """
         self._ensure_connected()
-        if self._table.count_rows() == 0:
-            return False
         safe_hash = content_hash.replace("'", "''")
         try:
-            results = (
-                self._table.search([0.0] * self._embedder.dim)
-                .where(f"content_hash = '{safe_hash}'")
-                .limit(1)
-                .to_list()
-            )
+            results = self._table.search().where(f"content_hash = '{safe_hash}'").limit(1).to_list()
             return len(results) > 0
-        except Exception as exc:
-            logger.exception("Vault exists check failed: %s", exc)
+        except Exception:  # noqa: BLE001
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:
@@ -119,9 +114,9 @@ class LanceDBBackend:
                 .to_list()
             )
             return [self._record_to_entry(r) for r in results]
-        except Exception as exc:
-            msg = f"Vault get_by_source failed: {exc}"
-            raise RetrievalError(msg, context={"source_path": source_path}) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Vault get_by_source failed: %s", exc)
+            return []
 
     def _ensure_connected(self) -> None:
         """Lazy connect. Runs migration if vault_v2 doesn't exist."""

@@ -1,17 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""In-memory vault backend.
+"""In-memory vault backend for testing.
 
-Stores entries in a list with O(1)-indexed dedup and a lowercase-content
-cache for fast substring query. No embeddings, no external dependencies.
-Implements VaultBackend protocol.
+Stores entries in a list. Query uses substring matching on content.
+No embeddings, no external dependencies. Implements VaultBackend protocol.
 
-Originally documented as "for testing," but the knowledge factory returns
-this backend as the SHIPPING DEFAULT when knowledge is unconfigured
-(``enabled=False`` or ``backend="memory"``). Production users hit this
-class on every ``bonfire scan`` unless they explicitly opt into LanceDB.
-The performance characteristics matter accordingly.
+Maintains side indices so the hot paths scale linearly:
+
+* ``_hash_set`` -- a ``set[str]`` of stored ``content_hash`` values so
+  :py:meth:`exists` is O(1). The earlier ``any(... for e in self._entries)``
+  scan made every ``exists`` call linear in vault size and turned ingest
+  (which calls ``exists`` once per entry before storing) into O(n²).
+* ``_lower_cache`` -- a parallel ``list[str]`` of lowercased ``e.content``
+  values, filled lazily on the first :py:meth:`query` call. The earlier
+  implementation re-lowered every entry on every call; caching the lowered
+  form per entry keeps repeated queries cheap.
 """
 
 from __future__ import annotations
@@ -25,37 +29,44 @@ if TYPE_CHECKING:
 
 
 class InMemoryVaultBackend:
-    """In-memory vault. Substring matching, no embeddings.
-
-    Shipping default when knowledge is unconfigured. O(1) ``exists()`` via a
-    side hash-set index; ``query()`` reads pre-computed lowercase content
-    from a side cache so it does NOT allocate ``e.content.lower()`` per
-    entry per call.
-
-    The public ``_entries: list[VaultEntry]`` attribute is preserved as the
-    canonical iteration / inspection surface; ``_hashes`` and
-    ``_lower_content`` are private indexes maintained at ``store()`` time.
-    All three are append-only — ``store()`` does NOT dedup on hash collision
-    (the backend's caller is responsible for the ``exists()``-then-``store()``
-    guard pattern).
-    """
+    """In-memory vault for tests. No embeddings, substring matching."""
 
     def __init__(self) -> None:
         self._entries: list[VaultEntry] = []
-        # O(1) ``exists()`` — set of all stored content hashes.
-        self._hashes: set[str] = set()
-        # ``query()`` lower-case cache, keyed by ``entry_id``. Populated at
-        # ``store()``; read in the substring-match hot loop so we never call
-        # ``e.content.lower()`` per entry per query.
-        self._lower_content: dict[str, str] = {}
+        # Set of stored content_hash values. O(1) membership for exists().
+        # A set is cheaper to maintain than a dict-index since the index
+        # mapping is never consulted by callers -- only presence.
+        self._hash_set: set[str] = set()
+        # Lowercased content, parallel to self._entries (same index). Filled
+        # lazily on the first query() pass so store() stays free of any
+        # per-entry .lower() allocation -- ingest-heavy workloads (which do
+        # not query) never pay the cost. Once populated, repeated queries
+        # reuse the cached lowercased strings (no per-call re-lowering).
+        self._lower_cache: list[str] = []
 
     async def store(self, entry: VaultEntry) -> str:
-        if not entry.content_hash:
-            entry = entry.model_copy(update={"content_hash": compute_hash(entry.content)})
+        c_hash = entry.content_hash
+        if not c_hash:
+            c_hash = compute_hash(entry.content)
+            entry = entry.model_copy(update={"content_hash": c_hash})
         self._entries.append(entry)
-        self._hashes.add(entry.content_hash)
-        self._lower_content[entry.entry_id] = entry.content.lower()
+        # set.add is idempotent; duplicate stores still land in _entries
+        # (preserving the prior append-on-duplicate behaviour) but exists()
+        # resolves in O(1).
+        self._hash_set.add(c_hash)
         return entry.entry_id
+
+    def _ensure_lower_cache(self) -> None:
+        """Bring ``_lower_cache`` up to length with ``_entries`` (idempotent).
+
+        Lowercases any entries appended since the last sync. ``.lower()`` runs
+        at most once per stored entry across the backend's lifetime.
+        """
+        if len(self._lower_cache) == len(self._entries):
+            return
+        # Append lowered content for any new entries since the last sync.
+        for entry in self._entries[len(self._lower_cache) :]:
+            self._lower_cache.append(entry.content.lower())
 
     async def query(
         self,
@@ -64,23 +75,21 @@ class InMemoryVaultBackend:
         limit: int = 5,
         entry_type: str | None = None,
     ) -> list[VaultEntry]:
-        candidates = self._entries
-        if entry_type is not None:
-            candidates = [e for e in candidates if e.entry_type == entry_type]
+        self._ensure_lower_cache()
         query_words = query.lower().split()
-        # Read from the lower-case cache populated at store() — no per-entry
-        # ``.lower()`` allocation in this hot path.
-        lower_content = self._lower_content
-        scored = [
-            (e, sum(1 for w in query_words if w in lower_content[e.entry_id])) for e in candidates
-        ]
-        scored = [(e, s) for e, s in scored if s > 0]
+        scored: list[tuple[VaultEntry, int]] = []
+        for idx, entry in enumerate(self._entries):
+            if entry_type is not None and entry.entry_type != entry_type:
+                continue
+            lowered = self._lower_cache[idx]
+            score = sum(1 for w in query_words if w in lowered)
+            if score > 0:
+                scored.append((entry, score))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [e for e, _ in scored[:limit]]
 
     async def exists(self, content_hash: str) -> bool:
-        # O(1) via side index; replaces the prior O(N) ``any(...)`` scan.
-        return content_hash in self._hashes
+        return content_hash in self._hash_set
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:
         return [e for e in self._entries if e.source_path == source_path]

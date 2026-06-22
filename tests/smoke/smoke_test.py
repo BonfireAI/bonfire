@@ -36,7 +36,6 @@ That is deferred to v0.1.1 / BON-633.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
@@ -118,8 +117,7 @@ def step1_import_bonfire() -> None:
     label = "step1: import bonfire + __version__"
     try:
         import bonfire
-    except Exception as exc:  # pragma: no cover — failure path is the gate.
-        logging.exception("step1: import bonfire crashed")
+    except Exception as exc:  # pragma: no cover — failure path is the gate.  # noqa: BLE001
         _fail(label, f"import failed: {exc!r}")
         return
     version = getattr(bonfire, "__version__", None)
@@ -140,8 +138,7 @@ def step2_protocols_surface() -> None:
             VaultBackend,
             VaultEntry,
         )
-    except Exception as exc:
-        logging.exception("step2: bonfire.protocols import crashed")
+    except Exception as exc:  # noqa: BLE001
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -152,8 +149,7 @@ def step3_engine_surface() -> None:
     label = "step3: bonfire.engine public surface"
     try:
         from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401
-    except Exception as exc:
-        logging.exception("step3: bonfire.engine import crashed")
+    except Exception as exc:  # noqa: BLE001
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -234,8 +230,7 @@ def step8_packaged_data_file() -> None:
     label = "step8: importlib.resources finds bonfire.onboard/ui.html"
     try:
         resource = files("bonfire.onboard").joinpath("ui.html")
-    except Exception as exc:
-        logging.exception("step8: importlib.resources lookup crashed")
+    except Exception as exc:  # noqa: BLE001
         _fail(label, f"importlib.resources lookup failed: {exc!r}")
         return
     if not resource.is_file():

@@ -1,7 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Cost analyzer — read-only query layer over the JSONL ledger."""
+"""Cost analyzer -- read-only query layer over the JSONL ledger.
+
+Reads the ledger at most once per :class:`CostAnalyzer` instance and caches
+both the parsed raw dicts and (lazily) the validated Pydantic records.
+
+* The cache invalidates when the ledger's ``(mtime, size)`` signature changes,
+  so an append between calls is observed without forcing every call to re-read.
+* Read-only aggregations (:py:meth:`cumulative_cost`, :py:meth:`agent_costs`,
+  :py:meth:`model_costs`) work directly off the raw dicts and avoid the
+  per-record Pydantic ``model_validate`` cost on long ledgers.
+* Methods that return typed models (:py:meth:`session_cost`,
+  :py:meth:`all_sessions`, :py:meth:`all_records`) lazily validate, with the
+  result memoized for the cache lifetime.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +22,7 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from bonfire.cost.models import (
     DEFAULT_LEDGER_PATH,
@@ -23,85 +37,129 @@ logger = logging.getLogger(__name__)
 
 
 class CostAnalyzer:
-    """Reads the cost ledger and computes aggregations on demand.
-
-    Memoizes the parsed-record tuple on the instance, invalidated by a
-    *signature* of the ledger file: its mtime, inode, and size taken
-    together. Multiple aggregation methods called on the same analyzer
-    instance share one read — the default ``bonfire cost`` callback
-    (``cumulative_cost`` + ``all_sessions``) previously paid the parse cost
-    twice per invocation; post-memoization it pays once.
-
-    Why the signature is a triple, not just the mtime: atomic file
-    replacement (``mv``/``rename`` of a temp file over the ledger, restoring
-    a backup with ``cp -p``/``rsync --times``, extracting an archive) can
-    land the *same* mtime the cache last saw — either by writing within the
-    same filesystem-timestamp tick or by deliberately stamping the old mtime
-    back on. An mtime-only key would then serve stale cost data indefinitely,
-    silently mis-reporting spend. Pairing mtime with the inode number (which
-    a rename/replace changes) and the file size (which an in-place rewrite to
-    a different length changes) catches those cases that the mtime alone
-    misses.
-    """
-
-    # Sentinel signature for "ledger file does not exist." Distinct from any
-    # real (st_mtime_ns, st_ino, st_size) triple — the -1 mtime component can
-    # never collide with a valid os.stat().st_mtime_ns (which is
-    # non-negative). When the file later appears, this sentinel won't match
-    # the real signature, so the next _read_records() call invalidates and
-    # re-reads.
-    _SIGNATURE_MISSING = (-1, -1, -1)
+    """Reads the cost ledger and computes aggregations on demand."""
 
     def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
         self._ledger_path = Path(ledger_path)
-        # Cached parsed records + the file signature they were read at. Both
-        # are set together in _read_records(); a None cache means "never read."
-        self._cache: tuple[list[DispatchRecord], list[PipelineRecord]] | None = None
-        self._cache_signature: tuple[int, int, int] = self._SIGNATURE_MISSING
+        # Cache signature: (mtime, size). ``None`` means cache is empty.
+        self._cache_signature: tuple[float, int] | None = None
+        # Raw parsed dicts split by record type. Survive across calls until
+        # the ledger's (mtime, size) changes.
+        self._raw_dispatches: list[dict[str, Any]] = []
+        self._raw_pipelines: list[dict[str, Any]] = []
+        # Lazily computed validated record lists. Reset whenever the raw
+        # cache reloads.
+        self._validated_dispatches: list[DispatchRecord] | None = None
+        self._validated_pipelines: list[PipelineRecord] | None = None
 
-    def _current_ledger_signature(self) -> tuple[int, int, int]:
-        """Return the ledger's ``(mtime_ns, inode, size)`` signature.
+    # Required field-name sets for each record type. Used by the raw-dict
+    # aggregation paths to skip schema-invalid lines without invoking the
+    # per-record Pydantic ``model_validate`` cost.
+    _DISPATCH_REQUIRED_FIELDS = (
+        "timestamp",
+        "session_id",
+        "agent_name",
+        "cost_usd",
+        "duration_seconds",
+    )
+    _DISPATCH_NUMERIC_FIELDS = ("timestamp", "cost_usd", "duration_seconds")
+    _PIPELINE_REQUIRED_FIELDS = (
+        "timestamp",
+        "session_id",
+        "total_cost_usd",
+        "duration_seconds",
+        "stages_completed",
+    )
+    _PIPELINE_NUMERIC_FIELDS = (
+        "timestamp",
+        "total_cost_usd",
+        "duration_seconds",
+        "stages_completed",
+    )
 
-        Returns ``_SIGNATURE_MISSING`` if the file is absent. The three fields
-        together detect every change the cache must react to: an append or
-        edit advances ``st_mtime_ns``; an atomic rename/replace allocates a new
-        ``st_ino``; an in-place rewrite to a different length changes
-        ``st_size`` — covering the same-mtime hazards a bare mtime key misses.
+    @staticmethod
+    def _is_floatable(value: Any) -> bool:
+        """True iff ``float(value)`` would succeed.
+
+        The raw-dict aggregation paths call ``float()`` on these fields; a
+        non-numeric value (e.g. a malformed ledger row with ``cost_usd: null``
+        or ``"n/a"``) would otherwise raise and crash the whole aggregation.
+        Skipping such rows matches the prior ``model_validate``-then-skip
+        behaviour without paying Pydantic on the hot path.
         """
         try:
-            stat = self._ledger_path.stat()
-        except FileNotFoundError:
-            return self._SIGNATURE_MISSING
-        return (stat.st_mtime_ns, stat.st_ino, stat.st_size)
+            float(value)
+        except (TypeError, ValueError):
+            return False
+        return True
 
-    def _read_records(
-        self,
-    ) -> tuple[list[DispatchRecord], list[PipelineRecord]]:
-        """Read and parse all records from the ledger file.
+    @classmethod
+    def _dispatch_is_valid(cls, data: dict[str, Any]) -> bool:
+        """Cheap schema check: required ``DispatchRecord`` fields are present
+        and numeric fields are float-coercible.
 
-        Memoized per instance with signature-based invalidation: if the
-        ledger file's ``(mtime_ns, inode, size)`` signature matches the cached
-        value, the cached tuple is returned as-is (identity-equal to the prior
-        call's result). Any change to any component of the signature — an
-        mtime advance from an append, a new inode from an atomic replacement,
-        or a size change from an in-place rewrite, including the file
-        appearing after a previous missing-file read — triggers a fresh parse.
+        Mirrors the prior ``model_validate``-then-skip behaviour for callers
+        that aggregate off the raw dicts. Same skip semantics, no Pydantic
+        cost on the hot path.
         """
-        current_signature = self._current_ledger_signature()
-        if self._cache is not None and current_signature == self._cache_signature:
-            return self._cache
+        if not all(field in data for field in cls._DISPATCH_REQUIRED_FIELDS):
+            return False
+        return all(cls._is_floatable(data[field]) for field in cls._DISPATCH_NUMERIC_FIELDS)
 
-        dispatches: list[DispatchRecord] = []
-        pipelines: list[PipelineRecord] = []
+    @classmethod
+    def _pipeline_is_valid(cls, data: dict[str, Any]) -> bool:
+        """Cheap schema check: required ``PipelineRecord`` fields are present
+        and numeric fields are float-coercible."""
+        if not all(field in data for field in cls._PIPELINE_REQUIRED_FIELDS):
+            return False
+        return all(cls._is_floatable(data[field]) for field in cls._PIPELINE_NUMERIC_FIELDS)
 
-        if current_signature == self._SIGNATURE_MISSING:
-            # File doesn't exist — cache the empty result keyed by the
-            # missing-sentinel so a follow-up call without file creation
-            # still hits cache.
-            self._cache = (dispatches, pipelines)
-            self._cache_signature = self._SIGNATURE_MISSING
-            return self._cache
+    def _current_signature(self) -> tuple[float, int] | None:
+        """Return ``(mtime, size)`` for the ledger, or ``None`` if absent.
 
+        Uses ``stat()`` (not ``open``) so the open-count tests stay honest --
+        the cache check itself never opens the file.
+        """
+        try:
+            st = self._ledger_path.stat()
+        except FileNotFoundError:
+            return None
+        return (st.st_mtime, st.st_size)
+
+    def _load_if_needed(self) -> None:  # noqa: C901
+        """Read the ledger if it has changed since the last load.
+
+        Caches parsed dicts under ``_raw_dispatches`` / ``_raw_pipelines`` and
+        invalidates the validated-record memos so the next typed-access call
+        rebuilds them.
+        """
+        sig = self._current_signature()
+        if sig is None:
+            # Ledger is missing -- clear any prior cache.
+            if (
+                self._cache_signature is not None
+                or self._raw_dispatches
+                or self._raw_pipelines
+                or self._validated_dispatches is not None
+                or self._validated_pipelines is not None
+            ):
+                self._cache_signature = None
+                self._raw_dispatches = []
+                self._raw_pipelines = []
+                self._validated_dispatches = None
+                self._validated_pipelines = None
+            return
+        if self._cache_signature == sig:
+            return
+
+        raw_dispatches: list[dict[str, Any]] = []
+        raw_pipelines: list[dict[str, Any]] = []
+        # Aggregate ``Unknown record type`` warnings into one
+        # summary line per load. A legacy ledger with N rows missing the
+        # ``type`` field previously produced N WARNING lines on every
+        # ``_load_if_needed`` call, drowning real signal in noise. Track
+        # counts per observed type and emit a single summary at the end.
+        unknown_counts: dict[str | None, int] = {}
         with self._ledger_path.open("r", encoding="utf-8") as fh:
             for line_num, line in enumerate(fh, 1):
                 line = line.strip()
@@ -112,57 +170,92 @@ class CostAnalyzer:
                 except json.JSONDecodeError:
                     logger.warning("Skipping malformed line %d in %s", line_num, self._ledger_path)
                     continue
-
                 record_type = data.get("type")
-                try:
-                    if record_type == "dispatch":
-                        dispatches.append(DispatchRecord.model_validate(data))
-                    elif record_type == "pipeline":
-                        pipelines.append(PipelineRecord.model_validate(data))
+                if record_type == "dispatch":
+                    raw_dispatches.append(data)
+                elif record_type == "pipeline":
+                    raw_pipelines.append(data)
+                else:
+                    # Aggregate; emit one summary below.
+                    if isinstance(record_type, str) or record_type is None:
+                        key = record_type
                     else:
-                        logger.warning("Unknown record type %r on line %d", record_type, line_num)
-                except (ValueError, KeyError, TypeError):
-                    logger.warning(
-                        "Skipping invalid record on line %d in %s",
-                        line_num,
-                        self._ledger_path,
-                    )
+                        key = repr(record_type)
+                    unknown_counts[key] = unknown_counts.get(key, 0) + 1
 
-        # Cache populated tuple keyed by the signature we observed at read
-        # time. If any component (mtime, inode, or size) differs between this
-        # call and the next, the signature check at the top of _read_records
-        # will invalidate.
-        self._cache = (dispatches, pipelines)
-        self._cache_signature = current_signature
-        return self._cache
+        if unknown_counts:
+            total = sum(unknown_counts.values())
+            # One summary line, regardless of how many distinct unknown
+            # types or how many rows. Format the distinct types compactly
+            # so an operator can still grep for a specific shape.
+            type_counts = ", ".join(
+                f"{t!r}: {c}" for t, c in sorted(unknown_counts.items(), key=lambda kv: -kv[1])
+            )
+            logger.warning(
+                "Skipped %d ledger row(s) with unknown record type in %s (%s). "
+                "Legacy ledger rows lacking a 'type' field are ignored.",
+                total,
+                self._ledger_path,
+                type_counts,
+            )
+
+        self._raw_dispatches = raw_dispatches
+        self._raw_pipelines = raw_pipelines
+        self._cache_signature = sig
+        # The newly-loaded raw cache invalidates any prior validated memos.
+        self._validated_dispatches = None
+        self._validated_pipelines = None
+
+    def _validated_dispatch_records(self) -> list[DispatchRecord]:
+        """Lazily validate the cached raw dispatch dicts.
+
+        Invalid records (those that fail Pydantic validation) are skipped
+        with a warning -- the read-side has always been forgiving of legacy
+        or malformed rows. The memo lives for the lifetime of the current
+        ``_cache_signature``.
+        """
+        if self._validated_dispatches is not None:
+            return self._validated_dispatches
+        validated: list[DispatchRecord] = []
+        for idx, data in enumerate(self._raw_dispatches, 1):
+            try:
+                validated.append(DispatchRecord.model_validate(data))
+            except (ValueError, KeyError, TypeError):
+                logger.warning("Skipping invalid dispatch record %d in %s", idx, self._ledger_path)
+        self._validated_dispatches = validated
+        return validated
+
+    def _validated_pipeline_records(self) -> list[PipelineRecord]:
+        """Lazily validate the cached raw pipeline dicts."""
+        if self._validated_pipelines is not None:
+            return self._validated_pipelines
+        validated: list[PipelineRecord] = []
+        for idx, data in enumerate(self._raw_pipelines, 1):
+            try:
+                validated.append(PipelineRecord.model_validate(data))
+            except (ValueError, KeyError, TypeError):
+                logger.warning("Skipping invalid pipeline record %d in %s", idx, self._ledger_path)
+        self._validated_pipelines = validated
+        return validated
 
     def cumulative_cost(self) -> float:
-        """Grand total USD across the whole ledger.
+        """Grand total USD across all pipeline records.
 
-        Every completed pipeline contributes its summary total. On top of
-        that, any *orphan* session — one that emitted dispatches but never a
-        PipelineCompleted summary, because its pipeline crashed mid-run
-        (Ctrl-C, or a contributor driving the engine directly) — contributes
-        the sum of its dispatch costs. Without the orphan term this headline
-        figure (e.g. "Built by Bonfire for $X") would silently under-count
-        real spend, which is a trust number we must not under-report.
-
-        A session that has a pipeline summary is counted only once, via that
-        summary; its dispatch rows are not re-added, so this stays additive
-        and non-breaking for the common completed-pipeline case.
+        Aggregates directly off the raw cached dicts -- the field is a flat
+        ``float`` and does not require Pydantic validation per record. Lines
+        missing any required ``PipelineRecord`` field are skipped (matching
+        the prior ``model_validate``-then-skip behaviour).
         """
-        dispatches, pipelines = self._read_records()
-
-        sessions_with_pipeline = {p.session_id for p in pipelines}
-        pipeline_total = sum(p.total_cost_usd for p in pipelines)
-        orphan_total = sum(
-            d.cost_usd for d in dispatches if d.session_id not in sessions_with_pipeline
+        self._load_if_needed()
+        return sum(
+            float(r["total_cost_usd"]) for r in self._raw_pipelines if self._pipeline_is_valid(r)
         )
-        return pipeline_total + orphan_total
 
     def session_cost(self, session_id: str) -> SessionCost | None:
         """Cost breakdown for a single session."""
-        dispatches, pipelines = self._read_records()
+        self._load_if_needed()
+        dispatches = self._validated_dispatch_records()
+        pipelines = self._validated_pipeline_records()
         return self._build_session_cost(session_id, dispatches, pipelines)
 
     @staticmethod
@@ -205,16 +298,24 @@ class CostAnalyzer:
         )
 
     def agent_costs(self) -> list[AgentCost]:
-        """Cumulative cost per agent, sorted by spend descending."""
-        dispatches, _ = self._read_records()
+        """Cumulative cost per agent, sorted by spend descending.
 
-        by_agent: dict[str, list[DispatchRecord]] = defaultdict(list)
-        for d in dispatches:
-            by_agent[d.agent_name].append(d)
+        Aggregates off the raw cached dicts -- avoids per-record Pydantic
+        validation on the read-only hot path. Lines missing any required
+        ``DispatchRecord`` field are skipped.
+        """
+        self._load_if_needed()
 
-        results = []
+        by_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for d in self._raw_dispatches:
+            if not self._dispatch_is_valid(d):
+                continue
+            agent_name = str(d["agent_name"])
+            by_agent[agent_name].append(d)
+
+        results: list[AgentCost] = []
         for agent_name, records in by_agent.items():
-            total = sum(r.cost_usd for r in records)
+            total = sum(float(r["cost_usd"]) for r in records)
             count = len(records)
             results.append(
                 AgentCost(
@@ -234,18 +335,24 @@ class CostAnalyzer:
         Records lacking a model string (legacy or unattributed) are grouped
         under model="". Empty-string is preserved as a visible bucket --
         operators want to see how much spend predates per-model attribution.
-        """
-        dispatches, _ = self._read_records()
 
-        by_model: dict[str, list[DispatchRecord]] = defaultdict(list)
-        for d in dispatches:
-            by_model[d.model].append(d)
+        Aggregates off the raw cached dicts -- avoids per-record Pydantic
+        validation on the read-only hot path.
+        """
+        self._load_if_needed()
+
+        by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for d in self._raw_dispatches:
+            if not self._dispatch_is_valid(d):
+                continue
+            model_name = str(d.get("model", ""))
+            by_model[model_name].append(d)
 
         results: list[ModelCost] = []
         for model_name, records in by_model.items():
-            total = sum(r.cost_usd for r in records)
+            total = sum(float(r["cost_usd"]) for r in records)
             count = len(records)
-            duration = sum(r.duration_seconds for r in records)
+            duration = sum(float(r["duration_seconds"]) for r in records)
             results.append(
                 ModelCost(
                     model=model_name,
@@ -262,9 +369,11 @@ class CostAnalyzer:
         """All sessions with their costs, sorted by timestamp descending.
 
         Groups dispatches and pipelines by session_id in a single pass each,
-        then builds SessionCost objects from the grouped data — O(M) total.
+        then builds SessionCost objects from the grouped data -- O(M) total.
         """
-        dispatches, pipelines = self._read_records()
+        self._load_if_needed()
+        dispatches = self._validated_dispatch_records()
+        pipelines = self._validated_pipeline_records()
 
         # Group dispatches by session_id in a single pass
         dispatches_by_session: dict[str, list[DispatchRecord]] = defaultdict(list)
@@ -272,7 +381,7 @@ class CostAnalyzer:
             dispatches_by_session[d.session_id].append(d)
 
         # Group pipelines by session_id in a single pass (last write wins
-        # — a retried PipelineCompleted event overrides the earlier record).
+        # -- a retried PipelineCompleted event overrides the earlier record).
         pipelines_by_session: dict[str, PipelineRecord] = {}
         for p in pipelines:
             pipelines_by_session[p.session_id] = p
@@ -317,7 +426,9 @@ class CostAnalyzer:
 
     def all_records(self) -> list[DispatchRecord | PipelineRecord]:
         """All ledger records sorted by timestamp. For export."""
-        dispatches, pipelines = self._read_records()
+        self._load_if_needed()
+        dispatches = self._validated_dispatch_records()
+        pipelines = self._validated_pipeline_records()
         records: list[DispatchRecord | PipelineRecord] = [*dispatches, *pipelines]
         records.sort(key=lambda r: r.timestamp)
         return records

@@ -284,6 +284,72 @@ class TestC1_8_RedirectOverwriteHome:
 
 
 # ---------------------------------------------------------------------------
+# BON-894 — C1.1 exclusion list is order-sensitive / substring-leaky.
+#
+# RED regression tests. The current negative-lookahead in C1.1 uses bare
+# ``\.venv`` / ``__pycache__`` tokens (substring match, no path-segment
+# anchor) and a wildcard-prefixed ``[a-zA-Z0-9_./-]*node_modules``. Two
+# concrete defects, both pinned below:
+#
+#   1. Substring leak — a destructive path that merely STARTS WITH an
+#      exclusion token as a substring is wrongly ALLOWED:
+#        * ``rm -rf __pycache__-backup/db``  -> should DENY (not a real
+#          __pycache__ dir; "__pycache__" is a substring of the dir name)
+#        * ``rm -rf node_modules-fake/x``    -> should DENY (same hazard)
+#        * ``rm -rf .venv-other/secrets``    -> should DENY (".venv" substr)
+#
+#   2. Order sensitivity — only tokens at the path START are recognised as
+#      ephemeral, so a legitimate nested ephemeral dir is wrongly DENIED:
+#        * ``rm -rf project/.venv``          -> should ALLOW (real .venv dir
+#          one segment deep)
+#        * ``rm -rf node_modules``           -> should ALLOW (already does;
+#          regression pin on the path that must stay allowed)
+#
+# The fix anchors each exclusion at a path-segment boundary
+# (``(?:^|/)<token>/``). Until then the asserts below FAIL.
+# ---------------------------------------------------------------------------
+
+
+class TestC1_1_ExclusionListOrderSensitive:
+    """BON-894 — C1.1 exclusion tokens must anchor at path-segment boundaries."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # "__pycache__" matched as a bare substring of the leading segment.
+            "rm -rf __pycache__-backup/db",
+            # wildcard-prefix / substring leak on node_modules.
+            "rm -rf node_modules-fake/x",
+            # ".venv" matched as a bare substring, not a directory marker.
+            "rm -rf .venv-other/secrets",
+        ],
+    )
+    def test_substring_leak_must_deny(self, cmd: str):
+        """Paths that merely CONTAIN an exclusion token as a substring must DENY."""
+        rule = _find("C1.1-rm-rf-non-temp")
+        assert rule.pattern.search(cmd) is not None, (
+            f"C1.1 must DENY {cmd!r} — the exclusion token is a substring of "
+            "the dir name, not a real ephemeral-path segment"
+        )
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # Legitimate ephemeral dir one path-segment deep — must be ALLOWED.
+            "rm -rf project/.venv",
+            # Already allowed today — regression pin so the fix keeps it allowed.
+            "rm -rf node_modules",
+        ],
+    )
+    def test_legitimate_ephemeral_still_allowed(self, cmd: str):
+        """Real dev-workflow rm -rf on ephemeral dirs must stay ALLOWED."""
+        rule = _find("C1.1-rm-rf-non-temp")
+        assert rule.pattern.search(cmd) is None, (
+            f"C1.1 must ALLOW {cmd!r} — legitimate ephemeral-path removal"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Structural invariants for every C1 rule (D3 DenyRule contract)
 # ---------------------------------------------------------------------------
 

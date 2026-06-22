@@ -29,12 +29,10 @@ hardcodes the gamified name in code.
 from __future__ import annotations
 
 import json
-import logging
 import re
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
-from bonfire.git.workflow import BranchCollisionError
 from bonfire.models.envelope import (
     META_PR_NUMBER,
     META_PR_URL,
@@ -52,8 +50,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 ROLE: AgentRole = AgentRole.PUBLISHER
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-scope constants
@@ -116,9 +112,16 @@ class BardHandler:
         *,
         git_workflow: Any,
         github_client: Any,
-        base_branch: str = "master",
+        base_branch: str = "main",
         config: PipelineConfig | None = None,
     ) -> None:
+        # ``base_branch`` default is ``"main"`` (modern OSS convention; GitHub
+        # default since 2020). Repos still on ``master`` should pass
+        # ``base_branch="master"`` explicitly at construction. A future
+        # enhancement may auto-detect via ``git symbolic-ref
+        # refs/remotes/origin/HEAD`` and fall back to ``"main"`` -- deferred
+        # because async-detection-at-construction would change the handler's
+        # sync constructor contract.
         self._git_workflow = git_workflow
         self._github_client = github_client
         self._base_branch = base_branch
@@ -175,26 +178,28 @@ class BardHandler:
             # 5. Create branch; structured error on collision.
             try:
                 await self._git_workflow.create_branch(branch_name)
-            except BranchCollisionError:
-                return envelope.model_copy(
-                    update={
-                        "metadata": {
-                            **envelope.metadata,
-                            _META_BRANCH: branch_name,
-                            _META_BASE_SHA: base_sha,
-                            _META_STAGING_FAILURE_REASON: "branch_collision",
-                        },
-                        "error": ErrorDetail(
-                            error_type="branch_collision",
-                            message=(
-                                f"Branch {branch_name!r} already exists; "
-                                "refusing to rewrite history."
+            except RuntimeError as branch_exc:
+                if "already exists" in str(branch_exc):
+                    return envelope.model_copy(
+                        update={
+                            "metadata": {
+                                **envelope.metadata,
+                                _META_BRANCH: branch_name,
+                                _META_BASE_SHA: base_sha,
+                                _META_STAGING_FAILURE_REASON: "branch_collision",
+                            },
+                            "error": ErrorDetail(
+                                error_type="branch_collision",
+                                message=(
+                                    f"Branch {branch_name!r} already exists; "
+                                    "refusing to rewrite history."
+                                ),
+                                stage_name=stage.name,
                             ),
-                            stage_name=stage.name,
-                        ),
-                        "status": TaskStatus.FAILED,
-                    },
-                )
+                            "status": TaskStatus.FAILED,
+                        },
+                    )
+                raise
 
             # 6. Stage + commit. Returns full HEAD SHA.
             commit_sha = await self._git_workflow.commit(
@@ -256,8 +261,7 @@ class BardHandler:
                 },
             )
 
-        except Exception as exc:
-            logger.exception("bard.handler_failed stage=%s", stage.name)
+        except Exception as exc:  # noqa: BLE001
             partial_metadata: dict[str, Any] = {**envelope.metadata}
             if branch_name is not None:
                 partial_metadata[_META_BRANCH] = branch_name

@@ -3,7 +3,7 @@
 
 """Workflow plan models — DAG-validated, frozen Pydantic v2 models.
 
-All models are frozen (immutable). WorkflowSpec validates its stage DAG
+All models are frozen (immutable). WorkflowPlan validates its stage DAG
 at construction time: duplicate names, dangling references, self-bounces,
 and cycles are rejected with descriptive error messages including cycle paths.
 """
@@ -66,115 +66,7 @@ class StageSpec(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-# -- DAG validation helpers (used by WorkflowSpec._validate_dag) -------------
-
-_WHITE, _GRAY, _BLACK = 0, 1, 2
-
-
-def _assert_unique_stage_names(stages: list[StageSpec]) -> set[str]:
-    """Collect stage names, refusing duplicates."""
-    stage_names: set[str] = set()
-    for stage in stages:
-        if stage.name in stage_names:
-            raise ValueError(
-                f"Duplicate stage name: '{stage.name}'. "
-                "All stage names must be unique within a workflow plan."
-            )
-        stage_names.add(stage.name)
-    return stage_names
-
-
-def _assert_no_dangling_references(stages: list[StageSpec], stage_names: set[str]) -> None:
-    """Refuse depends_on / on_gate_failure references to unknown stages."""
-    for stage in stages:
-        for dep in stage.depends_on:
-            if dep not in stage_names:
-                raise ValueError(
-                    f"Stage '{stage.name}' depends_on unknown stage '{dep}'. "
-                    f"Known stages: {sorted(stage_names)}"
-                )
-        if stage.on_gate_failure and stage.on_gate_failure not in stage_names:
-            raise ValueError(
-                f"Stage '{stage.name}' on_gate_failure references unknown stage "
-                f"'{stage.on_gate_failure}'. Known stages: {sorted(stage_names)}"
-            )
-
-
-def _assert_no_self_bounce(stages: list[StageSpec]) -> None:
-    """Refuse stages that depend on (or fail over to) themselves."""
-    for stage in stages:
-        if stage.name in stage.depends_on:
-            raise ValueError(
-                f"Stage '{stage.name}' has a self-dependency (self-bounce). "
-                "A stage cannot depend on itself."
-            )
-        if stage.on_gate_failure == stage.name:
-            raise ValueError(
-                f"Stage '{stage.name}' has on_gate_failure pointing to itself "
-                "(self-bounce). A stage cannot be its own failure fallback."
-            )
-
-
-def _build_combined_adjacency(stages: list[StageSpec]) -> dict[str, list[str]]:
-    """Combined dependency graph: depends_on + on_gate_failure edges."""
-    adjacency: dict[str, list[str]] = {s.name: [] for s in stages}
-    for stage in stages:
-        for dep in stage.depends_on:
-            adjacency[stage.name].append(dep)
-        if stage.on_gate_failure and stage.on_gate_failure != stage.name:
-            adjacency[stage.name].append(stage.on_gate_failure)
-    return adjacency
-
-
-def _reconstruct_cycle(node: str, neighbor: str, parent: dict[str, str | None]) -> list[str]:
-    """Reconstruct the cycle path, closed on the origin node."""
-    cycle = [node]
-    current = node
-    while parent[current] is not None and parent[current] != neighbor:
-        current = parent[current]  # type: ignore[assignment]
-        cycle.append(current)
-    cycle.append(neighbor)
-    cycle.reverse()
-    cycle.append(neighbor)  # close the cycle
-    return cycle
-
-
-# recursion: bounded by the stage count — white/gray/black coloring
-# visits each stage node at most once, so depth <= the number of stages.
-def _dfs_find_cycle(
-    node: str,
-    *,
-    adjacency: dict[str, list[str]],
-    color: dict[str, int],
-    parent: dict[str, str | None],
-) -> list[str] | None:
-    """Return the cycle path if found, else None."""
-    color[node] = _GRAY
-    for neighbor in adjacency[node]:
-        if color[neighbor] == _GRAY:
-            return _reconstruct_cycle(node, neighbor, parent)
-        if color[neighbor] == _WHITE:
-            parent[neighbor] = node
-            result = _dfs_find_cycle(neighbor, adjacency=adjacency, color=color, parent=parent)
-            if result is not None:
-                return result
-    color[node] = _BLACK
-    return None
-
-
-def _find_cycle(stage_names: set[str], adjacency: dict[str, list[str]]) -> list[str] | None:
-    """Find a cycle in the combined stage graph; ``None`` when acyclic."""
-    color: dict[str, int] = {name: _WHITE for name in stage_names}
-    parent: dict[str, str | None] = {name: None for name in stage_names}
-    for name in stage_names:
-        if color[name] == _WHITE:
-            cycle = _dfs_find_cycle(name, adjacency=adjacency, color=color, parent=parent)
-            if cycle is not None:
-                return cycle
-    return None
-
-
-class WorkflowSpec(BaseModel):
+class WorkflowPlan(BaseModel):
     """Immutable, DAG-validated workflow plan.
 
     Construction fails if:
@@ -196,25 +88,96 @@ class WorkflowSpec(BaseModel):
     task_description: str = ""
 
     @model_validator(mode="after")
-    def _validate_dag(self) -> WorkflowSpec:
+    def _validate_dag(self) -> WorkflowPlan:  # noqa: C901
         """Ensure the stage graph is a valid DAG."""
         if not self.stages:
             if self.workflow_type == WorkflowType.SINGLE:
                 return self
             raise ValueError("stages must not be empty")
 
-        stage_names = _assert_unique_stage_names(self.stages)
-        _assert_no_dangling_references(self.stages, stage_names)
-        _assert_no_self_bounce(self.stages)
-        adjacency = _build_combined_adjacency(self.stages)
+        stage_names: set[str] = set()
 
-        cycle = _find_cycle(stage_names, adjacency)
-        if cycle is not None:
-            path_str = " \u2192 ".join(cycle)
-            raise ValueError(
-                f"Cycle detected in workflow DAG: {path_str}. "
-                "Workflows must form a directed acyclic graph."
-            )
+        # -- 1. Unique names --
+        for stage in self.stages:
+            if stage.name in stage_names:
+                raise ValueError(
+                    f"Duplicate stage name: '{stage.name}'. "
+                    "All stage names must be unique within a workflow plan."
+                )
+            stage_names.add(stage.name)
+
+        # -- 2. Dangling references --
+        for stage in self.stages:
+            for dep in stage.depends_on:
+                if dep not in stage_names:
+                    raise ValueError(
+                        f"Stage '{stage.name}' depends_on unknown stage '{dep}'. "
+                        f"Known stages: {sorted(stage_names)}"
+                    )
+            if stage.on_gate_failure and stage.on_gate_failure not in stage_names:
+                raise ValueError(
+                    f"Stage '{stage.name}' on_gate_failure references unknown stage "
+                    f"'{stage.on_gate_failure}'. Known stages: {sorted(stage_names)}"
+                )
+
+        # -- 3. Self-bounce detection --
+        for stage in self.stages:
+            if stage.name in stage.depends_on:
+                raise ValueError(
+                    f"Stage '{stage.name}' has a self-dependency (self-bounce). "
+                    "A stage cannot depend on itself."
+                )
+            if stage.on_gate_failure == stage.name:
+                raise ValueError(
+                    f"Stage '{stage.name}' has on_gate_failure pointing to itself "
+                    "(self-bounce). A stage cannot be its own failure fallback."
+                )
+
+        # -- 4. Cycle detection (combined graph: depends_on + on_gate_failure) --
+        adjacency: dict[str, list[str]] = {s.name: [] for s in self.stages}
+        for stage in self.stages:
+            for dep in stage.depends_on:
+                adjacency[stage.name].append(dep)
+            if stage.on_gate_failure and stage.on_gate_failure != stage.name:
+                adjacency[stage.name].append(stage.on_gate_failure)
+
+        white, gray, black = 0, 1, 2
+        color: dict[str, int] = {name: white for name in stage_names}
+        parent: dict[str, str | None] = {name: None for name in stage_names}
+
+        # recursion: bounded by stage count (each node colored once)
+        def _dfs(node: str) -> list[str] | None:
+            """Return the cycle path if found, else None."""
+            color[node] = gray
+            for neighbor in adjacency[node]:
+                if color[neighbor] == gray:
+                    # Reconstruct cycle path, closed on the origin node.
+                    cycle = [node]
+                    current = node
+                    while parent[current] is not None and parent[current] != neighbor:
+                        current = parent[current]  # type: ignore[assignment]
+                        cycle.append(current)
+                    cycle.append(neighbor)
+                    cycle.reverse()
+                    cycle.append(neighbor)  # close the cycle
+                    return cycle
+                if color[neighbor] == white:
+                    parent[neighbor] = node
+                    result = _dfs(neighbor)
+                    if result is not None:
+                        return result
+            color[node] = black
+            return None
+
+        for name in stage_names:
+            if color[name] == white:
+                cycle = _dfs(name)
+                if cycle is not None:
+                    path_str = " \u2192 ".join(cycle)
+                    raise ValueError(
+                        f"Cycle detected in workflow DAG: {path_str}. "
+                        "Workflows must form a directed acyclic graph."
+                    )
 
         return self
 

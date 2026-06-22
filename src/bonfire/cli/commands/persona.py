@@ -12,7 +12,16 @@ from pathlib import Path
 
 import typer
 
+from bonfire._safe_read import safe_read_capped_text
+from bonfire._safe_write import safe_write_text
+from bonfire.persona._toml_writer import emit_persona_assignment
 from bonfire.persona.loader import PersonaLoader
+
+# Hard byte cap on the bonfire.toml read in ``persona set``. The file
+# carries a small TOML config; 1 MiB is comfortably beyond any honest
+# payload while bounding the damage from a planted oversized file. The
+# symmetric cap appears in ``cli/commands/init.py``.
+_PERSONA_READ_MAX_BYTES: int = 1 * 1024 * 1024
 
 # Bonfire ships with Falcor as the companion persona; users can swap
 # via `bonfire persona set <name>`.
@@ -84,16 +93,61 @@ def persona_set(
 
     toml_path = Path.cwd() / "bonfire.toml"
 
+    persona_line = emit_persona_assignment(name)
+
+    # Refuse symlinks at bonfire.toml — both branches below (read+mutate
+    # OR fresh-stub) end with a write_text that would follow a symlink
+    # and open the attacker-controlled target in write mode. We refuse
+    # at the top so neither branch can leak. ``Path.is_symlink()`` does
+    # NOT follow the link (unlike ``exists()``), so a dangling symlink
+    # planted to redirect the write is correctly identified here.
+    if toml_path.is_symlink():
+        typer.echo(
+            f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+            "or overwrite a symlinked config. Remove the symlink and re-run.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     if toml_path.exists():
-        content = toml_path.read_text()
+        # W11 M3: route through ``safe_read_capped_text`` so the read uses
+        # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
+        # between the ``is_symlink`` pre-check above and this read. The
+        # content is partially echoed back through ``re.sub`` into the
+        # subsequent ``safe_write_text(..., allow_existing=True)`` — a
+        # symlink-followed read here would mix attacker-controlled bytes
+        # into the rewritten bonfire.toml.
+        try:
+            content = safe_read_capped_text(toml_path, max_bytes=_PERSONA_READ_MAX_BYTES)
+        except FileExistsError:
+            # Race-planted symlink defeated the pre-check. Surface the
+            # operator-facing message that matches the pre-check branch.
+            typer.echo(
+                f"bonfire.toml at {toml_path} is a symlink. Refusing to follow "
+                "or overwrite a symlinked config. Remove the symlink and re-run.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from None
+        except ValueError as exc:
+            # Cap-exceeded. A multi-MiB bonfire.toml is not a legitimate
+            # operator shape; refuse to mutate it rather than partial-
+            # rewriting a giant file.
+            typer.echo(
+                f"bonfire.toml at {toml_path} exceeds size cap: {exc}. "
+                "Refusing to rewrite; inspect the file and trim it.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
         # Replace persona key ONLY in the [bonfire] section
         bonfire_section = re.search(r"(\[bonfire\][^\[]*)", content, re.DOTALL)
         if bonfire_section and re.search(r"^persona\s*=", bonfire_section.group(), re.MULTILINE):
-            # Replace persona within the [bonfire] section
+            # Replace persona within the [bonfire] section. Use a
+            # callable replacement so backslashes in the escaped name
+            # are NOT interpreted as re backreferences.
             old_section = bonfire_section.group()
             new_section = re.sub(
                 r'^persona\s*=\s*"[^"]*"',
-                f'persona = "{name}"',
+                lambda _m: persona_line,
                 old_section,
                 count=1,
                 flags=re.MULTILINE,
@@ -103,14 +157,20 @@ def persona_set(
             # [bonfire] exists but no persona key — add it
             content = content.replace(
                 "[bonfire]",
-                f'[bonfire]\npersona = "{name}"',
+                f"[bonfire]\n{persona_line}",
                 1,
             )
         else:
             # No [bonfire] section — append it
-            content += f'\n[bonfire]\npersona = "{name}"\n'
+            content += f"\n[bonfire]\n{persona_line}\n"
+        # ``allow_existing=True`` — we read this file's content one
+        # line above and are deliberately rewriting it. The symlink
+        # refusal is unconditional inside ``safe_write_text``; only
+        # the existing-file refusal is gated by this flag.
+        safe_write_text(toml_path, content, allow_existing=True)
     else:
-        content = f'[bonfire]\npersona = "{name}"\n'
-
-    toml_path.write_text(content)
+        content = f"[bonfire]\n{persona_line}\n"
+        # Fresh write — keep O_EXCL semantics so a regular file racing
+        # in between is_symlink() and the open is still refused.
+        safe_write_text(toml_path, content)
     typer.echo(f"Persona set to: {name}")

@@ -5,8 +5,8 @@ Innovative lens. Sage D8.2 locks the full protocol surface:
 - ``__init__(self) -> None``
 - ``_entries: list[VaultEntry]`` (typed instance attribute).
 - ``async def store(self, entry: VaultEntry) -> str`` — returns entry_id.
-- ``async def query(self, query: str, *, limit: int = 5, entry_type: str | None = None)``
-  — returns ``list[VaultEntry]``.
+- ``async def query(self, query: str, *, limit: int = 5, entry_type: str | None = None) ->
+list[VaultEntry]``
 - ``async def exists(self, content_hash: str) -> bool``
 - ``async def get_by_source(self, source_path: str) -> list[VaultEntry]``
 

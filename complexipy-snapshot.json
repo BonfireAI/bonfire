@@ -1,11 +1,11 @@
 [
   {
-    "path": "src/bonfire/cli/commands/build_agents.py",
-    "file_name": "build_agents.py",
+    "path": "src/bonfire/cli/commands/install_skill.py",
+    "file_name": "install_skill.py",
     "functions": [
       {
-        "name": "build_agents",
-        "complexity": 23
+        "name": "install_skill",
+        "complexity": 33
       }
     ]
   },
@@ -14,8 +14,8 @@
     "file_name": "analyzer.py",
     "functions": [
       {
-        "name": "CostAnalyzer::_read_records",
-        "complexity": 16
+        "name": "CostAnalyzer::_load_if_needed",
+        "complexity": 23
       }
     ]
   },
@@ -35,7 +35,7 @@
     "functions": [
       {
         "name": "ClaudeSDKBackend::_do_execute",
-        "complexity": 42
+        "complexity": 38
       }
     ]
   },
@@ -43,6 +43,14 @@
     "path": "src/bonfire/dispatch/security_hooks.py",
     "file_name": "security_hooks.py",
     "functions": [
+      {
+        "name": "_resolve_dot_segments",
+        "complexity": 16
+      },
+      {
+        "name": "_match_write_edit_sensitive_path",
+        "complexity": 18
+      },
       {
         "name": "_peel_one",
         "complexity": 23
@@ -61,7 +69,7 @@
       },
       {
         "name": "build_preexec_hook",
-        "complexity": 70
+        "complexity": 78
       }
     ]
   },
@@ -100,16 +108,6 @@
     ]
   },
   {
-    "path": "src/bonfire/handlers/steward.py",
-    "file_name": "steward.py",
-    "functions": [
-      {
-        "name": "StewardHandler::handle",
-        "complexity": 18
-      }
-    ]
-  },
-  {
     "path": "src/bonfire/knowledge/chunker.py",
     "file_name": "chunker.py",
     "functions": [
@@ -134,8 +132,18 @@
     "file_name": "plan.py",
     "functions": [
       {
-        "name": "WorkflowSpec::_validate_dag",
+        "name": "WorkflowPlan::_validate_dag",
         "complexity": 49
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/conversation.py",
+    "file_name": "conversation.py",
+    "functions": [
+      {
+        "name": "ConversationEngine::handle_answer",
+        "complexity": 16
       }
     ]
   },
@@ -155,7 +163,7 @@
     "functions": [
       {
         "name": "scan",
-        "complexity": 26
+        "complexity": 29
       }
     ]
   },
@@ -166,6 +174,26 @@
       {
         "name": "scan",
         "complexity": 16
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/scanners/vault_seed.py",
+    "file_name": "vault_seed.py",
+    "functions": [
+      {
+        "name": "_scan_project_size",
+        "complexity": 20
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/server.py",
+    "file_name": "server.py",
+    "functions": [
+      {
+        "name": "FrontDoorServer::_ws_handler",
+        "complexity": 27
       }
     ]
   },
@@ -195,7 +223,7 @@
     "functions": [
       {
         "name": "TechScanner::_detect_frameworks",
-        "complexity": 34
+        "complexity": 36
       },
       {
         "name": "_extract_pyproject_deps",

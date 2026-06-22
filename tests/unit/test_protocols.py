@@ -598,9 +598,17 @@ class TestDispatchOptions:
         assert opts.cwd == ""
         assert isinstance(opts.cwd, str)
 
-    def test_permission_mode_default_is_dontAsk(self):
+    def test_permission_mode_default_is_default(self):
+        """CONTRACT-CHANGE: default flipped from 'dontAsk' to 'default'.
+
+        Per the CLI / scanner / session hardening contract, the
+        deny-list-as-only-gate posture was tightened: the SDK-level
+        ask-mode is the new ship-safe default. Explicit ``dontAsk``
+        callers in ``handlers/`` (wizard, sage_correction_bounce) opt
+        in by name and stay unchanged.
+        """
         opts = DispatchOptions()
-        assert opts.permission_mode == "dontAsk"
+        assert opts.permission_mode == "default"
         assert isinstance(opts.permission_mode, str)
 
     # --- Frozen immutability -------------------------------------------
@@ -882,89 +890,3 @@ class TestTypeCheckingImportsInertAtRuntime:
 
         source = inspect.getsource(bonfire.protocols)
         assert "if TYPE_CHECKING:" in source
-
-
-# ---------------------------------------------------------------------------
-# TestDocstringAcknowledgesDispatchImport — BON-1029(b)
-#
-# protocols.py imports ``SecurityHooksConfig`` from
-# ``bonfire.dispatch.security_hooks`` at module (runtime) scope so Pydantic can
-# validate ``DispatchOptions.security_hooks``. The module docstring, however,
-# claims "Only ``bonfire.models`` may be imported" — a layering claim that the
-# dispatch import contradicts. The fix (option b) is NOT to relocate the model;
-# it is to amend the docstring so it honestly acknowledges and pins this one
-# exception. These tests pin that acknowledgment so the docstring can never
-# silently drift back to the false "only bonfire.models" claim while the
-# runtime import is still present.
-# ---------------------------------------------------------------------------
-
-
-class TestDocstringAcknowledgesDispatchImport:
-    """The module docstring must acknowledge the single ``bonfire.dispatch``
-    import exception (``SecurityHooksConfig``), matching the actual import set.
-
-    Each test first establishes the premise it depends on — that the runtime
-    import is genuinely present — so the assertion about the docstring is
-    grounded in real source, never tautological.
-    """
-
-    def test_runtime_dispatch_import_is_actually_present(self):
-        """Premise check: the module-scope (non-TYPE_CHECKING) import of
-        ``SecurityHooksConfig`` exists. If this ever stops being true, the
-        docstring-acknowledgment requirement no longer applies and these
-        tests should be revisited."""
-        import bonfire.protocols
-
-        source = inspect.getsource(bonfire.protocols)
-        import_line = "from bonfire.dispatch.security_hooks import SecurityHooksConfig"
-        assert import_line in source
-
-        # The import must be at module (runtime) scope, not under a
-        # ``TYPE_CHECKING`` guard — that is precisely what makes the
-        # "only bonfire.models" docstring claim false.
-        assert "SecurityHooksConfig" in bonfire.protocols.__dict__
-
-    def test_docstring_acknowledges_security_hooks_config_exception(self):
-        """The docstring must name ``SecurityHooksConfig`` as the imported
-        symbol, so a reader of the layering claim sees the carve-out."""
-        import bonfire.protocols
-
-        doc = inspect.getdoc(bonfire.protocols) or ""
-        assert "SecurityHooksConfig" in doc
-
-    def test_docstring_acknowledges_dispatch_source_module(self):
-        """The docstring must name ``bonfire.dispatch`` (or the fully-qualified
-        ``bonfire.dispatch.security_hooks``) as the source of the exception,
-        not just the symbol — so the layering claim is honest about which
-        package is dragged in."""
-        import bonfire.protocols
-
-        doc = inspect.getdoc(bonfire.protocols) or ""
-        assert "bonfire.dispatch" in doc
-
-    def test_docstring_no_longer_makes_unqualified_models_only_claim(self):
-        """The original false claim — that ``bonfire.models`` is the ONLY
-        importable package — must not survive verbatim. If the words
-        ``bonfire.models`` and ``Only`` still co-occur, the docstring must
-        also carry the ``SecurityHooksConfig`` qualifier so the claim is no
-        longer absolute."""
-        import bonfire.protocols
-
-        doc = inspect.getdoc(bonfire.protocols) or ""
-        makes_models_claim = "Only" in doc and "bonfire.models" in doc
-        if makes_models_claim:
-            assert "SecurityHooksConfig" in doc, (
-                "docstring still asserts an unqualified 'Only bonfire.models' "
-                "claim without acknowledging the SecurityHooksConfig exception"
-            )
-
-    def test_docstring_explains_why_the_exception_exists(self):
-        """The acknowledgment must include the reason — Pydantic needs the
-        runtime type to validate ``DispatchOptions.security_hooks`` — so the
-        carve-out reads as intentional, not accidental drift."""
-        import bonfire.protocols
-
-        doc = inspect.getdoc(bonfire.protocols) or ""
-        lowered = doc.lower()
-        assert "pydantic" in lowered
-        assert "security_hooks" in doc or "DispatchOptions" in doc

@@ -17,34 +17,151 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from bonfire.onboard.config_generator import generate_config, write_config
-from bonfire.onboard.conversation import ConversationEngine
+from bonfire.onboard.conversation import ConversationCompleteError, ConversationEngine
 from bonfire.onboard.narration import NarrationEngine
 from bonfire.onboard.orchestrator import run_scan
 from bonfire.onboard.protocol import (
     FrontDoorMessage,
     ScanUpdate,
+    ServerError,
+    UserMessage,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
 
     from bonfire.onboard.server import FrontDoorServer
 
-__all__ = ["run_front_door"]
+__all__ = [
+    "DEFAULT_CONVERSATION_TIMEOUT",
+    "BrowserDisconnectedError",
+    "ConversationTimeoutError",
+    "MessageTooLargeError",
+    "dispatch_user_message",
+    "run_front_door",
+]
 
 _log = logging.getLogger(__name__)
 
+# Default wall-clock cap on Act II (conversation). 5 minutes is long
+# enough for a deliberate user, short enough that a closed-browser hang
+# becomes a clean exit rather than an indefinite CLI block. Callers may
+# override via ``run_front_door(..., conversation_timeout=...)``; pass
+# ``None`` to disable the timeout entirely.
+DEFAULT_CONVERSATION_TIMEOUT: float = 300.0
 
-async def run_front_door(
+
+class BrowserDisconnectedError(RuntimeError):
+    """Raised when the browser disconnects before the conversation completes.
+
+    Surfaces the disconnect distinctly from a wall-clock timeout so the
+    CLI can offer a tailored remediation message ("relaunch ``bonfire
+    scan``") versus a stall message.
+    """
+
+
+class ConversationTimeoutError(TimeoutError):
+    """Raised when Act II exceeds the configured wall-clock budget.
+
+    Subclasses :class:`TimeoutError` so existing handlers that already
+    catch built-in timeouts continue to work.
+    """
+
+
+class MessageTooLargeError(BrowserDisconnectedError):
+    """Raised when a client sent a WebSocket frame larger than the server cap.
+
+    The WS server pins ``max_size`` to ``_WS_MAX_FRAME_BYTES`` (8 KiB).
+    A larger frame triggers close-code 1009 (message-too-big) on the
+    wire; the server flips ``oversize_disconnect`` and the flow surfaces
+    this exception with a tailored remediation message ("max 8 KiB")
+    instead of the generic "browser closed" message — the latter
+    misdiagnoses a long-paste error as a connection drop and sends the
+    user down the wrong recovery path.
+
+    Subclasses :class:`BrowserDisconnectedError` so existing CLI handlers
+    that already catch the parent (and treat oversize as a special case
+    of "connection ended unexpectedly") continue to work; new CLI code
+    discriminates on the subclass before the parent.
+    """
+
+
+async def dispatch_user_message(
+    data: dict[str, Any],
+    *,
+    conversation: ConversationEngine,
+    broadcast: Callable[[FrontDoorMessage], Awaitable[None]],
+    conversation_done: asyncio.Event,
+) -> None:
+    """Route a single client frame into the conversation engine.
+
+    Extracted from ``run_front_door``'s ``on_message`` closure so it is
+    unit-testable. Mirrors the original closure semantics:
+
+    - Non-``user_message`` frames are ignored.
+    - Overlong payloads (>``MAX_USER_MESSAGE_LEN``) trigger a
+      ``server_error`` frame with code ``message_too_long`` and never reach
+      the conversation analyzer.
+    - ``ConversationCompleteError`` after the third answer is broadcast as
+      a polite ``server_error`` and is NOT propagated.
+    - Once the conversation is complete, ``conversation_done`` is signalled
+      so the outer ``run_front_door`` can advance to Act III.
+
+    ``broadcast`` is the model-accepting emit callable (same shape as the
+    ``ConversationEngine``'s ``emit`` parameter); ``run_front_door`` wraps
+    it around ``server.broadcast`` with a ``model_dump`` adapter.
+    """
+    if data.get("type") != "user_message":
+        return
+
+    try:
+        msg = UserMessage.model_validate(data)
+    except ValidationError:
+        await broadcast(
+            ServerError(
+                code="message_too_long",
+                message="Message too long; please keep under 8 KiB.",
+            )
+        )
+        return
+
+    try:
+        await conversation.handle_answer(msg.text, broadcast)
+    except ConversationCompleteError as exc:
+        await broadcast(
+            ServerError(
+                code="conversation_complete",
+                message=str(exc),
+            )
+        )
+        return
+
+    if conversation.is_complete:
+        conversation_done.set()
+
+
+async def run_front_door(  # noqa: C901,PLR0915
     server: FrontDoorServer,
     project_path: Path,
+    *,
+    conversation_timeout: float | None = DEFAULT_CONVERSATION_TIMEOUT,
 ) -> Path:
     """Run the complete Front Door flow. Returns path to generated bonfire.toml.
 
     Orchestrates: scan → narration → conversation → config generation.
     The server must already be started. This function sets the server's
     ``on_message`` callback to route user answers to the conversation engine.
+
+    ``conversation_timeout`` (seconds) caps Act II. If the browser
+    disconnects before the user answers all three questions, raises
+    :class:`BrowserDisconnectedError`. If the user simply walks away
+    while the browser stays open, raises
+    :class:`ConversationTimeoutError` after the budget elapses. Pass
+    ``None`` to wait indefinitely (legacy behaviour).
     """
     # ------------------------------------------------------------------
     # Act I: Scan Theater
@@ -81,12 +198,12 @@ async def run_front_door(
 
     async def on_message(data: dict[str, Any]) -> None:
         """Route incoming user messages to the conversation engine."""
-        if data.get("type") != "user_message":
-            return
-        text = data.get("text", "")
-        await conversation.handle_answer(text, conversation_emit)
-        if conversation.is_complete:
-            conversation_done.set()
+        await dispatch_user_message(
+            data,
+            conversation=conversation,
+            broadcast=conversation_emit,
+            conversation_done=conversation_done,
+        )
 
     # Start conversation (emits ConversationStart + Q1)
     await conversation.start(conversation_emit)
@@ -95,10 +212,72 @@ async def run_front_door(
     # don't race with the engine's initial state.
     server.on_message = on_message
 
-    # Wait for all 3 answers.
-    # NOTE: If the browser closes mid-conversation, this hangs until Ctrl-C.
-    # Acceptable for v1 — a future improvement could race against shutdown_event.
-    await conversation_done.wait()
+    # Wait for all 3 answers, racing against:
+    #   - browser disconnect (server.shutdown_event fires when the last
+    #     WebSocket client drops)
+    #   - wall-clock timeout (configurable; defaults to
+    #     DEFAULT_CONVERSATION_TIMEOUT)
+    # Whichever fires first wins. The losing tasks are cancelled cleanly
+    # so the loop returns to the caller (the CLI) without leaked tasks.
+    done_task = asyncio.create_task(conversation_done.wait())
+    shutdown_task = asyncio.create_task(server.shutdown_event.wait())
+    pending: set[asyncio.Task[Any]] = {done_task, shutdown_task}
+    try:
+        finished, pending = await asyncio.wait(
+            pending,
+            timeout=conversation_timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    finally:
+        for task in pending:
+            task.cancel()
+        # Drain cancelled tasks so they don't dangle as "Task was
+        # destroyed but it is pending!" warnings.
+        for task in pending:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001,S110
+                # Swallow — we're already handling the race outcome.
+                pass
+
+    if done_task in finished:
+        # Happy path: all three answers in, advance to Act III.
+        pass
+    elif shutdown_task in finished:
+        # W9 Lane B (H3): discriminate oversize-close from generic browser
+        # disconnect. ``FrontDoorServer._ws_handler`` flips
+        # ``oversize_disconnect`` when a client connection closes with
+        # WS code 1009 (message-too-big), enforced by ``max_size``. Without
+        # this branch, a long-paste (≥ 8 KiB) gets surfaced to the user as
+        # "browser closed before onboarding completed" — wrong diagnosis,
+        # wrong recovery path. ``MessageTooLargeError`` carries the actionable
+        # remediation ("max 8 KiB").
+        if getattr(server, "oversize_disconnect", False):
+            _log.warning(
+                "Front Door client sent oversize WS frame (close code 1009); "
+                "aborting Act III. The user's answer exceeded the 8 KiB cap."
+            )
+            raise MessageTooLargeError(
+                "Your answer is too long (max 8 KiB per message). "
+                "Re-run `bonfire scan` and try a shorter response."
+            )
+        _log.warning(
+            "Front Door browser disconnected before conversation completed; "
+            "aborting Act III. Re-run `bonfire scan` to retry."
+        )
+        raise BrowserDisconnectedError(
+            "Browser closed before the onboarding conversation completed."
+        )
+    else:
+        # Neither task finished — wall-clock timeout fired.
+        _log.warning(
+            "Front Door conversation timed out after %s seconds; "
+            "aborting Act III. Re-run `bonfire scan` to retry.",
+            conversation_timeout,
+        )
+        raise ConversationTimeoutError(
+            f"Onboarding conversation did not complete within {conversation_timeout} seconds."
+        )
 
     # ------------------------------------------------------------------
     # Act III: Config Generation
@@ -109,16 +288,7 @@ async def run_front_door(
     config_event = generate_config(scan_results, conversation.profile, project_name)
     await server.broadcast(config_event.model_dump())
 
-    # Pass overwrite=True explicitly to preserve the front-door scan UX:
-    # users re-running `bonfire scan` against an existing config expect a
-    # refresh, not an error. A future CLI `--force` flag will thread the
-    # opposite default down here (so the default front-door call gets the
-    # safer FileExistsError + users opt into clobber via --force).
-    config_path = write_config(
-        config_event.config_toml,
-        project_path,
-        overwrite=True,
-    )
+    config_path = write_config(config_event.config_toml, project_path)
 
     _log.info("Front Door flow complete. Config written to %s", config_path)
     return config_path

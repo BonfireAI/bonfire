@@ -1,16 +1,13 @@
-"""Contract tests — Category C6 shell-escape / obfuscation WARN patterns.
+"""RED contract tests — Category C6 shell-escape / obfuscation WARN patterns.
 
-C6 rules ship as **WARN** (not DENY) in v0.1: they have a high false-positive
-rate, so the hook surfaces them for visibility but lets the call through rather
-than blocking. Each test pins a true-positive command the rule must flag.
+Sage-canonical (BON-338). Knight-B literal TP/FP rows. Per Sage D4 — C6
+ships as **WARN** (not DENY) in v0.1. High FP rate per Scout-2/338 §6.2 —
+calibration-first.
 
-Two former C6 rules — an $IFS space-substitution rule and a Unicode-lookalike
-rule — are NOT tested here because they no longer exist. They were structurally
-unreachable: the pre-exec hook normalizes commands (NFKC + an explicit
-$IFS -> space substitution) before any pattern runs, folding away the exact
-tokens those rules matched. Their bypass scenarios are still denied via the
-surviving DENY rules; see
-tests/unit/test_security_normalize_neutralizes_obfuscation.py.
+Sage ambiguity #4: C6.6 unicode-lookalike regex scope is DOCUMENTED as
+``\\u00a0\\u2000-\\u200f\\u2028-\\u202f\\uff01-\\uff5e`` (NBSP, zero-widths,
+fullwidth). Cyrillic lookalikes (U+0440) are a DOCUMENTED blind spot — see
+tests/unit/test_security_hooks_blindspots.py.
 """
 
 from __future__ import annotations
@@ -107,6 +104,20 @@ class TestC6_2_Base64Decode:
         assert rule.pattern.search(cmd) is not None
 
 
+class TestC6_3_IfsBypass:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "cat$IFS/etc/passwd",
+            "cat${IFS}/etc/passwd",
+            "cat$IFS$9/etc/passwd",
+        ],
+    )
+    def test_true_positive(self, cmd: str):
+        rule = _find_warn("C6.3-ifs-bypass")
+        assert rule.pattern.search(cmd) is not None
+
+
 class TestC6_4_BraceExpansion:
     @pytest.mark.parametrize(
         "cmd",
@@ -131,6 +142,40 @@ class TestC6_5_WildcardPath:
     def test_true_positive(self, cmd: str):
         rule = _find_warn("C6.5-wildcard-path")
         assert rule.pattern.search(cmd) is not None
+
+
+class TestC6_6_UnicodeLookalike:
+    """Ambiguity #4: scope is NBSP + zero-widths + fullwidth. Cyrillic NOT covered."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "\uff52\uff4d -rf /",  # fullwidth
+            "cat\u00a0/etc/passwd",  # nbsp
+        ],
+    )
+    def test_true_positive(self, cmd: str):
+        rule = _find_warn("C6.6-unicode-lookalike")
+        assert rule.pattern.search(cmd) is not None
+
+    def test_cyrillic_documented_blindspot(self):
+        """Cyrillic 'r' (U+0440) is a DOCUMENTED blind spot per ambiguity #4.
+
+        The C6.6 regex intentionally does NOT cover Cyrillic lookalikes. That
+        gap is tracked via xfail in test_security_hooks_blindspots.py.
+        """
+        rule = _find_warn("C6.6-unicode-lookalike")
+        # Cyrillic 'r' is NOT in the lookalike range — this search returns None.
+        # If a future Warrior "helpfully" widens the regex, this test catches it.
+        cmd = "\u0440m -rf /"
+        # Document the behavior: the pattern should NOT match Cyrillic-only cases.
+        # (The 'm' is ASCII but the leading 'r' is Cyrillic. Without wider range
+        # regex the match is absent.) This is the Sage-locked blind spot.
+        assert rule.pattern.search(cmd) is None, (
+            "Ambiguity #4 locked: C6.6 does NOT cover Cyrillic lookalikes. "
+            "A future Warrior that widens the regex MUST first re-synthesize "
+            "with Sage because this loosens the documented v0.1 scope."
+        )
 
 
 class TestC6_7_AliasFunctionRedef:

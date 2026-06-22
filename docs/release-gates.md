@@ -16,14 +16,14 @@ Every wave closes with a gate-tier declaration in its close-PR. The Wizard picks
 |------|------|-----------------|
 | **Infra** | Waves 2–3 (transfers, no runnable pipeline) | Unit tests green + Wizard + code-reviewer |
 | **Integration** | Waves 4–5 (scaffolding, partial pipeline) | Infra + integration tests green |
-| **E2E** | Waves 6+ (runnable `bonfire run`) | Integration + **box E2E PASS verdict** |
+| **E2E** | Waves 6+ (runnable engine end-to-end via library use; the `bonfire run` CLI verb is post-v0.1) | Integration + **box E2E PASS verdict** |
 | **Release** | v0.1.0 tag + re-publish | E2E + every README example executable + re-publish checklist |
 
 ## Reviewer cadence
 
 Every PR into `v0.1` requires **both**:
 
-- **Wizard** — Ishtar, the prompt architect. Standard dispatch review.
+- **Wizard** — the prompt-architect role. Standard dispatch review.
 - **code-reviewer** — superpowers agent. Independent lens.
 
 Two-lens review is non-negotiable. Drift happens when the same voice reviews the same work.
@@ -34,7 +34,7 @@ Two-lens review is non-negotiable. Drift happens when the same voice reviews the
 
 `ubuntu:24.04` Docker container. **Local execution only.** Never runs in CI.
 
-Rationale: API key stays on Anta's machine. Cost is observable in real time. No unattended runs draining the key. Pop!_OS 24.04 is Ubuntu-flavored, so box behavior mirrors host.
+Rationale: API key stays on the operator's machine. Cost is observable in real time. No unattended runs draining the key. Pop!_OS 24.04 is Ubuntu-flavored, so box behavior mirrors host.
 
 ### Contents
 
@@ -48,8 +48,8 @@ Rationale: API key stays on Anta's machine. Cost is observable in real time. No 
 1. Host invokes `tests/e2e/scripts/e2e-box.sh <wave>`.
 2. **Host clones the fixture into `.e2e-runs/<run-id>/target/` via SSH.** Credentials stay on the host.
 3. Container launches with `ANTHROPIC_API_KEY` from host `.env`, output dir mounted at `/workspace/out`, and the fixture bind-mounted read-write at `/workspace/target`.
-4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, then use the package as a library to fix the broken test and emit Bonfire-shaped artifacts (cost log, session log, branch with bard-pattern naming, review-verdict JSON). v0.2 swaps the library-use prompt for an end-to-end `bonfire run` invocation once the `pipeline` command module ships per the public-port plan.
-5. Claude operates as a library client of `bonfire-ai`: it reads the package's source, applies its components, and emits the artifacts the gate expects. v0.1 ships the artifact contract; v0.2 swaps in the full pipeline.
+4. Claude CLI receives the fixture prompt: install `bonfire-ai`, scan, then use the package as a library to fix the broken test and emit Bonfire-shaped artifacts (cost log, session log, branch with bard-pattern naming, review-verdict JSON). A later 0.1.x release swaps the library-use prompt for an end-to-end `bonfire run` invocation once the `pipeline` command module ships per the public-port plan (see [`README.md` § What's Not There Yet](../README.md) — the CLI verb is deferred to `v0.1.1`).
+5. Claude operates as a library client of `bonfire-ai`: it reads the package's source, applies its components, and emits the artifacts the gate expects. v0.1 ships the artifact contract; the later 0.1.x release that lands the `bonfire run` CLI verb swaps in the full pipeline.
 6. Post-run: diff filter + pytest + verdict JSON emission via the fixture's `gate/check-verdict.sh`.
 7. Verdict written to host at `.e2e-runs/<run-id>/verdict.json`.
 8. Both review lenses (Wizard + code-reviewer) read the verdict. Maintainer signs the merge.
@@ -93,7 +93,7 @@ The schema IS the contract. To tighten the bar, add an assertion to the schema a
 v0.1 ships the minimum viable:
 
 - Per-agent-dispatch line in `.bonfire/costs.jsonl`.
-- Stdout summary at the end of `bonfire run`.
+- Stdout summary at the end of a pipeline run (driven via library use in v0.1; via the `bonfire run` CLI verb when it lands in a later 0.1.x release).
 
 Throttle, budget caps, and full configuration module defer to **v0.2** (see BON-204 epic in the internal tracker).
 
@@ -124,7 +124,8 @@ A minimum-version constraint (e.g. `@>=2.1.0`) is **not** an acceptable substitu
 - [ ] v0.1.0 tag commit passes the full box E2E.
 - [ ] Every `README.md` example executable in a fresh box.
 - [ ] `CHANGELOG.md` cut and accurate.
-- [x] Commit history audited — leaked internal-tracker references in pre-v0.1.0 commit subjects accepted as historical for v0.1.0; new commits comply per [CONTRIBUTING.md](../CONTRIBUTING.md). See [CHANGELOG.md](../CHANGELOG.md) `[0.1.0]` Notes section.
+- [ ] Internal-tracker audit covers **both** (a) commit subjects on `v0.1` / `main` **and** (b) committed *docs-surface* file contents at `v0.1` HEAD — namely `docs/`, the root markdown files (`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CLAUDE.md`), and no other tree. Pre-`v0.1.0` commit *history* is grandfathered (rewriting published history is more harmful than preserving it); HEAD-state docs-surface files must be clean of internal-tracker IDs, internal Linear URLs, and contributor worktree paths. New commits comply per [CONTRIBUTING.md](../CONTRIBUTING.md). See [CHANGELOG.md](../CHANGELOG.md) Notes section. **Residual at this PR (pre-tag):** 4 HEAD-state references remain in this narrowed scope — an internal-tracker epic reference in `docs/release-gates.md`, a sample feature-branch path in the release-train lifecycle diagram in the same file, and two Linear-URL pointers in operator-local `CLAUDE.md`. These close in the v0.1.0 tag preflight sweep.
+- [ ] *(Gate 7a — narrow scope closed; broader test-helper subtree tracked in BON-1066 + follow-up.)* Source-comment and test-file audit: `src/bonfire/` + `tests/integration/` cleaned. Test-helper dirs (`tests/unit/`, `tests/smoke/`, `tests/dispatch/`, `scripts/`, `.github/workflows/`) still leak — Probe N+4 Scout C measured 356 `BON-NNN` occurrences across 112 files at HEAD. Widening tracked in BON-1066.
 - [ ] License headers consistent across `src/`.
 - [ ] `CONTRIBUTING.md` re-read against current reality.
 - [ ] `pip install bonfire-ai==0.1.0` works in a fresh venv.

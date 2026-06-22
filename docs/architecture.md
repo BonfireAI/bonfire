@@ -10,8 +10,6 @@ other docs in this directory:
   project ships.
 - `docs/adr/ADR-001-naming-vocabulary.md` locks the naming vocabulary
   used throughout the source.
-- `docs/audit/sage-decisions/` records the design decisions that
-  produced today's contracts.
 
 What's missing from those is a single map of the territory. This doc
 fills that gap. Read it once on day one, then come back for the
@@ -20,17 +18,49 @@ fills that gap. Read it once on day one, then come back for the
 ## What Bonfire is
 
 Bonfire is **a pipeline of role-bound agents over a typed event bus**.
-Each stage of a run is owned by an agent that plays a specific role
-(scout, knight, sage, warrior, bard, wizard, steward, architect); each
-stage emits typed events on a shared bus; cross-cutting observers — cost
-tracking, session logging, knowledge ingest, display — subscribe to
-those events without ever calling stages back.
+Each stage of a run is owned by an agent that plays a specific role —
+researcher (Scout), tester (Knight), implementer (Warrior), verifier
+(Cleric), publisher (Bard), reviewer (Wizard), closer (Steward),
+synthesizer (Sage), analyst (Architect); each stage emits typed events
+on a shared bus; cross-cutting observers — cost tracking, session
+logging, knowledge ingest, display — subscribe to those events without
+ever calling stages back.
 
-The framework ships an opinionated default: TDD-shaped 7-stage builds
-with code review baked in, run against your own model keys, with
-quality gates between stages. Everything else — the agents, the
-backends, the personas, the workflows — is pluggable through small
-``Protocol`` contracts.
+The role names follow the three-layer vocabulary locked by
+[`ADR-001`](adr/ADR-001-naming-vocabulary.md): a generic layer for
+code (`researcher`, `tester`, …), a professional layer for default
+display (`Research Agent`, `Test Agent`, …), and an opt-in gamified
+layer for personality-themed display (`Scout`, `Knight`, …). Above and
+throughout this doc the generic name is primary and the gamified alias
+is parenthetical; the table in ADR-001 § Agent Roles is the binding
+reference.
+
+The framework ships an opinionated default: TDD-shaped 9-stage builds
+with the stage-name sequence ``scout``, ``knight``, ``warrior``,
+``prover``, ``sage_correction_bounce``, ``bard``, ``wizard``,
+``merge_preflight``, ``steward`` (these are the canonical wire-format
+``StageSpec.name`` strings emitted by ``standard_build()`` — see
+``bonfire.workflow.standard`` and the ratified gamified-key exception
+in ADR-001 § Ratified Exceptions). Code review is baked in, runs use
+your own model keys, and quality gates evaluate between stages.
+Everything else — the agents, the backends, the personas, the
+workflows — is pluggable through small ``Protocol`` contracts.
+
+Within the standard build, the ``prover`` stage is a **verifier-role
+alias**: ``standard_build()`` emits ``StageSpec(role="prover", ...)``
+and the tier resolver in ``bonfire.agent.tiers`` normalizes ``"prover"``
+to ``AgentRole.VERIFIER`` through ``GAMIFIED_TO_GENERIC`` (alongside
+the canonical ``"cleric"`` alias). The prover stage runs after Warrior
+to verify the implementation against the failing tests; with
+``allowed_tools = ["Read", "Bash", "Grep", "Glob"]`` per
+``DefaultToolPolicy._FLOOR``, it is the read-and-execute counterpart to
+Warrior's read-write-edit toolset. Display translation resolves through
+``ROLE_DISPLAY["verifier"]`` (→ "Verify Agent" / "Cleric"); ``ROLE_DISPLAY``
+also ships a ``"prover"`` alias entry mirroring those same display
+strings so consumers that look up the raw factory-emitted role string
+resolve cleanly. Both the alias entry and the ``_FLOOR`` gamified keys
+are enumerated in ADR-001 § Ratified Exceptions; no other gamified-keyed
+code surfaces ship.
 
 Tagline (from `src/bonfire/__init__.py`):
 
@@ -44,7 +74,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 
 | Package | One-line purpose |
 |---|---|
-| `bonfire.engine` | Pipeline execution: `PipelineEngine`, per-stage `StageExecutor`, the six built-in quality gates, the checkpoint trio. |
+| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, gate evaluation, bounce, and budget watchdog), `StageExecutor` (a separately testable stage runner, re-exported but not driven by `PipelineEngine` today — the engine has its own inline stage loop), `ContextBuilder`, the eight built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. |
 | `bonfire.dispatch` | Agent execution backends (Claude SDK, Pydantic AI), the `execute_with_retry` runner, `TierGate`, and the pre-exec security hook. |
 | `bonfire.models` | Cross-package data contracts — frozen Pydantic shapes for envelopes, plans, events, and configuration. Dependency-free. |
 | `bonfire.events` | Typed pub/sub spine — `EventBus` plus the `BonfireEvent` base contract; consumers live one level deeper. |
@@ -55,7 +85,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 | Package | One-line purpose |
 |---|---|
 | `bonfire.agent` | Canonical `AgentRole` enum and the role↔display vocabulary. |
-| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Steward`, `Architect`) — the bespoke logic for stages that aren't a plain agent dispatch. |
+| `bonfire.handlers` | Pipeline-stage handlers (`Bard`, `Wizard`, `Steward`, `Architect`, `MergePreflight`, `SageCorrectionBounce`) — the bespoke logic for stages that aren't a plain agent dispatch. The verifier-role `MergePreflight` runs a deterministic pre-merge full-suite pytest against the simulated merged tip to catch cross-wave interactions; the synthesizer-role `SageCorrectionBounce` auto-bounces under-marked xfail decorators to a tool-restricted Sage correction agent before publication. |
 | `bonfire.persona` | CLI display translation only — turns events into character-voiced lines via TOML-defined personas. Never touches prompts. |
 | `bonfire.prompt` | Prompt compiler with priority-based truncation, identity blocks, and U-shape ordering. |
 
@@ -65,7 +95,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 |---|---|
 | `bonfire.git` | Branch / commit / worktree-isolation helpers used by the workflow stages. |
 | `bonfire.github` | GitHub API client for PRs and issues (with a mock for tests). |
-| `bonfire.knowledge` | Vault-backend factory — in-memory by default, LanceDB when configured. The `VaultBackend` protocol (in `bonfire.protocols`) is the stable public contract that any future memory implementation conforms to. |
+| `bonfire.knowledge` | Vault-backend factory — in-memory by default, LanceDB when configured. |
 | `bonfire.scan` | Scanners that turn project state into `VaultEntry` records for ingest. |
 | `bonfire.cost` | Cost ledger consumer, analyzer, and per-dispatch / per-pipeline records. |
 | `bonfire.session` | Session state and JSONL persistence — the durable footprint of a run. |
@@ -92,26 +122,58 @@ documented in `ADR-001`.
 
 ## Pipeline flow
 
-A single `bonfire run` follows the same path top-to-bottom every time:
+> **v0.1 disclaimer.** The CLI verb `bonfire run` described in this section
+> is **post-v0.1 design surface, not a shipped v0.1 command.** v0.1 ships
+> the engine as a library — `from bonfire.engine import PipelineEngine`
+> and `await engine.run(plan)` drives a real pipeline against a real
+> backend — plus the CLI subcommands `init`, `scan`, `status`, `resume`,
+> `handoff`, `persona`, and `cost`. The end-to-end `bonfire run` verb
+> that wires the engine through the CLI is deferred to a later 0.1.x
+> release (see [`README.md` § What's Not There Yet](../README.md)). The
+> pipeline flow described below is the shape the engine executes today
+> when driven from the library; it is also the shape `bonfire run` will
+> drive when the verb lands.
 
-1. **CLI entry.** `bonfire.cli.app` parses the command and instantiates
-   the composition root. The user-facing `bonfire run`-style commands
-   resolve a workflow plan from `bonfire.workflow` (e.g.
-   `standard_build`).
-2. **Workflow plan.** A `WorkflowSpec` (see `bonfire.models.plan`) is a
+A single pipeline run follows the same path top-to-bottom every time:
+
+1. **Entry point.** Today: a library caller imports `bonfire.engine`,
+   resolves a `WorkflowPlan` from `bonfire.workflow` (e.g.
+   `standard_build()`), constructs a `PipelineEngine`, and `await`s
+   `engine.run(plan)`. Tomorrow (post-v0.1): the `bonfire run`-style
+   CLI verb in `bonfire.cli.app` will resolve the same workflow plan
+   through the same composition root.
+2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
-   a handler, a list of gates, and dependency edges to earlier stages.
-3. **PipelineEngine.** `bonfire.engine.pipeline.PipelineEngine` walks
-   the plan in topological order and dispatches each stage to a
-   `StageExecutor`. It owns the `EventBus`, the `CheckpointManager`,
-   and the running cost / XP context.
-4. **StageExecutor.** For each stage, `bonfire.engine.executor`
-   constructs the input envelope, picks the right `StageHandler`, runs
-   it, and then runs the stage's `GateChain` over the result.
+   an optional handler name, a list of gate names, and dependency
+   edges to earlier stages.
+3. **PipelineEngine.** `bonfire.engine.pipeline.PipelineEngine`
+   constructs a `TopologicalSorter` over the plan, groups ready stages
+   by `parallel_group`, and runs each group either sequentially or
+   under an `asyncio.TaskGroup`. The engine holds the `AgentBackend`,
+   `EventBus`, `PipelineConfig`, the handler and gate registries, a
+   `ContextBuilder`, an optional `ToolPolicy`, and `BonfireSettings`.
+   It does **not** own a `CheckpointManager`; checkpoint persistence
+   is an opt-in surface (see "Checkpoints" below).
+4. **Inline stage execution.** For each stage the engine calls its
+   own `_execute_stage` method, which builds the per-stage context
+   via `ContextBuilder`, constructs the input envelope, and dispatches
+   it either to the named handler from the registry or, when no
+   handler is configured, to the agent backend through
+   `bonfire.dispatch.runner.execute_with_retry`. The standalone
+   `StageExecutor` class in `bonfire.engine.executor` implements the
+   same stage-runner contract and is re-exported from `bonfire.engine`
+   for downstream patching and for direct use by callers that want a
+   stage runner without the surrounding DAG / gate machinery; the
+   shipped `PipelineEngine` does not delegate to it today.
 5. **Handler.** A handler is either a plain agent dispatch (the
-   default for scouts, knights, warriors, sages) or one of the bespoke
-   handlers under `bonfire.handlers` (`Bard` for PR publication,
-   `Wizard` for review, `Steward` for closure, `Architect` for analysis).
+   default for the researcher / tester / implementer / synthesizer
+   roles — Scout / Knight / Warrior / Sage in the gamified vocabulary)
+   or one of the bespoke classes in `bonfire.handlers`: `Bard` for PR
+   publication (publisher), `Wizard` for review (reviewer), `Steward`
+   for closure (closer), `Architect` for analysis (analyst),
+   `MergePreflight` for the pre-merge full-suite pytest gate (verifier),
+   and `SageCorrectionBounce` for auto-bouncing under-marked xfail
+   decorators to a tool-restricted Sage agent (synthesizer).
 6. **Dispatch backend.** Plain-dispatch handlers call into
    `bonfire.dispatch` — by default `ClaudeSDKBackend`, optionally
    `PydanticAIBackend` — through the `execute_with_retry` runner. The
@@ -124,14 +186,37 @@ A single `bonfire run` follows the same path top-to-bottom every time:
    consumers (`bonfire.events.consumers`) react to events without
    blocking the pipeline. Wiring is done once at composition time via
    `wire_consumers`.
-9. **Checkpoint and gates.** After each stage the engine writes a
-   checkpoint and evaluates the stage's `GateChain`. A failing
-   error-severity gate short-circuits the run; the pipeline reports
-   `PipelineResult(success=False)` with the gate's message.
+9. **Gates and bounce.** After each stage the engine evaluates the
+   stage's gate chain in registration order. A passing chain advances
+   the pipeline. A failing error-severity gate triggers an optional
+   single bounce to a recovery stage if `StageSpec.on_gate_failure`
+   is set, then re-runs the original stage and re-evaluates gates
+   exactly once (Sage decision D7 — no recursive retries). If the
+   gate still fails, the engine short-circuits and returns
+   `PipelineResult(success=False)` with the gate's failure result.
+   Budget enforcement runs at parallel-group boundaries: a group that
+   pushes accumulated cost above `plan.budget_usd` halts the run.
 
 The vocabulary in this section — *stage*, *handler*, *gate*,
 *envelope*, *plan* — is locked by
 [`ADR-001-naming-vocabulary.md`](adr/ADR-001-naming-vocabulary.md).
+
+### Checkpoints
+
+`PipelineEngine.run()` does **not** write checkpoints. The engine has
+no `CheckpointManager` dependency on its constructor, and the pipeline
+loop has no checkpoint write site. `CheckpointManager`
+(`bonfire.engine.checkpoint`) is a standalone, publicly-importable
+helper that persists a `PipelineResult` plus its `WorkflowPlan` to an
+atomic JSON file per session, and reads it back for resume. Callers
+that want save / restore semantics must drive the manager themselves
+around `PipelineEngine.run()` — typically: run the engine, take the
+returned `PipelineResult`, and call `CheckpointManager.save(...)`. The
+resume path on `PipelineEngine.run()` accepts a `completed=` mapping
+of already-done stages, which is what a caller would build from a
+loaded `CheckpointData`. The CLI does not yet wire this up; the
+machinery is shipped as an extension surface, not as a default
+behavior.
 
 ## Event bus and consumers
 
@@ -176,18 +261,14 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
   `bonfire.dispatch.pydantic_ai_backend` for working references.
 - **Vault backends — `VaultBackend`** (`bonfire.protocols`): implement
   `store`, `query`, `exists`, and `get_by_source` to plug a different
-  knowledge store under `bonfire.knowledge.get_vault_backend`. This
-  protocol is the stable public interface for Bonfire's memory layer:
-  future memory tiers — richer knowledge graphs, alternate stores — are
-  expected to conform to it rather than to any one backend, so depend on
-  `VaultBackend`, not on a concrete implementation.
+  knowledge store under `bonfire.knowledge.get_vault_backend`.
 - **Personas — TOML in `src/bonfire/persona/builtins/`**: drop a new
   persona TOML with the required schema and `PersonaLoader.load` will
   pick it up. Personas are display-only — they cannot reach into
   prompts or gates by construction.
 - **Workflows — `bonfire.workflow`**: register a new workflow factory
   on the `WorkflowRegistry`. The factory returns a frozen,
-  DAG-validated `WorkflowSpec`. The package depends only on
+  DAG-validated `WorkflowPlan`. The package depends only on
   `bonfire.models`, so new workflows do not need to touch the engine.
 - **Stage handlers — `StageHandler`** (`bonfire.protocols`):
   implement `handle(stage, envelope, prior_results) -> Envelope` if you
@@ -200,7 +281,7 @@ seams. Every seam is a `typing.Protocol` so structural subtyping
 
 ## Gates and quality
 
-`bonfire.engine.gates` ships six built-in `QualityGate` implementations
+`bonfire.engine.gates` ships eight built-in `QualityGate` implementations
 plus the `GateChain` composer. The chain runs gates in registration
 order and short-circuits on the first error-severity failure.
 
@@ -212,6 +293,8 @@ order and short-circuits on the first error-severity failure.
 | `VerificationGate` | The result text contains "verified" or "checks passed". |
 | `ReviewApprovalGate` | The result text contains "approve" or "approved". |
 | `CostLimitGate` | The pipeline's accumulated cost is within the configured budget. |
+| `MergePreflightGate` | The `MergePreflightHandler` envelope reports `COMPLETED` (clean → `info`; with `META_PREFLIGHT_TEST_DEBT_NOTED` set → `warning`, allow-with-annotation per Sage Q6). Any non-COMPLETED status (cross-wave interaction, pure-warrior bug, pytest collection error, merge conflict) blocks the merge with `error` severity. Gate name is locked at `"merge_preflight_passed"`. |
+| `SageCorrectionResolvedGate` | The `SageCorrectionBounceHandler` envelope reports a non-ambiguous resolution. Clean resolutions (`corrected`, `not_needed_*`, skip path) pass with `info`; `warrior_bug` verdicts and Wizard-escalated bounces pass with `warning` (the bounce is visible but does not block); `ambiguous` classifier verdicts block with `error` (forces Wizard inspection). Gate name is locked at `"sage_correction_resolved"`. |
 
 `GateChain.evaluate_all` does **not** wrap individual gate exceptions —
 a raising gate propagates to `PipelineEngine.run()`, which catches it
@@ -243,19 +326,6 @@ Two short pieces orient the model:
    inside the hook turns into a DENY plus a `SecurityDenied` event
    tagged `_infra.error`.
 
-Two obfuscation classes — Unicode-lookalike characters (fullwidth,
-NBSP, zero-widths) and `$IFS` / `${IFS}` / `$IFS$9` space-substitution —
-are handled by the **normalization step, not by dedicated pattern
-rules**. NFKC folds lookalike codepoints to their plain equivalents and
-the `$IFS` substitution erases the IFS tokens *before* any pattern runs,
-so the de-obfuscated command is matched by the ordinary deny rules
-(for example, `cat${IFS}~/.ssh/id_rsa` normalizes to
-`cat ~/.ssh/id_rsa` and is denied by the SSH-private-key exfiltration
-rule; fullwidth `ｒｍ -rf /` normalizes to `rm -rf /` and is denied by
-the destructive-`rm` rule). The catalogue deliberately does **not**
-carry separate "IFS bypass" or "Unicode lookalike" rules, because a rule
-matching those byte-patterns could never fire after normalization.
-
 DENY emits a `SecurityDenied` event and blocks the tool call. WARN
 emits the same event with the reason prefixed `"WARN: "` and lets the
 call through — visibility without blocking.
@@ -271,21 +341,12 @@ For day-to-day contributor work:
   ship-ready change.
 - [`docs/release-gates.md`](release-gates.md) — the gate-by-gate map of
   what each ticket must clear before it merges.
-- [`docs/release-gate-tickets.md`](release-gate-tickets.md) — the
-  ticket-level expectations that feed the gates.
 
 For decision provenance — reach for these when you want to know *why*
 a contract is shaped the way it is:
 
 - [`docs/adr/ADR-001-naming-vocabulary.md`](adr/ADR-001-naming-vocabulary.md)
   — the locked vocabulary referenced throughout this doc.
-- [`docs/audit/sage-decisions/bon-337-unified-sage-2026-04-18.md`](audit/sage-decisions/bon-337-unified-sage-2026-04-18.md)
-  — the unified Sage decision behind the agent-tool policy.
-- [`docs/audit/sage-decisions/bon-338-unified-sage-2026-04-18.md`](audit/sage-decisions/bon-338-unified-sage-2026-04-18.md)
-  — the security-hook design (the source of the catalogue + the
-  fail-closed semantics).
-- [`docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md`](audit/sage-decisions/bon-341-sage-20260422T235032Z.md)
-  — the knowledge-layer decision that grounds `bonfire.knowledge`.
 
 For surface-level reading, the package-level `__init__.py` docstrings
 (notably `bonfire.handlers`, `bonfire.persona`, and

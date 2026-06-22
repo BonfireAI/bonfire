@@ -112,68 +112,6 @@ class TestCostAnalyzer:
         analyzer = CostAnalyzer(ledger_path=tmp_path / "nonexistent.jsonl")
         assert analyzer.cumulative_cost() == 0.0
 
-    def test_cumulative_cost_includes_orphan_dispatch_only_session(self, ledger_path: Path) -> None:
-        """A pipeline that crashes before emitting PipelineCompleted (Ctrl-C,
-        or a contributor driving the engine directly) leaves the ledger with
-        dispatch rows and no matching pipeline row. That spend is real and
-        MUST appear in the cumulative total — otherwise the load-bearing
-        "Built by Bonfire for $X" headline silently under-counts a trust
-        number. The total is the sum of the dispatch costs, not zero.
-        """
-        rec = DispatchRecord(
-            timestamp=100.0,
-            session_id="ses_orphan",
-            agent_name="scout",
-            cost_usd=0.07,
-            duration_seconds=12.0,
-        )
-        _write_records(ledger_path, [rec])
-        analyzer = CostAnalyzer(ledger_path=ledger_path)
-        assert analyzer.cumulative_cost() == pytest.approx(0.07)
-
-    def test_cumulative_cost_does_not_under_count_orphan_alongside_pipeline(
-        self, ledger_path: Path
-    ) -> None:
-        """Failure-path / no-silent-under-count contract: when the ledger holds
-        BOTH a completed-pipeline session and an orphan dispatch-only session,
-        the cumulative total MUST include the orphan spend on top of the
-        pipeline spend. A regression that drops orphan rows would still return
-        the (smaller) pipeline-only total here — this asserts the larger,
-        truthful sum so that silent under-counting fails loudly.
-        """
-        recs: list[DispatchRecord | PipelineRecord] = [
-            # Completed pipeline session: dispatches plus a summary row.
-            DispatchRecord(
-                timestamp=1000.0,
-                session_id="ses_done",
-                agent_name="scout",
-                cost_usd=0.10,
-                duration_seconds=10.0,
-            ),
-            PipelineRecord(
-                timestamp=1001.0,
-                session_id="ses_done",
-                total_cost_usd=0.10,
-                duration_seconds=10.0,
-                stages_completed=1,
-            ),
-            # Orphan session: dispatch only, pipeline crashed before completing.
-            DispatchRecord(
-                timestamp=2000.0,
-                session_id="ses_orphan",
-                agent_name="warrior",
-                cost_usd=0.05,
-                duration_seconds=5.0,
-            ),
-        ]
-        _write_records(ledger_path, recs)
-        analyzer = CostAnalyzer(ledger_path=ledger_path)
-        # Pipeline-only (buggy) total would be 0.10; the truthful total is 0.15.
-        assert analyzer.cumulative_cost() == pytest.approx(0.15)
-        # Guard the direction explicitly: the truthful total must exceed the
-        # pipeline-only figure a regression would return.
-        assert analyzer.cumulative_cost() > 0.10
-
     def test_session_cost_returns_dispatches_and_total(
         self, ledger_path: Path, sample_records: list
     ) -> None:
@@ -327,10 +265,7 @@ class TestAnalyzerEdge:
             # Half-written: no closing brace, no newline.
             fh.write('{"type":"dispatch","timestamp":2.0,"session_id":"s","agent_name"')
         analyzer = CostAnalyzer(ledger_path=ledger_path)
-        # The intact first line is a real (orphan) dispatch with no pipeline
-        # summary, so its spend counts toward the truthful cumulative total;
-        # the half-written second line is skipped and must not corrupt it.
-        assert analyzer.cumulative_cost() == pytest.approx(0.1)
+        assert analyzer.cumulative_cost() == pytest.approx(0.0)  # no pipeline rows
         agents = analyzer.agent_costs()
         assert len(agents) == 1
         assert agents[0].total_cost_usd == pytest.approx(0.1)

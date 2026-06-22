@@ -45,7 +45,7 @@ from bonfire.analysis.models import (
 def _valid_study_metadata(**overrides: Any) -> StudyMetadata:
     defaults: dict[str, Any] = dict(
         workspace_id="ws-1",
-        project_root=Path("/fake/proj"),
+        project_root=Path("/tmp/fake"),  # noqa: S108
         scanned_at=datetime.datetime(2026, 4, 14, 0, 0, 0),
         git_sha=None,
         structural_only=False,

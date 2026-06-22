@@ -1,0 +1,22 @@
+# Pre-commit hooks for Bonfire.
+#
+# Wires the project's real quality gates — `ruff check` and
+# `ruff format --check` — so they run automatically before every commit.
+# These mirror the Lint step in `.github/workflows/ci.yml`; CI remains the
+# enforced gate, pre-commit is the fast local layer.
+#
+# Setup: `pip install pre-commit && pre-commit install` (see CONTRIBUTING.md).
+# Run against the whole tree: `pre-commit run --all-files`.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        name: ruff check
+        args: [--no-fix]
+        files: ^(src|tests)/
+      - id: ruff-format
+        name: ruff format --check
+        args: [--check]
+        files: ^(src|tests)/

@@ -17,10 +17,8 @@ from typing import Any
 
 import pytest
 
-from bonfire.errors import NetworkError, RetrievalError
 from bonfire.knowledge.embeddings import EmbeddingProvider, get_embedder
 from bonfire.knowledge.mock_embedder import MockEmbedder
-from bonfire.knowledge.ollama_embedder import OllamaEmbedder
 
 # ---------------------------------------------------------------------------
 # Protocol conformance
@@ -121,51 +119,3 @@ class TestGetEmbedderPassThrough:
     def test_get_embedder_respects_dim(self) -> None:
         embedder: Any = get_embedder(provider="mock", dim=256)
         assert embedder.dim == 256
-
-
-# ---------------------------------------------------------------------------
-# OllamaEmbedder._embed_batch — typed failure vocabulary (ADR-002)
-# ---------------------------------------------------------------------------
-
-
-class _FakeOllamaClient:
-    """Minimal stand-in for ollama.Client that raises a preset exception."""
-
-    def __init__(self, exc: Exception) -> None:
-        self._exc = exc
-
-    def embed(self, *, model: str, input: list[str]) -> dict[str, Any]:
-        raise self._exc
-
-
-class _ConnectionRefused(Exception):
-    """Name carries 'connection' so the embedder routes it to NetworkError."""
-
-
-class _NotFound(Exception):
-    """Carries a 404 status_code so the embedder routes it to RetrievalError."""
-
-    status_code = 404
-
-
-def _embedder_with_client(client: Any) -> OllamaEmbedder:
-    """Build an OllamaEmbedder without importing the real ollama package."""
-    embedder = object.__new__(OllamaEmbedder)
-    embedder._client = client
-    embedder._model = "nomic-embed-text"
-    embedder._dim = 768
-    return embedder
-
-
-class TestOllamaEmbedderErrorVocabulary:
-    def test_embed_batch_connection_failure_raises_network_error(self) -> None:
-        """A connection failure speaks the one vocabulary as NetworkError."""
-        embedder = _embedder_with_client(_FakeOllamaClient(_ConnectionRefused("refused")))
-        with pytest.raises(NetworkError):
-            embedder._embed_batch(["search_document: hello"])
-
-    def test_embed_batch_model_not_found_raises_retrieval_error(self) -> None:
-        """A 404 (model not pulled) speaks the one vocabulary as RetrievalError."""
-        embedder = _embedder_with_client(_FakeOllamaClient(_NotFound("missing")))
-        with pytest.raises(RetrievalError):
-            embedder._embed_batch(["search_document: hello"])

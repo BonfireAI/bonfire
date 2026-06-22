@@ -44,7 +44,13 @@ NodeKind = Literal[
 
 
 class CartographerBudget(BaseModel):
-    """Frozen budget of Cartographer tunables (BON-226 §5)."""
+    """Frozen budget of Cartographer tunables.
+
+    Immutable budget envelope consumed by the Cartographer scan. Holds
+    token ceilings, ranking parameters, projection caps, and the per-
+    enrichment-mode knobs. ``model_config = frozen=True`` so a scan run
+    cannot mutate the budget mid-flight.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -64,7 +70,11 @@ class CartographerBudget(BaseModel):
     )
     enrichment_enabled: bool = Field(default=False)
 
-    # ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────
+    # ─── Enrichment delta ────────────────────────────────────────────
+    # Optional per-symbol summary generation. ``harvest`` pulls
+    # summaries from existing docstrings / READMEs / git logs only;
+    # ``llm`` additionally allows a budgeted model call to summarise
+    # un-documented symbols.
     enrichment_mode: Literal["off", "harvest", "llm"] = Field(default="harvest")
     enrichment_top_n: int = Field(default=20, ge=1, le=500)
     enrichment_batch_size: int = Field(default=5, ge=1, le=50)
@@ -94,9 +104,9 @@ class RankedNode(BaseModel):
         min_length=1,
         description="Projected TreeContext signature text. Never empty (§12 M5). "
         "The non-empty invariant is enforced at the model layer via "
-        "``min_length=1`` so an external caller (BON-231 composition root, "
-        "a future plugin, the serializer round-trip path) cannot construct "
-        "an invalid ``RankedNode`` with ``snippet=''``.",
+        "``min_length=1`` so an external caller (composition root, future "
+        "plugin, serializer round-trip path) cannot construct an invalid "
+        "``RankedNode`` with ``snippet=''``.",
     )
     tokens: int = Field(
         ge=0,
@@ -106,7 +116,10 @@ class RankedNode(BaseModel):
     symbol_rank: float = Field(ge=0.0)
     edge_weight_in: float = Field(ge=0.0)
 
-    # ─── BON-294 Wave 2c.1 enrichment delta ──────────────────────────
+    # ─── Enrichment delta ────────────────────────────────────────────
+    # Optional per-symbol summary + provenance tag. ``summary_source``
+    # records where the prose came from so callers can filter by
+    # provenance (e.g. "only llm-generated summaries").
     summary: str | None = Field(default=None, max_length=500)
     summary_source: Literal[
         "docstring",
@@ -206,23 +219,23 @@ class ProjectAnalysis(BaseModel):
     )
     rendered_map: str
 
-    # BON-303 Wave 3a.4 — discovered gaps for DiscoveredIntentSource.
-    # Default empty list preserves all existing tests that construct
-    # ProjectAnalysis() without gaps.
+    # Discovered structural gaps, surfaced by the Strategist scan.
+    # Default empty tuple preserves backward-compatibility for callers
+    # that construct ``ProjectAnalysis(...)`` without a gaps argument.
     gaps: tuple[GapFinding, ...] = Field(default=())
 
     @field_validator("study_schema_version")
     @classmethod
     def _require_v2_schema(cls, v: int) -> int:
-        # BON-294 Wave 2c.1 A10 — reject v1 cache blobs so Wave 2b cache
-        # reads fall back to a fresh scan instead of silently returning
-        # a study missing the enrichment fields.
+        # Reject v1 cache blobs so cache reads fall back to a fresh
+        # scan instead of silently returning a study missing the
+        # enrichment fields.
         if v != 2:
             raise ValueError(f"study_schema_version must be 2, got {v}")
         return v
 
     def to_bytes(self) -> bytes:
-        """Gzip-compressed JSON — BON-231 Wave 2b cache seam.
+        """Gzip-compressed JSON — the cache-seam wire format.
 
         The two-byte gzip magic (``\\x1f\\x8b``) lets any cache layer
         sniff the envelope without deserialising. ``gzip`` is imported

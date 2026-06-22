@@ -16,6 +16,10 @@ PRIVACY RULES:
 - Read MEMORY.md index entries (name + description) but NOT memory file bodies
 - Report counts and topics, never content
 - Settings: report structure, not values of env vars
+
+Safety rails: ``settings.json``, ``MEMORY.md``, and
+``CLAUDE.md`` are read through :func:`bonfire._safe_read.safe_read_text`
+so a multi-GB file or a ``/dev/zero`` symlink cannot hang the scanner.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from bonfire._safe_read import safe_read_text
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
 
 if TYPE_CHECKING:
@@ -31,6 +36,18 @@ if TYPE_CHECKING:
 __all__ = ["scan"]
 
 PANEL = "claude_memory"
+
+# Byte caps applied to settings / MEMORY.md / CLAUDE.md reads. These
+# files are normally small (single-digit KB to a few hundred KB); 5 MiB
+# is a generous headroom that still bounds the worst-case read.
+_SETTINGS_READ_MAX_BYTES = 5 * 1024 * 1024
+_SETTINGS_READ_MAX_BYTES_ENV = "BONFIRE_CLAUDE_SETTINGS_MAX_BYTES"
+
+_MEMORY_READ_MAX_BYTES = 5 * 1024 * 1024
+_MEMORY_READ_MAX_BYTES_ENV = "BONFIRE_MEMORY_READ_MAX_BYTES"
+
+_CLAUDE_MD_READ_MAX_BYTES = 5 * 1024 * 1024
+_CLAUDE_MD_READ_MAX_BYTES_ENV = "BONFIRE_CLAUDE_MD_READ_MAX_BYTES"
 
 # Memory file type prefixes — files are named like feedback_xxx.md, project_yyy.md, etc.
 _MEMORY_TYPE_PREFIXES = ("feedback", "project", "reference", "session", "user")
@@ -83,28 +100,57 @@ async def scan(
 
 
 async def _scan_settings(claude_dir: Path, emit: ScanCallback) -> int:
-    """Read settings.json and report model, permissions, extensions."""
+    """Read settings.json and report structural metadata for model, permissions, extensions.
+
+    Per the module's privacy posture ("Settings: report structure, not values"):
+    ``model`` and ``permissions`` are emitted as *presence/structure* signals
+    only — the literal values never appear in any event field. This mirrors
+    the existing ``extensions`` handling, which only emits a count.
+
+    The persisted output (``bonfire.toml [bonfire.claude_memory]`` via
+    ``config_generator._build_claude_memory``) and the WS broadcast both
+    consume the ``value`` / ``detail`` fields; a leak in either is durable.
+    Claude Code's ``permissions`` block can carry deny-list rules and ``env``
+    values today, and may grow auth-bearing fields in future — emitting the
+    raw value or its ``str(dict)`` repr would commit those into config.
+    """
     settings_path = claude_dir / "settings.json"
     if not settings_path.is_file():
         return 0
 
     try:
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        raw = safe_read_text(
+            settings_path,
+            env_var=_SETTINGS_READ_MAX_BYTES_ENV,
+            default_bytes=_SETTINGS_READ_MAX_BYTES,
+        )
+        data = json.loads(raw)
     except (json.JSONDecodeError, OSError):
         return 0
 
     count = 0
 
-    # Model override
-    model = data.get("model")
-    if model:
-        await emit(ScanUpdate(panel=PANEL, label="model", value=str(model)))
+    # Model override — emit presence/structure, NOT the value. The literal
+    # model identifier can itself carry token-like segments for custom
+    # endpoints; presence is the only safe signal.
+    if "model" in data:
+        await emit(ScanUpdate(panel=PANEL, label="model", value="set"))
         count += 1
 
-    # Permissions mode
-    permissions = data.get("permissions")
-    if permissions:
-        await emit(ScanUpdate(panel=PANEL, label="permissions", value=str(permissions)))
+    # Permissions — emit structural metadata (top-level key names + count),
+    # NOT the nested values. The deny-list bodies and any env values stay
+    # out of the event entirely.
+    if "permissions" in data:
+        permissions = data.get("permissions")
+        if isinstance(permissions, dict):
+            keys = sorted(permissions.keys())
+            value = f"{len(keys)} key{'s' if len(keys) != 1 else ''}"
+            detail = ", ".join(keys)
+        else:
+            # Non-dict permissions (legacy string form, etc.): report type only.
+            value = type(permissions).__name__
+            detail = ""
+        await emit(ScanUpdate(panel=PANEL, label="permissions", value=value, detail=detail))
         count += 1
 
     # Extensions count
@@ -183,7 +229,11 @@ async def _scan_memory_index(mem_dir: Path, emit: ScanCallback) -> int:
         return 0
 
     try:
-        text = memory_md.read_text(encoding="utf-8")
+        text = safe_read_text(
+            memory_md,
+            env_var=_MEMORY_READ_MAX_BYTES_ENV,
+            default_bytes=_MEMORY_READ_MAX_BYTES,
+        )
     except OSError:
         return 0
 
@@ -209,7 +259,11 @@ async def _scan_claude_md(project_path: Path, emit: ScanCallback) -> int:
         return 0
 
     try:
-        text = claude_md.read_text(encoding="utf-8")
+        text = safe_read_text(
+            claude_md,
+            env_var=_CLAUDE_MD_READ_MAX_BYTES_ENV,
+            default_bytes=_CLAUDE_MD_READ_MAX_BYTES,
+        )
     except OSError:
         return 0
 

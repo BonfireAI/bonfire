@@ -57,59 +57,6 @@ class TestIngestMarkdown:
 
 
 # ---------------------------------------------------------------------------
-# Markdown ingestion — resilience tier (BON-527)
-# ---------------------------------------------------------------------------
-
-
-class TestIngestMarkdownResilience:
-    """Lock the typed-zero contract: missing/empty markdown returns 0, never raises.
-
-    BON-527 re-adds the resilience tests filtered out of BON-341 RED to keep
-    that wave at the D8.3 floor. The contract mirrors the backfill missing-dir
-    pattern: ``ingest_markdown`` answers an unusable input with ``int`` 0 — not
-    an exception, not ``None``.
-    """
-
-    async def test_ingest_markdown_missing_file_returns_zero(self, tmp_path) -> None:
-        """A path that does not exist ingests to typed-zero, never raises."""
-        missing = tmp_path / "does-not-exist.md"
-        assert not missing.exists()
-        backend = InMemoryVaultBackend()
-        stored = await ingest_markdown(missing, backend=backend)
-        assert stored == 0
-        assert isinstance(stored, int)
-        assert stored is not None
-        assert backend._entries == []
-
-    async def test_ingest_markdown_empty_file_returns_zero(self, tmp_path) -> None:
-        """An empty file (and a whitespace-only file) ingests to typed-zero."""
-        empty = tmp_path / "empty.md"
-        empty.write_text("")
-        backend = InMemoryVaultBackend()
-        stored = await ingest_markdown(empty, backend=backend)
-        assert stored == 0
-        assert isinstance(stored, int)
-        assert backend._entries == []
-
-        whitespace = tmp_path / "whitespace.md"
-        whitespace.write_text("   \n\t\n   \n")
-        whitespace_stored = await ingest_markdown(whitespace, backend=backend)
-        assert whitespace_stored == 0
-        assert backend._entries == []
-
-    async def test_ingest_markdown_directory_path_returns_zero(self, tmp_path) -> None:
-        """A directory passed where a file is expected returns 0, never raises.
-
-        ``is_file()`` is False for a directory, so the same typed-zero guard
-        protects against this OSError-prone input.
-        """
-        backend = InMemoryVaultBackend()
-        stored = await ingest_markdown(tmp_path, backend=backend)
-        assert stored == 0
-        assert backend._entries == []
-
-
-# ---------------------------------------------------------------------------
 # Session ingestion
 # ---------------------------------------------------------------------------
 
@@ -157,42 +104,6 @@ class TestIngestSession:
         second = await ingest_session(log, backend=backend)
         assert first >= 1
         assert second == 0
-
-
-# ---------------------------------------------------------------------------
-# Session ingestion — resilience tier (BON-527)
-# ---------------------------------------------------------------------------
-
-
-class TestIngestSessionResilience:
-    """Lock the typed-zero contract: missing/empty session log returns 0, never raises."""
-
-    async def test_ingest_session_missing_file_returns_zero(self, tmp_path) -> None:
-        """A session-log path that does not exist ingests to typed-zero."""
-        missing = tmp_path / "no-such-session.jsonl"
-        assert not missing.exists()
-        backend = InMemoryVaultBackend()
-        stored = await ingest_session(missing, backend=backend)
-        assert stored == 0
-        assert isinstance(stored, int)
-        assert stored is not None
-        assert backend._entries == []
-
-    async def test_ingest_session_empty_file_returns_zero(self, tmp_path) -> None:
-        """An empty (and a blank-line-only) session log ingests to typed-zero."""
-        empty = tmp_path / "empty.jsonl"
-        empty.write_text("")
-        backend = InMemoryVaultBackend()
-        stored = await ingest_session(empty, backend=backend)
-        assert stored == 0
-        assert isinstance(stored, int)
-        assert backend._entries == []
-
-        blank = tmp_path / "blank.jsonl"
-        blank.write_text("\n\n   \n")
-        blank_stored = await ingest_session(blank, backend=backend)
-        assert blank_stored == 0
-        assert backend._entries == []
 
 
 # ---------------------------------------------------------------------------

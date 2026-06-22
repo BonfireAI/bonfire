@@ -200,8 +200,7 @@ class TestFalcorAsShippedCompanion:
 
             # phrases.toml has nested shape: [stage.started] -> phrases = [...]
             # We flatten any list[str] value found anywhere in the tree.
-            # recursion: bounded by the parsed phrases.toml tree depth —
-            # tomllib output is a finite acyclic dict/list tree.
+            # recursion: bounded by the finite nesting depth of the parsed TOML tree
             def _walk(node: object) -> None:
                 if isinstance(node, dict):
                     for v in node.values():

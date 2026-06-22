@@ -67,7 +67,7 @@ def _v1_blob(*, version: int = 1) -> bytes:
         "study_schema_version": version,
         "metadata": {
             "workspace_id": "ws-1",
-            "project_root": "/fake/proj",
+            "project_root": "/tmp/proj",  # noqa: S108
             "scanned_at": "2026-01-01T00:00:00",
             "git_sha": None,
             "structural_only": True,

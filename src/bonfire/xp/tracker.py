@@ -9,6 +9,9 @@ import json
 import time
 from pathlib import Path
 
+from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
+from bonfire._safe_write import safe_append_text
+
 # ---------------------------------------------------------------------------
 # Level ladder: (threshold, level_number, tier_name) — descending order
 # ---------------------------------------------------------------------------
@@ -51,6 +54,13 @@ class XPTracker:
     ) -> None:
         """Append an XP event to the JSONL file.
 
+        Uses ``safe_append_text`` to refuse symlinks at
+        ``xp_events.jsonl`` (via ``is_symlink()`` pre-check +
+        ``O_NOFOLLOW`` defense-in-depth). The W7.M ``safe_write_text``
+        rollout closed truncate-mode write sites but missed this
+        append-mode site; a planted symlink would otherwise redirect
+        every recorded XP event to an attacker-controlled target.
+
         Note: No file-level locking is used. Bonfire runs one pipeline
         at a time, so concurrent writes are not expected. If concurrent
         pipelines are introduced, this method must be wrapped in a
@@ -62,19 +72,33 @@ class XPTracker:
             "respawn": respawn,
             "timestamp": time.time(),
         }
-        with self._jsonl_path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event) + "\n")
+        safe_append_text(self._jsonl_path, json.dumps(event) + "\n")
 
     def events(self) -> list[dict]:
-        """Read all events from the JSONL file."""
-        if not self._jsonl_path.exists():
+        """Read all events from the JSONL file.
+
+        Uses ``safe_read_capped_text`` (W7.M read-side helper) to refuse
+        symlinks at ``xp_events.jsonl`` and to cap reads at
+        ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
+        ``safe_append_text`` write-side hardening on ``record``: Wave 9
+        closed the write half of the XP-ledger attack surface; this
+        closes the read half.
+
+        ``Path.is_symlink()`` is checked BEFORE ``Path.exists()`` so a
+        dangling symlink (where ``exists()`` returns ``False``) does
+        NOT collapse into the empty-list "no events yet" branch and
+        mask the attack signal. Live, dangling, and looping symlinks
+        all route through ``safe_read_capped_text`` which raises
+        ``FileExistsError`` with the W7.M ``"symlink"`` substring.
+        """
+        if not self._jsonl_path.is_symlink() and not self._jsonl_path.exists():
             return []
+        text = safe_read_capped_text(self._jsonl_path, max_bytes=MAX_CHECKPOINT_BYTES)
         results: list[dict] = []
-        with self._jsonl_path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if line:
-                    results.append(json.loads(line))
+        for line in text.splitlines():
+            line = line.strip()
+            if line:
+                results.append(json.loads(line))
         return results
 
     def total_xp(self) -> int:

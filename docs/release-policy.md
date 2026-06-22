@@ -7,13 +7,13 @@ to PyPI during the pre-release and v0.1 development periods.
 
 ## Current Status
 
-`bonfire-ai` is in alpha at version `0.1.0a2`. The original `0.1.0`
-tag shipped on 2026-04-28; on 2026-05-03 the version label was reverted
-to the `0.1.0aN` alpha series to honestly reflect that the release-gate
-items in [`docs/release-gates.md`](release-gates.md) remain open. The
-alpha series has since advanced to `0.1.0a2`. Stable `v0.1.0` is the
-future tag once the gates all clear. See
-[`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.
+`bonfire-ai` is in alpha at version `0.1.0a4` (per `pyproject.toml`).
+The original `0.1.0` tag shipped on 2026-04-28; on 2026-05-03 the
+version label was reverted to `0.1.0a1` to honestly reflect that the
+release-gate items in [`docs/release-gates.md`](release-gates.md)
+remain open, and the alpha series has since advanced to `0.1.0a4`.
+Stable `v0.1.0` is the future tag once the release-gate items clear.
+See [`CHANGELOG.md`](../CHANGELOG.md) for the per-release record.
 
 The two sections below ("Pre-release Period" and "Release Candidate
 Period") describe earlier alpha-numbering phases (`0.0.0a1`, `0.0.0a2`,
@@ -21,22 +21,6 @@ Period") describe earlier alpha-numbering phases (`0.0.0a1`, `0.0.0a2`,
 reference. The current alpha series uses the `0.1.0aN` form. The
 "v0.1.0 Release" section captures the gates that govern cutting the
 stable tag.
-
-## Pre-tag Checklist
-
-Run before cutting any new alpha/rc/release tag:
-
-- [ ] **Version-literal grep.** Before tagging a new alpha, grep
-  `README.md` and `CLAUDE.md` for the *previous* version literal and
-  update any stale references to the version being shipped:
-  `grep -nF "<previous-version>" README.md CLAUDE.md` should return no
-  matches. (Historical references in `CHANGELOG.md` are intentional and
-  exempt.) This guard exists because the docs' only release-status
-  signal is the version string — a stale literal silently lies to new
-  contributors (BON-890).
-- [ ] **Single source of truth.** Confirm the new version is consistent
-  across `pyproject.toml`, `src/bonfire/__init__.py` (the editable
-  fallback `__version__`), `README.md`, and `CLAUDE.md`.
 
 ## Pre-release Period
 
@@ -82,8 +66,9 @@ The first functional release is cut when:
 - All four trust-triangle components are on `main`: the four
   `@runtime_checkable` extension protocols (`AgentBackend`,
   `VaultBackend`, `QualityGate`, `StageHandler`), the default
-  allow-list floor and user-configurable per-role allow-lists (W4.1),
-  and the default security hook set (W4.2).
+  allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+  the Protocol seam IS the user-configurable surface; no TOML loader
+  ships in v0.1), and the default security hook set (W4.2).
 
 At that point:
 

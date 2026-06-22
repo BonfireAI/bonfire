@@ -4,44 +4,435 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] — 2026-05-17
+
+Docs-only release. README repositioned for marketing impact on the
+GitHub repo page: centered hero stack, 3-beat sub-tagline, naming-gesture
+excerpt above the fold, v1.0.0 banner relocated to a "What's in v1.0.0"
+callout. No code changes; the v1.0.0 surface is unchanged.
+
+### Changed
+
+- README hero now uses a centered stack with upgraded badges + nav row
+  (matches the OSS spine used by astro / prisma / bun / vercel-ai).
+- Three-beat sub-tagline under the hero packs install + in-chat +
+  naming claims into one italicized line.
+- New "Install (60 seconds)" section above the fold pairs the three-line
+  install with a four-line naming-gesture dialog excerpt (cross-links
+  to the full "Your First Scan" section below).
+- v1.0.0 banner blockquote demoted to a "What's in v1.0.0" callout
+  further down the README.
+- Stub-command caveat and legacy onboarding warnings consolidated into
+  the "What's Not There Yet" section so honest-list discipline lives
+  in one place.
+
+## [1.0.0] — 2026-05-17
+
+The first stable release of `bonfire-ai`. Bonfire pivots from "Python pipeline
+runtime with browser-tab onboard" to **the opinion package that opinions your
+Claude Code CLI for shipping software with a nine-role cadre**. Pip-install
+drops both the Python runtime AND a Claude Code skill that the user installs
+via a one-time `bonfire install-skill` command. From then on, `/bonfire scan`
+inside the user's Claude Code session opens the onboarding conversation in
+chat — no browser tab, no WebSocket, no context switch.
 
 ### Added
 
-- **Bonfire cadre as Claude Code subagents.** Ships the six v1 cadre roles
-  (`scout-innovative`, `scout-conservative`, `knight`, `warrior`, `sage`,
-  `wizard`) plus the `bonfire-powered` catch-all as Claude Code subagent
-  definitions. Two distribution rails:
-  - **Plugin (canonical).** `.claude-plugin/plugin.json` + pre-rendered
-    `agents/<role>.md` files. Installable via Claude Code's
-    `/plugin install bonfire@<marketplace>`. Subagent type surfaces as the
-    colon-namespaced `bonfire:<role>` form.
-  - **Raw-files CLI (fallback).** `bonfire install-agents [--scope user|project]`
-    drops flat-named `bonfire-<role>.md` files at the chosen scope, with
-    paired `bonfire uninstall-agents` and `bonfire list-agents`. Necessary
-    for environments that can't use the plugin (Cursor, Codex, raw SDK)
-    and as a user-customization "fork" lane (priority 4 shadows priority 5).
-- **New `bonfire.cadre` module.** `CADRE_CONTRACT_VERSION` constant +
-  `resolve_role_prompt(role)` adapter (skeleton; library-side
-  refusal-on-mismatch deferred to a follow-up to keep the scaffold PR
-  single-concern).
-- **New `bonfire build-agents` CLI.** Generates `agents/<role>.md` files
-  from canonical bodies at `src/bonfire/prompts/<role>.md` plus per-role
-  metadata at `src/bonfire/agent/role_metadata.py`. Use `--check` in CI
-  to fail on drift.
-- `.claude/settings.local.json.example` ships the Warrior Bash unblock
-  pattern as opt-in recommendation, never silent auto-install.
-- Per-role tool-scoping confirmed: Knight ships WITHOUT Bash for v1
-  (Knight writes RED, Warrior runs the cycle); Warrior is the only role
-  with Bash; Wizard is read-only (`Agent` tool is unavailable to subagents
-  regardless).
+- **Claude Code skill bundle** (`src/bonfire/skill/SKILL.md`).
+  Instruction-based skill content delivered with the wheel. Describes the
+  `/bonfire scan` flow: greeting (asks what to call Bonfire), repo read,
+  cadre wiring, `bonfire.toml` write. Covers the nine-role cadre with both
+  Falcor (shipped default) and default persona display-name lineages.
+- **`bonfire install-skill` CLI verb.** One-time command that copies the
+  bundled skill content to `~/.claude/skills/bonfire/`. Idempotent. Refuses
+  to overwrite divergent content without `--force`. Uses `safe_write_text`
+  (symlink-rejection + O_NOFOLLOW) and `safe_read_capped_text` (1 MiB cap).
+- **README rewritten with a conversational tool stance.** Hero leads with
+  "Your Claude Code, opinionated." Body opens with the naming gesture.
+  Quick Start walks through pip-install → install-skill → `/bonfire scan`.
+  Dialog-scenario block depicts the in-chat conversation shape. Architecture
+  / extension surface / cadre glossary preserved for engineer-reviewer
+  second read.
 
-## [0.1.0a2] — 2026-05-04
+### Changed
 
-Maintenance alpha. No functional changes from `0.1.0a1` — this release lands
-a set of release-pipeline hardening and developer-environment compatibility
-fixes accumulated since the prior alpha, and exercises the OIDC-driven
-release workflow end-to-end for the first time.
+- **`/bonfire scan` is now the primary conversational surface.** The
+  browser-tab onboard (`onboard/server.py` + `onboard/ui.html`) stays as
+  the deprecated legacy path; not removed in this release. See
+  `docs/scan-front-door-protocol.md` if you need it.
+- **`ANTHROPIC_API_KEY` requirement documented in README Quick Start.**
+  Previous alpha docs implicitly required it; v1.0.0 names it explicitly.
+- **Stub-command caveat.** `bonfire status`, `bonfire resume`,
+  `bonfire handoff` are now explicitly labelled as v1.0 stubs in the README;
+  full implementation lands in v1.x.
+- **PyPI classifier advances from `Development Status :: 3 - Alpha` to
+  `Development Status :: 5 - Production/Stable`.**
+
+### Removed (BREAKING — alpha API)
+
+- **`StageExecutor.execute_single` deleted.** The class was unreachable
+  from `PipelineEngine` (engine uses its own `_execute_stage`); the public
+  re-exported API was a divergent dead path that dropped
+  `initial_envelope.metadata` and diverged on `model_override` semantics.
+  Deletion makes `PipelineEngine._execute_stage` the canonical execution
+  surface. Vault-advisor wire-up is deferred to a v1.x release; the
+  advisor class itself stays live and importable.
+- **`StageExecutor` class removed from `bonfire.engine` public API.** The
+  public-API surface shrank from 15 to 14 symbols. If you imported it
+  directly, your code will fail to import; use `PipelineEngine` instead.
+
+### Fixed
+
+- **Bus-vs-`PipelineResult` parity restored at the handler seam.**
+  Introduced shared `dispatch/handler_runner.py::run_handler_dispatch`
+  helper that emits synthetic `Dispatch*` events stamped with handler
+  cost. `sage_correction_bounce` now routes through it. Sage-correction
+  cycle costs are visible to every bus observer (`CostTracker`,
+  `CostLedgerConsumer`, the budget watchdog, `KnowledgeIngestConsumer`).
+- **`PipelineEngine.run` outer-exception path emits `PipelineFailed`.**
+  Previously the outer `try/except` silently returned a failure result
+  without notifying observers. Now emits `PipelineFailed` with
+  `failed_handler`, `duration_seconds`, `stages_completed`, and
+  `total_cost_usd` populated.
+- **Halt-branch event completeness on `PipelineFailed`.** New fields
+  (`failed_handler`, `duration_seconds`, `stages_completed`) added to
+  `PipelineFailed`; populated on all five halt branches (outer exception,
+  budget exceeded, parallel stage failed, single stage failed, gate
+  failure + bounce).
+- **Observer-registration completeness canary.** New parametrized test
+  asserts every concrete `BonfireEvent` subclass in `models/events.py`
+  has at least one registered consumer in the default wiring. Pre-empts
+  the regression class where a new event lands without an observer.
+- **Read-side TOCTOU and boundary-validation defense-in-depth.**
+  `safe_read_capped_text` migrated to `mcp_servers._read_servers_from_config`,
+  `session/persistence.py`, `config_generator.py`, and several CLI commands.
+  `SessionPersistence` validates session IDs at all public-method
+  boundaries. `git/scratch.ScratchWorktreeContext` validates the prefix
+  kwarg. 83 new adversarial tests.
+- **Scan front-door protocol citations re-anchored.** 67 docstring +
+  comment citations in `docs/scan-front-door-protocol.md` drifted +6 to
+  +307 lines per source file after prior hardening waves; all corrected.
+  New AST-based drift checker wired into CI between Lint and Test.
+
+### Security
+
+- **`_HOME_PREFIX_RE` regex bypass fixed.** Greedy `[^/]+` username slot
+  used to match the literal `..` segment, letting `/home/../etc/sudoers`
+  bypass `WRITE_EDIT_SENSITIVE_PATH_DENY`. Now uses negative lookaheads
+  to refuse `./` and `../` username slots. 58 new adversarial tests.
+
+### Audit
+
+A full audit at the post-Wave-11 baseline (three independent scouts:
+security, pipeline, onboard) returned **zero CRITICAL findings across
+all three axes**. The two HIGHs surfaced by the onboard scout
+(stub-command caveat, `ANTHROPIC_API_KEY` in Quick Start) folded into
+this release's README rewrite.
+
+### Notes
+
+- The full opinion mechanism (UserPromptSubmit + Stop hooks, subagent
+  registrations, browser-tab rip, plugin marketplace publish) is
+  intentionally deferred to v1.x. v1.0.0 delivers the framing, the
+  install path, and the in-chat `/bonfire scan` surface — the seed.
+- Migration from `0.1.0aN`: change install command to
+  `pip install bonfire-ai` (drop `--pre`). After install, run
+  `bonfire install-skill` once to register the Claude Code skill, then
+  `/bonfire scan` from inside Claude Code.
+
+## [0.1.0a4] — 2026-05-16
+
+The fourth alpha release of `bonfire-ai`. A coordinated hardening pass against
+the cost-accounting, security, and onboarding surfaces of the runtime, plus
+release-prep docs hygiene that the [0.1.0a3] cut left stale. The stable
+`0.1.0` tag remains held until the full release-gate ladder (per
+[`docs/release-policy.md`](docs/release-policy.md)) clears in code, in CI,
+and in a fresh release-gate Box.
+
+### Added
+
+- **`DispatchFailed.cost_usd` field and new `PipelineFailed` event.** Bus
+  observers can now reconstruct cumulative cost on failure paths. Three
+  `DispatchFailed` emit sites in `dispatch/runner.py` and four
+  `PipelineFailed` emit sites in `engine/pipeline.py` thread cumulative
+  cost through the bus.
+- **`CostTracker` and `CostLedgerConsumer` dual-subscribe.** `CostTracker`
+  observes both `DispatchCompleted` AND `DispatchFailed`;
+  `CostLedgerConsumer` observes both `PipelineCompleted` AND
+  `PipelineFailed`. Bus-observed total now equals
+  `PipelineResult.total_cost_usd` on success, failure, bounce, and
+  parallel-group paths.
+- **`safe_read_capped_text` mirrored to symmetric read sites.** The Wave-9
+  safe-write rollout now covers `session/persistence.py::read_events`,
+  `xp/tracker.py::XPTracker.events`, and the `bonfire init` gitignore
+  append. Symlink, oversize, and TOCTOU shapes are refused with typed
+  errors.
+
+### Changed
+
+- **`StageExecutor.execute_single` cumulative-cost stamp aligned with
+  `PipelineEngine._execute_stage`.** The public re-exported API applies
+  the same `cumulative_iteration_cost` stamp as the live engine path.
+  Note: full execution-path consolidation between the two
+  implementations is queued for a subsequent alpha.
+- **`bonfire init` re-runs report `Already present:` for pre-existing
+  artifacts.** Previously emitted `Created:` on every re-run regardless
+  of whether the artifact actually existed.
+- **WebSocket message-size cap unified to 8 KiB.** The Pydantic max
+  (`onboard/protocol.py::MAX_USER_MESSAGE_LEN`) and the websockets server
+  cap now share a single source of truth.
+- **Legacy `[bonfire.tools]` section emits a migration warning.** Project
+  TOMLs with the legacy section now get a `typer.echo` instructing the
+  move to `.bonfire/tools.local.toml`.
+- **`--conversation-timeout -1` renders as `unbounded` in `--help`.**
+
+### Fixed
+
+- **`_HOME_PREFIX_RE` no longer accepts `..` or `.` as a username
+  segment.** A greedy `[^/]+` in `_HOME_PREFIX_RE` previously matched the
+  literal `..` segment, letting inputs like `/home/../etc/sudoers`
+  canonicalize to `~/etc/sudoers` and bypass
+  `WRITE_EDIT_SENSITIVE_PATH_DENY`. The regex now uses a negative
+  lookahead to exclude `./` and `../` username slots; the entire deny
+  floor is restored.
+- **`_handle_bounce` failure-path branches preserve `bounce_target`
+  cost.** Refactored from `tuple[Envelope, float] | None` to
+  `tuple[Envelope | None, float]`; cost-delta is now credited on every
+  halt path.
+- **`_validate_session_id` and `_envelope_id_re` regex use `\Z`
+  anchor.** Trailing `\n` (CRLF / log-injection shape) is now rejected.
+  Previously `$` allowed it.
+- **`bonfire cost session <bad>` validates at the CLI boundary.**
+  Invalid session IDs fail at the typer parsing layer rather than
+  mid-execution.
+- **`Unknown record type None` warning aggregated** to one summary line
+  per legacy ledger load (was per-record spam).
+- **`bonfire init <existing-file>` raises a tailored error.** Previously
+  raised a `FileExistsError` traceback to the user; now `typer.echo` +
+  `Exit(1)`.
+
+### Security
+
+- **`C1.1-rm-rf-non-temp` regex anchor normalized to `\b`.** Switched
+  from `(?:^|[|;&]\s+)` to `\b` to match the rest of the catalogue.
+  Bypass forms `/bin/rm`, `exec rm`, `\rm`, `time/nice/command rm` are
+  now caught.
+- **`WRITE_EDIT_SENSITIVE_PATH_DENY` expanded with six modern
+  surfaces:** `~/.ssh/config`, `~/.config/git/config`, `/etc/cron.d/`,
+  `/etc/systemd/system/`, `/usr/local/bin/`, `/etc/ld.so.preload`.
+- **`_safe_resolve_config_path` refuses home-symlink targets
+  unconditionally.** Symlinks whose targets escape the active
+  write-floor now return a typed error rather than silently following.
+
+### Internal
+
+- **Release-prep docs hygiene.** README, CHANGELOG, `docs/release-policy.md`,
+  `docs/scan-front-door-protocol.md`, `src/bonfire/__init__.py` fallback
+  `__version__`, and `src/bonfire/cli/app.py` docstring all aligned with
+  the current alpha label.
+
+## [0.1.0a3] — 2026-05-16
+
+The third alpha release of `bonfire-ai`. Bonfire is a pipeline runtime
+for AI agents — it wires role-bound stages over a typed event bus, enforces
+TDD at the role boundary, and ships the four extension Protocols
+(`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`) that
+together form the trust triangle a production deployment composes against.
+The stable `0.1.0` tag remains held until the full release-gate ladder
+(per [`docs/release-policy.md`](docs/release-policy.md)) clears in code,
+in CI, and in a fresh release-gate Box. Follow-ups surfaced in this alpha
+are tracked under BON-610 and ship in subsequent v0.1.0aN or v0.1.x patches.
+
+Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
+hardening pass across the dispatch, scanner, persona, git, and Front Door
+modules, and a performance pass that takes Vault ingest from
+quadratic to linear. Everything else is sharpening: a clarified `bonfire
+scan --no-browser` contract, a documented WebSocket protocol for the
+onboarding flow, and the CI and pre-commit wiring that make "the suite
+passes" mean what it should on the integration branch.
+
+### Added
+
+- **WebSocket protocol specification for `bonfire scan`.** A complete spec
+  of the `FrontDoorServer` ↔ client message exchange ships at
+  `docs/scan-front-door-protocol.md`. Every event and message in the spec
+  carries a `file:line` citation back to its emit or handler site, so
+  third-party clients can implement against the spec rather than
+  re-deriving the protocol from source.
+- **Headless scan driver script.** `scripts/petri_conversational_driver.py`
+  is a minimal Python WebSocket client that drives `bonfire scan
+  --no-browser` end-to-end without a browser — spawn, parse the URL, log
+  every event, reply to onboarding questions, and exit cleanly on
+  `config_generated`. Surfaces a `scan_phase` state-machine discriminator
+  (`pending`/`scanning`/`conversing`/`done`) and a configurable
+  per-message receive timeout (`--timeout-seconds`, default 120s).
+- **Pre-commit configuration.** `.pre-commit-config.yaml` ships at the
+  repo root with `ruff check` and `ruff format` hooks that mirror the CI
+  gate. Run `pre-commit install` once after cloning to catch lint and
+  format issues locally before pushing.
+
+### Changed
+
+- **BREAKING: `DispatchOptions.permission_mode` default flipped to
+  `"default"` (SDK ask-mode).** The previous default `"dontAsk"` is now
+  framed as defense-in-depth rather than the primary trust gate; explicit
+  `permission_mode="dontAsk"` opt-ins in `handlers/wizard.py` and
+  `handlers/sage_correction_bounce.py` continue to behave as before.
+  Callers that today inherit the default will now run agents in
+  SDK ask-mode. Handlers that need autonomous behavior must opt in
+  explicitly. Review your call sites before upgrading from `0.1.0a*`.
+- **`bonfire scan --no-browser` is documented as WebSocket-driven, not
+  browser-suppressed.** The flag never disabled the Front Door server —
+  it only suppressed `typer.launch(url)`. Help text, runtime echo, and
+  module docstrings now say so. With `--no-browser` set, the wait line
+  reads `Waiting for client connection at <ws_url>` instead of the prior
+  `Waiting for browser connection...`. The default browser-launch path
+  is unchanged.
+- **`InMemoryVaultBackend.exists()` is now O(1).** A parallel hash-set
+  index turns the previous linear scan into a constant-time membership
+  check. n-entry ingest was O(n²) before this change; it is now O(n).
+- **Vault query lowercasing is now cached.** `query()` no
+  longer re-lowercases each entry's content on every call; a lazy
+  parallel cache fills on first query, and ingest-heavy workloads that
+  never query never pay the cost.
+- **LanceDB `exists()` is filter-only.** The zero-vector ANN search is
+  gone; existence checks no longer carry per-call embedding cost.
+  Semantics preserved.
+- **Cost-ledger parsing is memoized.** `cost.analyzer` now caches the
+  parsed ledger keyed by `(mtime, size)`; repeated `bonfire cost`
+  invocations within a session reuse the parsed structure. A new
+  raw-dict aggregation path on cold queries skips the Pydantic
+  round-trip.
+- **CLI cold-start is ~6× faster.** `bonfire --version` and
+  `bonfire --help` no longer drag `websockets`, `bonfire.onboard.server`,
+  or `bonfire.cost.analyzer` into the import graph. Cold start measured
+  ~451 ms before this change and ~73 ms after, on the same machine. A
+  forbidden-modules contract test pins the boundary so future imports
+  cannot silently re-inflate the cold path.
+- **`dispatch/` package surface.** `ToolPolicy`, `DefaultToolPolicy`, and
+  `SecurityHooksConfig` are now re-exported at `bonfire.dispatch` so
+  contributors implementing custom tool policies do not have to reach
+  into submodules. The package docstring is corrected to describe
+  `TierGate` accurately as a no-op stub (the prior text claimed it
+  enforced quotas, which it does not).
+- **`bonfire scan` documentation rephrased as "WS-driven" instead of
+  "browser-based".** The short-form docstrings on `scan` and `_run_scan`
+  drop the browser-only framing.
+
+### Fixed
+
+- **Front Door server survives multiple `asyncio.run()` calls.**
+  `FrontDoorServer.__init__` previously constructed its `asyncio.Event`
+  instances eagerly, binding them to whichever loop was current at
+  construction time. Embedders that reused a server across loops hit
+  `RuntimeError: <Event> is bound to a different event loop` on the
+  second `await`. Events are now created lazily inside `start()`, so
+  every `start()` rebinds them to the current loop.
+- **`bonfire persona set <name>` no longer corrupts `bonfire.toml` with
+  hostile names.** All three TOML write sites route through a shared
+  `escape_basic_string` helper; persona names containing quotes,
+  newlines, control characters, or fake section headers are escaped
+  rather than written through.
+- **`PersonaLoader.load(name)` validates names with a slug pattern.**
+  Path-traversal probes like `PersonaLoader.load("../../etc/passwd")`
+  now short-circuit with a single WARNING and never touch the
+  filesystem.
+- **MCP scanner is bounded, symlink-safe, and non-blocking.**
+  `_read_servers_from_config` enforces a 1 MiB size cap (overridable via
+  `BONFIRE_MCP_SCAN_MAX_BYTES`), rejects symlinks whose resolved target
+  escapes the home or project root, and reads via `asyncio.to_thread`
+  to keep the event loop unblocked.
+- **`git_state` scanner emits error events instead of silently dropping
+  panels.** `_run_cmd`'s return type tightened to
+  `tuple[int | None, str]`; non-zero git exit codes (corrupt
+  `.git/HEAD`), `returncode is None`, and timeouts now produce a
+  recognizable `ScanUpdate`. The scanner also treats a no-commit repo
+  (where `git log` legitimately fails) as a benign empty state.
+- **`rm -rf` security pattern matches ephemeral tokens at path-segment
+  boundaries.** The previous substring lookahead let unsafe paths like
+  `rm -rf __pycache__-backup/db` slip through DENY. The lookahead now
+  requires the ephemeral token (`__pycache__`, `node_modules`, `.venv`,
+  `dist`, `build`) to sit at a real path-segment boundary.
+- **User-supplied security-hook regexes compile once.** Patterns are
+  hoisted to compile time in the hook factory; the broken-pattern
+  fail-safe DENY path is preserved.
+- **Bounce-back stages count against `budget_usd`.** After a successful
+  bounce-back, the pipeline previously credited only the retried
+  stage's cost to `total_cost_usd`, silently dropping the bounce-target
+  stage's cost. A run that should have halted at the budget cap could
+  slip past it. `total_cost_usd` now includes both the bounce target
+  and the retry, and the budget watchdog halts correctly.
+
+### Security
+
+- **Remote-URL sanitization is now `urlsplit`-based.** The previous
+  five-step `re.sub` chain has been replaced with a single
+  `urllib.parse.urlsplit` parse. SCP-style `git@host:path` URLs are
+  rewritten to `ssh://host/path` first so the same parser handles both
+  shapes. Userinfo and the entire query string are dropped, so
+  `?token=...` and GHSA-style credentials no longer leak through scan
+  output.
+- **Git subprocess errors no longer echo subcommand args, stderr, or
+  commit messages.** `_run_git` now raises a redacted `RuntimeError`
+  naming only the subcommand and exit code. A new `verbose: bool = False`
+  keyword opts in to full detail for debugging.
+- **Claude-memory settings scan reports structure, not values.** When
+  scanning `~/.claude/settings.json` and project-local equivalents,
+  `model` is reported as `value="set"` (no literal); `permissions` is
+  reported as `value=f"{N} key(s)"` with `detail` listing only the
+  sorted top-level keys. Nested contents are never emitted.
+- **SDK backend traceback redaction.** `ClaudeSDKBackend.execute` no
+  longer stores `traceback.format_exc()` on persisted envelopes by
+  default. The `ErrorDetail.traceback` field is a single-frame
+  `file:line: ExceptionType: message` summary, so prompts and agent
+  options can no longer leak through tracebacks into long-lived session
+  JSONL. Set `BONFIRE_DEBUG_TRACEBACKS=1` to restore the full traceback
+  during debugging.
+
+### Internal
+
+- CI now runs on the `v0.1` integration branch in addition to `main`, so
+  required status checks actually fire on the branch where feature work
+  lands.
+- `ruff` is pinned to an exact version in both pre-commit and CI to keep
+  the two surfaces from drifting.
+- The release-gate Box image puts `claude-code` on `PATH` for the
+  unprivileged `box` user and bakes in `python3-pytest` and
+  `python3-yaml` so the in-box gate-verdict script can actually run.
+  `claude --version` is asserted at image build time — a broken install
+  now fails the build instead of surfacing as a runtime `exit:127`.
+- W4.1 framing reconciled across `dispatch/tool_policy.py`,
+  `docs/release-policy.md`, and `CLAUDE.md`: the `ToolPolicy` extension
+  Protocol IS the user-configurable surface; no TOML loader ships in
+  v0.1. Users override the default allow-list floor by implementing
+  `ToolPolicy` and passing it into `StageExecutor` / `PipelineEngine`
+  via the `tool_policy=` kwarg.
+
+<!-- TODO restore the permalink line below when v0.1.0 tag actually cuts -->
+<!-- [0.1.0]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0 -->
+
+## [0.1.0a2] — 2026-05-05
+
+Lands the first declarative integration surface — Instruction Set Markup
+(ISM) v1 — alongside the OIDC-driven PyPI release workflow and a cluster of
+developer-environment compatibility fixes. First end-to-end exercise of the
+new release pipeline.
+
+### Added
+
+- **Instruction Set Markup (ISM) v1.** Declarative third-party tool
+  integrations as markdown + YAML documents instead of hand-coded Python.
+  Frozen Pydantic schema in `src/bonfire/integrations/document.py`
+  (`ISMDocument`, `ISMCategory` covering forge / ticketing / comms / vault /
+  ide, `DetectionRule` discriminated union over command / env_var /
+  file_match / python_import, `Credentials`, `Fallback`, `ISMSchemaError`).
+  Two-tier loader at `src/bonfire/integrations/loader.py` with builtin +
+  user discovery, mirroring `bonfire.persona.loader.PersonaLoader`. First
+  reference adapter ships at
+  `src/bonfire/integrations/builtins/github.ism.md` — forge category,
+  declares `pr.open` / `pr.merge` / `pr.review` / `issue.close`, detects via
+  `gh` CLI + `GITHUB_TOKEN` / `GH_TOKEN` env + `.git/config`. The wheel
+  include in `pyproject.toml` is extended so `.ism.md` files ship.
 
 ### Changed
 
@@ -222,11 +613,13 @@ end-to-end CLI verb are still in progress and ship in subsequent
 
 ### Notes
 
-- Pre-v0.1.0a1 commit history on the `v0.1` branch contains internal-tracker
+- Pre-v0.1.0a2 commit history on the `v0.1` branch contains internal-tracker
   references (e.g., `BON-NNN`) in commit subjects. This is accepted as
-  historical for the v0.1.0a1 alpha release. New commits comply with
-  [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
+  historical through the v0.1.0a2 alpha release; the public tree's strict
+  enforcement begins with the next post-alpha sweep. New commits from that
+  point on comply with [CONTRIBUTING.md](CONTRIBUTING.md) per repo policy.
 
-[Unreleased]: https://github.com/BonfireAI/bonfire/compare/v0.1.0a2...HEAD
-[0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a1
+[0.1.0a2]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a2
+[0.1.0a3]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a3
+[0.1.0a4]: https://github.com/BonfireAI/bonfire/releases/tag/v0.1.0a4

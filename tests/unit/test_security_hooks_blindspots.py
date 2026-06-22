@@ -1,10 +1,8 @@
 """RED contract tests — Scout-2/338 §5 blind-spot corpus (BON-338).
 
 Sage-canonical. Knight-A basis — all 12 documented blind spots preserved as
-xfails. Cyrillic lookalikes stay an xfail: NFKC normalization is what catches
-fullwidth/NBSP lookalikes (by folding them to their plain ASCII form so the
-ordinary deny rules fire), and NFKC does NOT fold Cyrillic to Latin, so the
-Cyrillic case is uncaught in v0.1; v0.2 integrates a confusables library.
+xfails. Sage ambiguity #4 keeps Cyrillic xfail (C6.6 regex intentionally does
+NOT cover Cyrillic; v0.2 integrates a confusables library).
 
 Each blind spot is INTENTIONALLY not caught in v0.1. The xfail markers let
 today's run green while documenting the gap so a future Warrior can flip
@@ -165,22 +163,20 @@ class TestBlindSpotHeredoc:
 
 
 class TestBlindSpotUnicodeLookalike:
-    """NFKC normalization catches fullwidth / NBSP / zero-width lookalikes by
-    folding them to their plain ASCII form before matching, so the ordinary
-    deny rules fire on the de-obfuscated command. Cyrillic lookalikes are a
-    DOCUMENTED blind spot — NFKC does NOT fold Cyrillic to Latin, so the scope
-    does NOT widen in v0.1. v0.2 uses a confusables library."""
+    """Ambiguity #4: C6.6 regex covers NBSP + zero-widths + fullwidth range.
+    NFKC normalize catches fullwidth. Cyrillic lookalikes are DOCUMENTED blind
+    spot — scope does NOT widen in v0.1. v0.2 uses a confusables library."""
 
     @pytest.mark.asyncio
     async def test_fullwidth_rm_caught(self):
-        """NFKC: fullwidth ｒｍ → ASCII 'rm'. Denied by the destructive-rm rule."""
+        """NFKC: fullwidth ｒｍ → ASCII 'rm'. Must deny."""
         cmd = "ｒｍ -rf /"
         assert _is_deny(await _run(cmd))
 
     @pytest.mark.xfail(
-        reason="Blind spot #6: Cyrillic 'r' (U+0440) is NOT NFKC-equivalent to "
-        "Latin 'r' (U+0072), so normalization does not fold it and the command "
-        "is not recognized as destructive in v0.1. v0.2 via confusables library.",
+        reason="Blind spot #6 / Ambiguity #4 (Scout-2/338 §5.6): Cyrillic 'r' "
+        "(U+0440) is NOT NFKC-equivalent to Latin 'r' (U+0072). C6.6 regex "
+        "does NOT widen to Cyrillic in v0.1. v0.2 via confusables library.",
     )
     @pytest.mark.asyncio
     async def test_cyrillic_rm_caught(self):

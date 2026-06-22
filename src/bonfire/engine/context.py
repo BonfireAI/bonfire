@@ -8,9 +8,9 @@ budget info into a single context string. Respects a ``max_context_tokens``
 limit, truncating low-priority sections first while preserving task and
 bounce context.
 
-Sage D2: V1's ``PathGuard.contains_absolute_paths()`` check on ``task`` and
-``bounce_context`` is NOT ported in v0.1 because ``bonfire.git`` is not yet
-present. A follow-up ticket may re-introduce it.
+ContextBuilder does not currently apply an absolute-path check on ``task`` or
+``bounce_context``; both strings are trusted as supplied by the caller. A
+follow-up may layer an opt-in guard at this seam.
 """
 
 from __future__ import annotations

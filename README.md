@@ -13,6 +13,10 @@ Name your assistant — your cadre wires itself around the name.*
 
 **[Quickstart](#install-60-seconds)** · **[The Cadre](#the-cadre)** · **[Docs](docs/architecture.md)** · **[Issues](https://github.com/BonfireAI/bonfire/issues)**
 
+<br>
+
+<img src="docs/media/bonfire-hero.gif" alt="Bonfire CLI demo — the command palette, an opinionated project init, and persona list" width="820">
+
 </div>
 
 ## Install (60 seconds)

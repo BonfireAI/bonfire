@@ -1,0 +1,61 @@
+{
+  "frozen_count": 8,
+  "entries": [
+    {
+      "file": "src/bonfire/dispatch/runner.py",
+      "symbol_or_line": "208",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except at the dispatch retry boundary; records the failure for the retry verdict; ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/dispatch/security_hooks.py",
+      "symbol_or_line": "1117",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except that surfaces as DENY in the hook body (fail-closed security path); ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/onboard/flow.py",
+      "symbol_or_line": "239",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except draining the onboarding flow (catches CancelledError + Exception); ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/onboard/scanners/git_state.py",
+      "symbol_or_line": "71",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing best-effort drain of the git-state scanner; ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/engine/factory.py",
+      "symbol_or_line": "58",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except wrapping tomllib + pydantic construction errors; ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/engine/advisor.py",
+      "symbol_or_line": "62",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing best-effort advisory broad-except (non-fatal advice path); ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/engine/pipeline.py",
+      "symbol_or_line": "154",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except at a pipeline stage boundary; records the failure for the stage verdict; ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    },
+    {
+      "file": "src/bonfire/engine/pipeline.py",
+      "symbol_or_line": "590",
+      "rule": "BLE001",
+      "reason": "grandfathered at v1.0.1 gate-adoption 2026-06-22 (ratchet: BON-1757) — pre-existing broad-except at a nested pipeline stage boundary; records the failure for the stage verdict; ratchet to a typed error",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
+    }
+  ]
+}

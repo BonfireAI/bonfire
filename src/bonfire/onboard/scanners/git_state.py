@@ -68,7 +68,7 @@ async def _run_cmd(
             proc.kill()
             try:
                 await proc.communicate()
-            except Exception:  # noqa: BLE001,S110,best-effort,drain,—
+            except (TimeoutError, OSError):
                 pass
             return (_RC_TIMEOUT, "")
         return (proc.returncode, stdout.decode(errors="replace").strip())

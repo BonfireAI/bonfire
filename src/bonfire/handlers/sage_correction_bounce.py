@@ -33,6 +33,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -409,10 +410,10 @@ class SageCorrectionBounceHandler:
             # Fallback signature: classifier expects the warrior text.
             try:
                 result = classify(prior_results.get("warrior", ""))
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError, AttributeError):
                 logger.warning("sage_correction_bounce.classifier_invocation_failed")
                 return None
-        except Exception:  # noqa: BLE001
+        except (ValueError, AttributeError, RuntimeError):
             logger.warning("sage_correction_bounce.classifier_invocation_failed")
             return None
 
@@ -579,7 +580,7 @@ class SageCorrectionBounceHandler:
                     await cherry_pick_result
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except RuntimeError as exc:
                 # Cherry-pick failure -> abort + return FAILED. No re-verify.
                 self._safe_cherry_pick_abort()
                 return _CorrectionCycleOutcome(
@@ -611,7 +612,7 @@ class SageCorrectionBounceHandler:
             reverify_result = await self._call_pytest_runner(_DEFAULT_PYTEST_ARGS)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",

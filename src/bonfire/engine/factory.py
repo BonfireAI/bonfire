@@ -19,7 +19,10 @@ fires on the ``settings=None`` branch.
 from __future__ import annotations
 
 import logging
+import tomllib
 from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 if TYPE_CHECKING:
     from bonfire.models.config import BonfireSettings
@@ -55,7 +58,7 @@ def load_settings_or_default() -> BonfireSettings:
 
     try:
         return BonfireSettings()
-    except Exception as exc:  # noqa: BLE001 -- wraps tomllib + pydantic types
+    except (ValidationError, tomllib.TOMLDecodeError, OSError) as exc:
         logger.warning(
             "Failed to load BonfireSettings from bonfire.toml/env (%s); "
             "falling back to schema defaults. Pass settings= explicitly "

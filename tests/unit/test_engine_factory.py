@@ -29,11 +29,33 @@ RED-friendly until the Warrior writes the factory.
 from __future__ import annotations
 
 import logging
+import tomllib
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from bonfire.models.config import BonfireSettings
+from bonfire.models.config import BonfireSettings, PipelineConfig
+
+
+def _make_validation_error() -> ValidationError:
+    """Build a real ``pydantic.ValidationError`` for the never-raise matrix.
+
+    The factory narrows its ``except`` to the exact observed load-failure
+    set ``(ValidationError, TOMLDecodeError, OSError)`` (BON-1757), so the
+    never-raise test must exercise instances of those concrete types rather
+    than arbitrary stand-ins.
+    """
+    try:
+        # PipelineConfig is the plain nested BaseModel (no BaseSettings source
+        # resolution, which recurses when fed init kwargs); its
+        # ``_budget_non_negative`` validator raises on a negative budget.
+        PipelineConfig(max_budget_usd=-1.0)
+    except ValidationError as exc:  # pragma: no cover - construction helper
+        return exc
+    msg = "expected a ValidationError from a negative budget"  # pragma: no cover
+    raise AssertionError(msg)  # pragma: no cover
+
 
 # ---------------------------------------------------------------------------
 # Helper — strip BONFIRE_* env vars so tests are deterministic
@@ -179,8 +201,8 @@ def test_load_settings_invalid_env_var_warns_and_defaults(
 @pytest.mark.parametrize(
     "exc_factory,label",
     [
-        (lambda: RuntimeError("toml decode boom"), "toml-decode"),
-        (lambda: ValueError("validation boom"), "validation-error"),
+        (lambda: tomllib.TOMLDecodeError("toml decode boom"), "toml-decode"),
+        (_make_validation_error, "validation-error"),
         (lambda: OSError("io boom"), "os-error"),
     ],
 )

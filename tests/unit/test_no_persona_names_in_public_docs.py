@@ -157,14 +157,16 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # `feedback_line_anchored_allowlists_fragile_2026_05_16`,
         # any README hero/section addition above this breadcrumb
         # shifts these anchors and the test fires.
+        # README hero-demo GIF added below the nav block: shifted
+        # 362/363 → 366/367 (the animated CLI demo + its <br> spacing).
         (
             "README.md",
-            362,
+            366,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            363,
+            367,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----

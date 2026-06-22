@@ -702,6 +702,7 @@ def _live_command_roster() -> set[str]:
     """
     from bonfire.cli.app import app as cli_app
 
+    # recursion: bounded by the CLI command-tree depth (finite typer app)
     def _walk(typer_app: Any, prefix: str = "") -> list[str]:
         out: list[str] = []
         for cmd_info in typer_app.registered_commands:

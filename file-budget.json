@@ -10,7 +10,7 @@
     "tests/integration/test_budget_enforcement.py": 508,
     "tests/unit/test_architect_handler.py": 630,
     "tests/unit/test_bard_handler.py": 1345,
-    "tests/unit/test_bon_1072_cost_accounting_close.py": 861,
+    "tests/unit/test_bon_1072_cost_accounting_close.py": 862,
     "tests/unit/test_bon_1074_onboard_polish.py": 634,
     "tests/unit/test_bon_1075_read_symmetric_hardening.py": 759,
     "tests/unit/test_classifier.py": 587,
@@ -59,6 +59,6 @@
     "src/bonfire/onboard": 4328,
     "src/bonfire/prompt": 773,
     "tests/integration": 1363,
-    "tests/unit": 72070
+    "tests/unit": 72072
   }
 }

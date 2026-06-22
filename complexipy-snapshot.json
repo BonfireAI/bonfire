@@ -98,8 +98,8 @@
     ]
   },
   {
-    "path": "src/bonfire/handlers/merge_preflight.py",
-    "file_name": "merge_preflight.py",
+    "path": "src/bonfire/handlers/preflight_pytest.py",
+    "file_name": "preflight_pytest.py",
     "functions": [
       {
         "name": "classify_pytest_run",

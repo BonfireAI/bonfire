@@ -1,0 +1,234 @@
+[
+  {
+    "path": "src/bonfire/cli/commands/install_skill.py",
+    "file_name": "install_skill.py",
+    "functions": [
+      {
+        "name": "install_skill",
+        "complexity": 33
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/cost/analyzer.py",
+    "file_name": "analyzer.py",
+    "functions": [
+      {
+        "name": "CostAnalyzer::_load_if_needed",
+        "complexity": 23
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/dispatch/runner.py",
+    "file_name": "runner.py",
+    "functions": [
+      {
+        "name": "execute_with_retry",
+        "complexity": 33
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/dispatch/sdk_backend.py",
+    "file_name": "sdk_backend.py",
+    "functions": [
+      {
+        "name": "ClaudeSDKBackend::_do_execute",
+        "complexity": 38
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/dispatch/security_hooks.py",
+    "file_name": "security_hooks.py",
+    "functions": [
+      {
+        "name": "_resolve_dot_segments",
+        "complexity": 16
+      },
+      {
+        "name": "_match_write_edit_sensitive_path",
+        "complexity": 18
+      },
+      {
+        "name": "_peel_one",
+        "complexity": 23
+      },
+      {
+        "name": "_split_chain",
+        "complexity": 23
+      },
+      {
+        "name": "_unwrap",
+        "complexity": 25
+      },
+      {
+        "name": "_extract_substitutions",
+        "complexity": 27
+      },
+      {
+        "name": "build_preexec_hook",
+        "complexity": 78
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/engine/pipeline.py",
+    "file_name": "pipeline.py",
+    "functions": [
+      {
+        "name": "PipelineEngine::_execute_stage",
+        "complexity": 20
+      },
+      {
+        "name": "PipelineEngine::_run_inner",
+        "complexity": 23
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/handlers/architect.py",
+    "file_name": "architect.py",
+    "functions": [
+      {
+        "name": "ArchitectHandler::handle",
+        "complexity": 28
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/handlers/merge_preflight.py",
+    "file_name": "merge_preflight.py",
+    "functions": [
+      {
+        "name": "classify_pytest_run",
+        "complexity": 19
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/knowledge/chunker.py",
+    "file_name": "chunker.py",
+    "functions": [
+      {
+        "name": "chunk_markdown",
+        "complexity": 60
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/knowledge/scanner.py",
+    "file_name": "scanner.py",
+    "functions": [
+      {
+        "name": "ProjectScanner::extract_signatures",
+        "complexity": 27
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/models/plan.py",
+    "file_name": "plan.py",
+    "functions": [
+      {
+        "name": "WorkflowPlan::_validate_dag",
+        "complexity": 49
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/conversation.py",
+    "file_name": "conversation.py",
+    "functions": [
+      {
+        "name": "ConversationEngine::handle_answer",
+        "complexity": 16
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/narration.py",
+    "file_name": "narration.py",
+    "functions": [
+      {
+        "name": "_category_key",
+        "complexity": 17
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/scanners/git_state.py",
+    "file_name": "git_state.py",
+    "functions": [
+      {
+        "name": "scan",
+        "complexity": 29
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/scanners/project_structure.py",
+    "file_name": "project_structure.py",
+    "functions": [
+      {
+        "name": "scan",
+        "complexity": 16
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/scanners/vault_seed.py",
+    "file_name": "vault_seed.py",
+    "functions": [
+      {
+        "name": "_scan_project_size",
+        "complexity": 20
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/onboard/server.py",
+    "file_name": "server.py",
+    "functions": [
+      {
+        "name": "FrontDoorServer::_ws_handler",
+        "complexity": 27
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/persona/loader.py",
+    "file_name": "loader.py",
+    "functions": [
+      {
+        "name": "PersonaLoader::_validate_raw",
+        "complexity": 23
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/scan/decision_recorder.py",
+    "file_name": "decision_recorder.py",
+    "functions": [
+      {
+        "name": "DecisionRecorder::_extract_pattern_decisions",
+        "complexity": 19
+      }
+    ]
+  },
+  {
+    "path": "src/bonfire/scan/tech_scanner.py",
+    "file_name": "tech_scanner.py",
+    "functions": [
+      {
+        "name": "TechScanner::_detect_frameworks",
+        "complexity": 36
+      },
+      {
+        "name": "_extract_pyproject_deps",
+        "complexity": 48
+      }
+    ]
+  }
+]

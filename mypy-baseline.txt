@@ -1,0 +1,53 @@
+src/bonfire/knowledge/ollama_embedder.py:0: error: Library stubs not installed for "ollama"  [import-untyped]
+src/bonfire/cli/commands/install_skill.py:0: error: Incompatible types in assignment (expression has type "bytes", variable has type "str")  [assignment]
+src/bonfire/cli/commands/install_skill.py:0: error: Incompatible types in assignment (expression has type "bytes", variable has type "str")  [assignment]
+src/bonfire/models/events.py:0: error: "BonfireEvent" has no attribute "event_type"  [attr-defined]
+src/bonfire/models/envelope.py:0: error: Need type annotation for "defaults"  [var-annotated]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "str"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "TaskStatus"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "ErrorDetail | None"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "list[Artifact]"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "float"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "str | None"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "Path | None"  [arg-type]
+src/bonfire/models/envelope.py:0: error: Argument 1 to "Envelope" has incompatible type "**dict[str, float | list[Any] | str | Path | None]"; expected "dict[str, Any]"  [arg-type]
+src/bonfire/models/envelope.py:0: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
+src/bonfire/models/envelope.py:0: note: Consider using "Mapping" instead, which is covariant in the value type
+src/bonfire/onboard/scanners/vault_seed.py:0: error: Function is missing a return type annotation  [no-untyped-def]
+src/bonfire/cli/commands/persona.py:0: error: Argument "builtin_dir" to "PersonaLoader" has incompatible type "Traversable"; expected "Path"  [arg-type]
+src/bonfire/cli/app.py:0: error: Return type "click.core.Command | None" of "get_command" incompatible with return type "typer._click.core.Command | None" in supertype "typer.core.TyperGroup"  [override]
+src/bonfire/cli/app.py:0: error: Argument 1 of "get_command" is incompatible with supertype "typer.core.TyperGroup"; supertype defines the argument type as "Context"  [override]
+src/bonfire/cli/app.py:0: note: This violates the Liskov substitution principle
+src/bonfire/cli/app.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+src/bonfire/cli/app.py:0: error: Incompatible return value type (got "typer._click.core.Command | None", expected "click.core.Command | None")  [return-value]
+src/bonfire/cli/app.py:0: error: Argument 1 to "get_command" of "TyperGroup" has incompatible type "click.core.Context"; expected "typer._click.core.Context"  [arg-type]
+src/bonfire/cli/app.py:0: error: Argument 1 of "format_commands" is incompatible with supertype "typer.core.TyperGroup"; supertype defines the argument type as "Context"  [override]
+src/bonfire/cli/app.py:0: note: This violates the Liskov substitution principle
+src/bonfire/cli/app.py:0: note: See https://mypy.readthedocs.io/en/stable/common_issues.html#incompatible-overrides
+src/bonfire/cli/app.py:0: error: Argument 2 of "format_commands" is incompatible with supertype "typer.core.TyperGroup"; supertype defines the argument type as "HelpFormatter"  [override]
+src/bonfire/cli/app.py:0: error: Argument 1 to "list_commands" of "TyperGroup" has incompatible type "click.core.Context"; expected "typer._click.core.Context"  [arg-type]
+src/bonfire/cli/app.py:0: error: Argument 1 to "append" of "list" has incompatible type "tuple[str, typer._click.core.Command]"; expected "tuple[str, click.core.Command]"  [arg-type]
+src/bonfire/models/config.py:0: error: Unused "type: ignore" comment  [unused-ignore]
+src/bonfire/models/config.py:0: error: Incompatible types in assignment (expression has type "dict[str, Any]", base class "BaseSettings" defined the type as "SettingsConfigDict")  [assignment]
+src/bonfire/models/config.py:0: note: Error code "assignment" not covered by "type: ignore[misc]" comment
+src/bonfire/handlers/merge_preflight.py:0: error: Argument "sibling_status" to "_classify_preflight_run" of "MergePreflightHandler" has incompatible type "str"; expected "Literal['ok', 'skipped', 'error']"  [arg-type]
+src/bonfire/dispatch/security_hooks.py:0: error: Unused "type: ignore" comment  [unused-ignore]
+src/bonfire/dispatch/security_hooks.py:0: error: List item 0 has incompatible type "Callable[[dict[Any, Any], str, dict[Any, Any]], Awaitable[dict[str, Any]]]"; expected "Callable[[PreToolUseHookInput | PostToolUseHookInput | PostToolUseFailureHookInput | UserPromptSubmitHookInput | StopHookInput | SubagentStopHookInput | PreCompactHookInput | NotificationHookInput | SubagentStartHookInput | PermissionRequestHookInput, str | None, HookContext], Awaitable[AsyncHookJSONOutput | SyncHookJSONOutput]]"  [list-item]
+src/bonfire/knowledge/backend.py:0: error: Library stubs not installed for "lancedb"  [import-untyped]
+src/bonfire/knowledge/backend.py:0: error: Library stubs not installed for "pyarrow"  [import-untyped]
+src/bonfire/dispatch/pydantic_ai_backend.py:0: error: Library stubs not installed for "pydantic_ai"  [import-untyped]
+src/bonfire/engine/pipeline.py:0: error: Argument "explicit_override" to "resolve_dispatch_model" has incompatible type "str | None"; expected "str"  [arg-type]
+src/bonfire/cli/commands/scan.py:0: error: Unused "type: ignore" comment  [unused-ignore]
+src/bonfire/dispatch/sdk_backend.py:0: error: Unused "type: ignore" comment  [unused-ignore]
+src/bonfire/dispatch/sdk_backend.py:0: error: Unused "type: ignore" comment  [unused-ignore]
+src/bonfire/dispatch/sdk_backend.py:0: error: Cannot assign to a type  [misc]
+src/bonfire/dispatch/sdk_backend.py:0: note: Error code "misc" not covered by "type: ignore[assignment]" comment
+src/bonfire/dispatch/sdk_backend.py:0: error: Cannot assign to a type  [misc]
+src/bonfire/dispatch/sdk_backend.py:0: note: Error code "misc" not covered by "type: ignore[assignment]" comment
+src/bonfire/dispatch/sdk_backend.py:0: error: Cannot assign to a type  [misc]
+src/bonfire/dispatch/sdk_backend.py:0: note: Error code "misc" not covered by "type: ignore[assignment]" comment
+src/bonfire/dispatch/sdk_backend.py:0: error: Argument "hooks" to "ClaudeAgentOptions" has incompatible type "dict[str, list[Any]] | None"; expected "dict[Literal['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'PreCompact', 'Notification', 'SubagentStart', 'PermissionRequest'], list[HookMatcher]] | None"  [arg-type]
+src/bonfire/dispatch/sdk_backend.py:0: error: Argument "setting_sources" to "ClaudeAgentOptions" has incompatible type "list[str]"; expected "list[Literal['user', 'project', 'local']] | None"  [arg-type]
+src/bonfire/dispatch/sdk_backend.py:0: error: Argument "thinking" to "ClaudeAgentOptions" has incompatible type "dict[str, Any]"; expected "ThinkingConfigAdaptive | ThinkingConfigEnabled | ThinkingConfigDisabled | None"  [arg-type]
+src/bonfire/dispatch/sdk_backend.py:0: error: Argument "effort" to "ClaudeAgentOptions" has incompatible type "str"; expected "Literal['low', 'medium', 'high', 'xhigh', 'max'] | None"  [arg-type]
+src/bonfire/dispatch/sdk_backend.py:0: error: Value of type variable "_SupportsAcloseT" of "aclosing" cannot be "AsyncIterator[UserMessage | AssistantMessage | SystemMessage | ResultMessage | StreamEvent | RateLimitEvent]"  [type-var]

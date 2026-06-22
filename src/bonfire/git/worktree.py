@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from bonfire.errors import SubprocessError
 from bonfire.git.workflow import _run_git, _validate_ref_name
 
 if TYPE_CHECKING:
@@ -87,9 +86,9 @@ class WorktreeManager:
         return worktrees
 
     async def remove(self, path: Path) -> None:
-        """Remove a worktree at *path*. Raises SubprocessError if not found."""
+        """Remove a worktree at *path*. Raises RuntimeError if not found."""
         if not path.exists():
-            raise SubprocessError(f"Worktree path does not exist: {path}")
+            raise RuntimeError(f"Worktree path does not exist: {path}")
         await _run_git(self._repo, "worktree", "remove", str(path), "--force")
         # Clean up remnants if git didn't fully remove
         if path.exists():
@@ -100,15 +99,12 @@ class WorktreeManager:
         active = await self.list()
         match = [wt for wt in active if wt.branch == branch]
         if not match:
-            raise SubprocessError(f"No worktree for branch '{branch}'")
+            raise RuntimeError(f"No worktree for branch '{branch}'")
 
         wt = match[0]
         await self.remove(wt.path)
 
-        # Also remove the branch. ``_run_git`` (in ``workflow.py``) still raises
-        # ``RuntimeError`` on git failure, so this suppress must catch
-        # ``RuntimeError`` — migrating ``_run_git`` to ``SubprocessError`` is a
-        # separate, broader change (it is coupled across all of ``GitWorkflow``).
+        # Also remove the branch
         with contextlib.suppress(RuntimeError):
             await _run_git(self._repo, "branch", "-D", branch)
 

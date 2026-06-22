@@ -3,7 +3,7 @@
 
 """Pipeline execution engine -- the heart of Bonfire.
 
-Executes a WorkflowSpec as a DAG of stages using TopologicalSorter.
+Executes a WorkflowPlan as a DAG of stages using TopologicalSorter.
 Features: parallel groups via TaskGroup, gate evaluation, bounce-back,
 iteration/retry, budget enforcement, event emission, resume from checkpoint.
 
@@ -15,9 +15,7 @@ Sage decisions enforced:
     D6: ``budget_remaining_usd`` clamped at zero.
     D7: Single bounce -- target runs, original re-runs, gates re-evaluate
         ONCE, then halt regardless of second outcome.
-    D8: PipelineResult is frozen. The historical ``error: str`` field is
-        retained for back-compat; ``error_detail: ErrorDetail | None`` carries
-        the structured, traceback-bearing failure (Elegance Law).
+    D8: PipelineResult has exactly 8 fields (frozen).
     D11: ``PipelineConfig`` has no ``dispatch_timeout_seconds``; pass
          ``timeout_seconds=None`` to ``execute_with_retry``.
 """
@@ -35,9 +33,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.context import ContextBuilder
-from bonfire.engine.executor import (
-    StageExecutor,  # noqa: F401 -- public re-export for patch/discover
-)
 from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
 from bonfire.models.events import (
@@ -53,7 +48,7 @@ from bonfire.models.events import (
     StageSkipped,
     StageStarted,
 )
-from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowSpec
+from bonfire.models.plan import GateContext, GateResult, StageSpec, WorkflowPlan
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
@@ -79,9 +74,6 @@ class PipelineResult(BaseModel):
     total_cost_usd: float = 0.0
     duration_seconds: float = 0.0
     error: str = ""
-    # Structured, traceback-bearing failure (Elegance Law). Populated on the
-    # never-raise shell's catch-all path; ``error`` (str) stays for back-compat.
-    error_detail: ErrorDetail | None = None
     failed_stage: str = ""
     gate_failure: GateResult | None = None
 
@@ -92,7 +84,7 @@ class PipelineResult(BaseModel):
 
 
 class PipelineEngine:
-    """Executes a WorkflowSpec as a DAG with gates, bounces, and budget control.
+    """Executes a WorkflowPlan as a DAG with gates, bounces, and budget control.
 
     Constructor accepts all dependencies via keyword-only arguments.
     ``run()`` is the sole public method -- a never-raise shell around
@@ -131,28 +123,68 @@ class PipelineEngine:
 
     async def run(
         self,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         *,
         session_id: str | None = None,
         completed: dict[str, Envelope] | None = None,
         initial_envelope: Envelope | None = None,
     ) -> PipelineResult:
-        """Execute a workflow plan. NEVER raises -- returns PipelineResult."""
+        """Execute a workflow plan. NEVER raises -- returns PipelineResult.
+
+        Outer-exception branch (everything not caught by an inner per-stage
+        try/except) emits :class:`PipelineFailed` BEFORE returning the
+        failed result. Wave 11 Lane D closes the bus-vs-``PipelineResult``
+        parity gap on this halt branch: without the emit, every observer
+        subscribed to ``PipelineFailed`` (``CostLedgerConsumer``,
+        ``DisplayConsumer``, ``XPConsumer``) silently missed the halt;
+        the persisted ledger had no row, the CLI showed nothing, and the
+        XP calculator never penalized the run.
+        """
         sid = session_id or uuid4().hex[:12]
         start = time.monotonic()
+        # Pre-seed the completed dict so the outer-exception branch can
+        # report ``stages_completed = len(seen_so_far)``. The dict is
+        # passed by reference into ``_run_inner`` which mutates it as
+        # stages finish, so by the time the outer ``except`` catches an
+        # exception the count reflects every stage that completed before
+        # the halt fired.
+        stages_seen: dict[str, Envelope] = dict(completed or {})
         try:
-            return await self._run_inner(plan, sid, completed or {}, start, initial_envelope)
+            return await self._run_inner(plan, sid, stages_seen, start, initial_envelope)
         except Exception as exc:  # noqa: BLE001
-            # CancelledError is a BaseException (not Exception) on 3.12+, so it
-            # propagates past this catch-all -- cancellation must surface.
             duration = time.monotonic() - start
-            # Capture the structured detail INSIDE the except so the traceback
-            # is live (Elegance Law); keep ``error`` (str) for back-compat.
+            error_msg = str(exc)
+            # Best-effort total_cost reconstruction from whatever stages
+            # the inner loop managed to populate before the exception
+            # fired. ``sum(env.cost_usd for env in stages_seen.values())``
+            # matches the engine accumulator on the success path.
+            total_cost = sum(env.cost_usd for env in stages_seen.values())
+            await self._emit(
+                PipelineFailed(
+                    session_id=sid,
+                    sequence=0,
+                    failed_stage="",
+                    error_message=error_msg,
+                    total_cost_usd=total_cost,
+                    # Sentinel: outer-exception halts cannot name a
+                    # specific bounce-target handler. ``__outer__`` is
+                    # distinct from ``None`` (which the schema uses for
+                    # non-bounce halt branches) and from a real handler
+                    # name (which the bounce-target branch sets).
+                    # Operators reading the bus can grep for ``__outer__``
+                    # to distinguish outer-exception halts from every
+                    # other halt shape.
+                    failed_handler="__outer__",
+                    duration_seconds=duration,
+                    stages_completed=len(stages_seen),
+                )
+            )
             return PipelineResult(
                 success=False,
                 session_id=sid,
-                error=str(exc),
-                error_detail=ErrorDetail.from_exception(exc),
+                stages=stages_seen,
+                total_cost_usd=total_cost,
+                error=error_msg,
                 duration_seconds=duration,
             )
 
@@ -160,15 +192,28 @@ class PipelineEngine:
 
     async def _run_inner(
         self,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         session_id: str,
         completed: dict[str, Envelope],
         start: float,
         initial_envelope: Envelope | None = None,
     ) -> PipelineResult:
-        """The real pipeline execution logic."""
-        stages_done: dict[str, Envelope] = dict(completed)
-        total_cost = 0.0
+        """The real pipeline execution logic.
+
+        The caller (``run``) passes a mutable ``completed`` dict that
+        this method MUTATES in place as stages finish. On the
+        outer-exception path (an unexpected raise here), ``run``'s
+        ``except`` branch reads the same dict to populate
+        ``PipelineFailed.stages_completed`` and reconstruct
+        ``total_cost_usd``. Re-binding to a fresh ``dict(completed)``
+        would orphan the outer's view; mutate-in-place is load-bearing.
+        """
+        stages_done: dict[str, Envelope] = completed
+        # Resume path: pre-completed stages already incurred cost in their
+        # original run. Seed total_cost from them so budget accounting and
+        # result.total_cost_usd reflect the full pipeline spend, not just the
+        # post-resume tail.
+        total_cost = sum(env.cost_usd for env in stages_done.values())
         stage_map = self._build_stage_map(plan)
 
         # Emit PipelineStarted
@@ -244,6 +289,8 @@ class PipelineEngine:
                             failed_stage="",
                             error_message=error_msg,
                             total_cost_usd=total_cost,
+                            duration_seconds=duration,
+                            stages_completed=len(stages_done),
                         )
                     )
                     return PipelineResult(
@@ -288,7 +335,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         initial_envelope: Envelope | None,
     ) -> tuple[PipelineResult | None, float]:
         """Execute a parallel group via TaskGroup, then evaluate gates."""
@@ -309,34 +356,47 @@ class PipelineEngine:
 
                 tg.create_task(_run_one())
 
-        # Check for failures in parallel group
+        # Accumulate ALL sibling costs and record ALL envelopes BEFORE
+        # short-circuiting on any failure. Otherwise, when one parallel
+        # sibling FAILS, later siblings (in dict-iteration order) silently
+        # lose both their envelope (not added to stages_done) AND their
+        # cost (not added to total_cost). The asyncio.TaskGroup above
+        # already awaited every sibling to completion -- there is no work
+        # to cancel here, only accounting to record.
+        first_failed: tuple[str, Envelope] | None = None
         for sname, env in results.items():
             stages_done[sname] = env
             total_cost += env.cost_usd
-            if env.status == TaskStatus.FAILED:
-                duration = time.monotonic() - start
-                error_msg = env.error.message if env.error else "stage failed"
-                await self._emit(
-                    PipelineFailed(
-                        session_id=session_id,
-                        sequence=0,
-                        failed_stage=sname,
-                        error_message=error_msg,
-                        total_cost_usd=total_cost,
-                    )
+            if first_failed is None and env.status == TaskStatus.FAILED:
+                first_failed = (sname, env)
+
+        if first_failed is not None:
+            sname, env = first_failed
+            duration = time.monotonic() - start
+            error_msg = env.error.message if env.error else "stage failed"
+            await self._emit(
+                PipelineFailed(
+                    session_id=session_id,
+                    sequence=0,
+                    failed_stage=sname,
+                    error_message=error_msg,
+                    total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    stages_completed=len(stages_done),
                 )
-                return (
-                    PipelineResult(
-                        success=False,
-                        session_id=session_id,
-                        stages=stages_done,
-                        total_cost_usd=total_cost,
-                        duration_seconds=duration,
-                        error=error_msg,
-                        failed_stage=sname,
-                    ),
-                    total_cost,
-                )
+            )
+            return (
+                PipelineResult(
+                    success=False,
+                    session_id=session_id,
+                    stages=stages_done,
+                    total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    error=error_msg,
+                    failed_stage=sname,
+                ),
+                total_cost,
+            )
 
         # Gate evaluation for parallel stages
         for sname, env in results.items():
@@ -367,7 +427,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         initial_envelope: Envelope | None,
     ) -> tuple[PipelineResult | None, float]:
         """Execute a single stage sequentially, then evaluate gates."""
@@ -389,6 +449,8 @@ class PipelineEngine:
                     failed_stage=stage_name,
                     error_message=error_msg,
                     total_cost_usd=total_cost,
+                    duration_seconds=duration,
+                    stages_completed=len(stages_done),
                 )
             )
             return (
@@ -430,7 +492,7 @@ class PipelineEngine:
         spec: StageSpec,
         completed: dict[str, Envelope],
         total_cost: float,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         session_id: str,
         initial_envelope: Envelope | None = None,
     ) -> Envelope:
@@ -438,6 +500,20 @@ class PipelineEngine:
 
         Tries up to spec.max_iterations times. On success, returns immediately.
         On failure after all iterations, returns the failed envelope.
+
+        The parallel ``StageExecutor.execute_single`` path was deleted
+        after an audit surfaced divergence between it and this method
+        (unreachable production code path, missing
+        ``initial_envelope.metadata`` merge, model-override semantic
+        gap). One responsibility the dead path carried -- querying
+        ``VaultAdvisor`` for known issues before each dispatch -- is
+        intentionally deferred here: a follow-up will add a
+        ``vault_advisor=`` kwarg to :class:`PipelineEngine` (and the
+        matching ``known_issues=`` thread into ``ContextBuilder.build``)
+        once the lifecycle semantics (per-stage vs per-pipeline caching,
+        opt-in default) are pinned. The advisor itself remains live at
+        :mod:`bonfire.engine.advisor`; only the engine-side wiring is
+        parked.
         """
         await self._emit(
             StageStarted(
@@ -449,6 +525,14 @@ class PipelineEngine:
         )
 
         last_envelope: Envelope | None = None
+        # Iterations 0..N-1 of a stage's max_iterations may each fail with
+        # a real cost charged by the backend. Without this accumulator,
+        # only the FINAL envelope's cost_usd survives -- intermediate
+        # failed-iteration spend leaks out of total_cost_usd entirely. We
+        # track the sum here and stamp the cumulative value onto the
+        # returned envelope so the caller's ``total_cost += env.cost_usd``
+        # sees every dollar this stage actually cost.
+        cumulative_iteration_cost: float = 0.0
 
         for _iteration in range(spec.max_iterations):
             # Build context
@@ -543,8 +627,14 @@ class PipelineEngine:
                 result_env = dispatch_result.envelope
 
             last_envelope = result_env
+            cumulative_iteration_cost += result_env.cost_usd
 
             if result_env.status != TaskStatus.FAILED:
+                # Stamp the cumulative cost (sum of every iteration this
+                # stage attempted) onto the returned envelope so the
+                # caller's ``total_cost += env.cost_usd`` captures every
+                # dollar, not just the successful iteration's slice.
+                final_env = result_env.model_copy(update={"cost_usd": cumulative_iteration_cost})
                 await self._emit(
                     StageCompleted(
                         session_id=session_id,
@@ -552,16 +642,19 @@ class PipelineEngine:
                         stage_name=spec.name,
                         agent_name=spec.agent_name,
                         duration_seconds=0.0,
-                        cost_usd=result_env.cost_usd,
+                        cost_usd=final_env.cost_usd,
                     )
                 )
-                return result_env
+                return final_env
 
-        # All iterations exhausted -- return final failed envelope
+        # All iterations exhausted -- return final failed envelope with
+        # the cumulative iteration cost stamped on so the budget watchdog
+        # sees every dollar burned by the exhausted retries.
         if last_envelope is None:
             last_envelope = Envelope(
                 task=spec.name or "<unnamed>", agent_name=spec.agent_name
             ).with_error(ErrorDetail(error_type="executor", message="no iterations executed"))
+        final_failed = last_envelope.model_copy(update={"cost_usd": cumulative_iteration_cost})
         await self._emit(
             StageFailed(
                 session_id=session_id,
@@ -569,11 +662,11 @@ class PipelineEngine:
                 stage_name=spec.name,
                 agent_name=spec.agent_name,
                 error_message=(
-                    last_envelope.error.message if last_envelope.error else "exhausted iterations"
+                    final_failed.error.message if final_failed.error else "exhausted iterations"
                 ),
             )
         )
-        return last_envelope
+        return final_failed
 
     # -- Gate evaluation chain -----------------------------------------------
 
@@ -646,7 +739,7 @@ class PipelineEngine:
 
     async def _handle_bounce(
         self,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         spec: StageSpec,
         gate_result: GateResult,
         completed: dict[str, Envelope],
@@ -654,20 +747,40 @@ class PipelineEngine:
         session_id: str,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
-    ) -> Envelope | None:
+    ) -> tuple[Envelope | None, float, str | None]:
         """Execute bounce-back: run target stage, then re-run original.
 
-        Returns the re-executed envelope if the second gate check passes.
-        Returns None if the bounce fails or second gate check fails (Sage D7
-        -- single bounce, no recursion).
+        Returns ``(retry_envelope, cost_delta, failed_handler)``.
+
+        On success, ``retry_envelope`` is the retried original's
+        envelope, ``cost_delta`` is the FULL cost added by the bounce
+        (bounce-target cost + retry cost), and ``failed_handler`` is
+        ``None`` (no halt). The caller must credit ``cost_delta`` to its
+        running total so budget accounting includes the bounce target.
+
+        On every failure branch (no target configured, target lookup
+        miss, bounce-target failed, retry failed, second gate failure)
+        returns ``(None, cost_delta, failed_handler)`` where
+        ``cost_delta`` reflects every dollar the bounce path actually
+        burned before halting. ``failed_handler`` names the bounce
+        TARGET when the target's own execution failed (so the emitted
+        ``PipelineFailed`` event can identify which handler died);
+        ``None`` on every other branch (no bounce attempted, retry
+        failed on the original, second-gate failure — in those cases
+        ``failed_stage`` already names the original stage that broke
+        the contract).
+
+        Earlier versions returned ``(None, cost_delta)`` and the
+        bounce-target's identity was lost from the event stream;
+        threading ``failed_handler`` upward closes the H4 naming gap.
         """
         target_name = spec.on_gate_failure
         if not target_name:
-            return None
+            return None, 0.0, None
 
         target_spec = stage_map.get(target_name)
         if not target_spec:
-            return None
+            return None, 0.0, None
 
         # Execute bounce target.
         bounce_env = await self._execute_stage(
@@ -678,16 +791,31 @@ class PipelineEngine:
             session_id,
             initial_envelope,
         )
-        # Preserve the ORIGINAL bounce-target envelope (if any) under a
-        # ``<target>__bounced`` marker so downstream consumers that reference
-        # the pre-bounce output are not silently lost when the target re-runs.
-        if target_name in completed:
-            completed[f"{target_name}__bounced"] = completed[target_name]
+        bounce_cost = bounce_env.cost_usd
+        # If the bounce target is a stage already in ``completed``
+        # (typical: bounce target is the DAG-init stage whose work the
+        # original stage's gate flagged), the replacement quietly drops
+        # the prior envelope's cost from
+        # ``sum(env.cost_usd for env in completed.values())``. The
+        # resume-from-checkpoint path reads that sum as the seed total
+        # (engine/pipeline.py:165). Stamp the bounce-target envelope
+        # with the combined cost so the sum-of-stages invariant matches
+        # the engine accumulator. H6.
+        prior_target_env = completed.get(target_name)
+        if prior_target_env is not None:
+            bounce_env = bounce_env.model_copy(
+                update={"cost_usd": prior_target_env.cost_usd + bounce_cost}
+            )
         completed[target_name] = bounce_env
-        total_cost += bounce_env.cost_usd
+        total_cost += bounce_cost
 
         if bounce_env.status == TaskStatus.FAILED:
-            return None
+            # Bounce target itself failed -- the dollars it spent still
+            # left the wallet; surface them to the caller so budget
+            # accounting reflects the partial spend. Surface the
+            # bounce-target name so the emitted ``PipelineFailed`` can
+            # identify which handler died (H4).
+            return None, bounce_cost, target_name
 
         # Re-execute the original stage.
         retry_env = await self._execute_stage(
@@ -698,19 +826,27 @@ class PipelineEngine:
             session_id,
             initial_envelope,
         )
+        retry_cost = retry_env.cost_usd
 
         if retry_env.status == TaskStatus.FAILED:
-            return None
+            # The bounce target SUCCEEDED; the original's retry failed.
+            # ``failed_stage`` already names the original; no
+            # ``failed_handler`` distinction to make on this branch.
+            return None, bounce_cost + retry_cost, None
 
         # Re-evaluate gates on the retried result (ONCE -- Sage D7).
         passed, _second_failure = await self._evaluate_gates(
             spec, retry_env, completed, total_cost, session_id
         )
         if not passed:
-            # Second gate failure -- halt (no infinite loops).
-            return None
+            # Second gate failure -- halt (no infinite loops). Still
+            # credit the bounce-target + retry cost to the caller. The
+            # bounce TARGET succeeded; the original's retried result
+            # failed the gate — ``failed_stage`` (the original) already
+            # carries operator context.
+            return None, bounce_cost + retry_cost, None
 
-        return retry_env
+        return retry_env, bounce_cost + retry_cost, None
 
     # -- Gate result handling (shared by parallel + sequential) ---------------
 
@@ -723,7 +859,7 @@ class PipelineEngine:
         total_cost: float,
         start: float,
         session_id: str,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
         stage_map: dict[str, StageSpec],
         initial_envelope: Envelope | None = None,
     ) -> tuple[PipelineResult | None, float]:
@@ -743,9 +879,16 @@ class PipelineEngine:
         if passed or gate_failure is None:
             return None, 0.0
 
-        # Try bounce-back if configured.
+        # Try bounce-back if configured. ``_handle_bounce`` now ALWAYS
+        # returns a (retry_envelope_or_none, cost_delta, failed_handler)
+        # tuple so the bounce-target's spend lands in the running total
+        # regardless of whether the bounce succeeded, and the bounce
+        # target's identity reaches the emitted ``PipelineFailed`` on
+        # bounce-target halt branches.
+        bounce_cost_delta = 0.0
+        failed_handler: str | None = None
         if spec.on_gate_failure:
-            bounced = await self._handle_bounce(
+            retry_env, bounce_cost_delta, failed_handler = await self._handle_bounce(
                 plan,
                 spec,
                 gate_failure,
@@ -755,19 +898,28 @@ class PipelineEngine:
                 stage_map,
                 initial_envelope,
             )
-            if bounced is not None:
-                stages_done[spec.name] = bounced
-                # The bounce ran the TARGET stage (a real re-execution that
-                # burned tokens) before re-running the original. Both costs
-                # must reach the caller's running total / budget watchdog —
-                # returning only ``bounced.cost_usd`` (the retry) would drop
-                # the bounce-target's own spend. The re-executed target now
-                # lives in ``stages_done[target_name]``.
-                target_env = stages_done.get(spec.on_gate_failure)
-                target_cost = target_env.cost_usd if target_env is not None else 0.0
-                return None, bounced.cost_usd + target_cost
+            if retry_env is not None:
+                # Stamp ``retry_env`` with the combined cost of the
+                # original (already in ``stages_done`` at this point —
+                # the caller wrote it before invoking us) PLUS the
+                # retry. Replacing ``stages_done[spec.name] = retry_env``
+                # without this stamp drops the original's cost from
+                # ``sum(env.cost_usd for env in stages_done.values())``,
+                # which the resume-from-checkpoint path reads as the
+                # seed total_cost (engine/pipeline.py:165). H6.
+                original_env = stages_done.get(spec.name)
+                if original_env is not None:
+                    retry_env = retry_env.model_copy(
+                        update={"cost_usd": original_env.cost_usd + retry_env.cost_usd}
+                    )
+                stages_done[spec.name] = retry_env
+                return None, bounce_cost_delta
 
-        # Gate failure -- halt pipeline.
+        # Gate failure -- halt pipeline. Credit any cost the bounce
+        # path burned before halting so PipelineResult.total_cost_usd
+        # (and the PipelineFailed event's total_cost_usd) reflect every
+        # dollar that left the wallet.
+        total_cost += bounce_cost_delta
         duration = time.monotonic() - start
         await self._emit(
             PipelineFailed(
@@ -776,6 +928,9 @@ class PipelineEngine:
                 failed_stage=stage_name,
                 error_message=gate_failure.message,
                 total_cost_usd=total_cost,
+                failed_handler=failed_handler,
+                duration_seconds=duration,
+                stages_completed=len(stages_done),
             )
         )
         return (
@@ -799,12 +954,12 @@ class PipelineEngine:
         await self._bus.emit(event)
 
     @staticmethod
-    def _build_stage_map(plan: WorkflowSpec) -> dict[str, StageSpec]:
+    def _build_stage_map(plan: WorkflowPlan) -> dict[str, StageSpec]:
         """Build a name->StageSpec lookup from a plan."""
         return {s.name: s for s in plan.stages}
 
     @staticmethod
-    def _build_dag(plan: WorkflowSpec, skip: set[str]) -> TopologicalSorter[str]:
+    def _build_dag(plan: WorkflowPlan, skip: set[str]) -> TopologicalSorter[str]:
         """Build a TopologicalSorter from plan stages, skipping completed ones."""
         dag: TopologicalSorter[str] = TopologicalSorter()
         for stage in plan.stages:

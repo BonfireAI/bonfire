@@ -1,10 +1,8 @@
-"""RED tests — BON-341 W5.2 — `bonfire.knowledge.hasher` (innovative lens).
+"""RED tests for ``bonfire.knowledge.hasher``.
 
-Sage D8.2 type locks:
+Type locks:
 - ``content_hash(text: str) -> str`` — SHA-256 hex (64 chars).
 - ``file_hash(path: pathlib.Path) -> str`` — SHA-256 hex (64 chars).
-
-Adjudication: ``docs/audit/sage-decisions/bon-341-sage-20260422T235032Z.md``.
 """
 
 from __future__ import annotations

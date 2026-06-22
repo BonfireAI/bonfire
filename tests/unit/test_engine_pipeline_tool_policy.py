@@ -35,7 +35,7 @@ from bonfire.dispatch.result import DispatchResult
 from bonfire.events.bus import EventBus
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import Envelope, ErrorDetail
-from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 from bonfire.protocols import DispatchOptions
 
 # ---------------------------------------------------------------------------
@@ -62,8 +62,8 @@ class _MockBackend:
         return True
 
 
-def _single_plan(*, role: str = "", agent_name: str = "s1") -> WorkflowSpec:
-    return WorkflowSpec(
+def _single_plan(*, role: str = "", agent_name: str = "s1") -> WorkflowPlan:
+    return WorkflowPlan(
         name="pipeline-tool-policy-test",
         workflow_type=WorkflowType.STANDARD,
         stages=[StageSpec(name="s1", agent_name=agent_name, role=role)],
@@ -86,7 +86,9 @@ def config() -> PipelineConfig:
 
 
 class TestPipelineConstructorAcceptsToolPolicy:
-    """Sage D5 — mirror of StageExecutor; additive kwarg, backward compat."""
+    """Sage D5 — additive ``tool_policy=`` kwarg, backward compat. (Pre-Wave-11-
+    Lane-E this contract was also mirrored on the standalone ``StageExecutor``
+    class; Lane E deleted that class.)"""
 
     def test_default_tool_policy_is_none(self, bus: EventBus, config: PipelineConfig) -> None:
         """Sage D5 — no kwarg → ``self._tool_policy is None``."""
@@ -395,7 +397,7 @@ class TestMultiStageRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="multi",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -431,7 +433,7 @@ class TestMultiStageRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="two-warriors",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -468,7 +470,7 @@ class TestParallelGroupRatchet:
         from bonfire.dispatch.tool_policy import DefaultToolPolicy
         from bonfire.engine.pipeline import PipelineEngine
 
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="parallel-roles",
             workflow_type=WorkflowType.STANDARD,
             stages=[
@@ -559,7 +561,7 @@ class TestPipelineHandlerRouteBypass:
             ) -> Envelope:
                 return envelope.with_result("handled", cost_usd=0.0)
 
-        plan = WorkflowSpec(
+        plan = WorkflowPlan(
             name="handler-plan",
             workflow_type=WorkflowType.STANDARD,
             stages=[

@@ -7,7 +7,7 @@ Public surface — three symbols:
 - ``DenyRule`` — frozen slotted dataclass describing one pattern rule.
 - ``DEFAULT_DENY_PATTERNS`` — tuple of 37 rules that the hook hard-denies
   (categories C1, C2, C3, C4, C7).
-- ``DEFAULT_WARN_PATTERNS`` — tuple of 13 rules the hook warns on but does
+- ``DEFAULT_WARN_PATTERNS`` — tuple of 15 rules the hook warns on but does
   not deny (categories C5, C6). WARN emits a SecurityDenied event whose
   reason is prefixed ``"WARN: "``; the tool call still proceeds.
 
@@ -52,10 +52,29 @@ _C1_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C1.1-rm-rf-non-temp",
         category="destructive-fs",
+        # Exclusion list is anchored at path-segment boundaries.
+        # Each ephemeral-dir token (``node_modules``, ``.venv``, ``__pycache__``,
+        # ``dist``, ``build``) is bracketed by ``(?:^|/)`` on the left and
+        # ``(?:/|\s|$)`` on the right, so:
+        #   * ``rm -rf __pycache__-backup/db`` is NOT excused (the dir name
+        #     merely starts with the token as a substring — DENY).
+        #   * ``rm -rf project/.venv`` IS excused (real ephemeral dir one
+        #     path-segment deep — ALLOW).
+        # Absolute-path prefixes (``/tmp/``, ``/var/tmp/``, ``$TMPDIR/``, ``./``)
+        # remain anchored at the start of the path argument as before.
         pattern=re.compile(
-            r"(?:^|[|;&]\s*)rm\s+(?:-[a-zA-Z]*[rRfF][a-zA-Z]*\s+)+"
-            r"(?!(?:/tmp/|/var/tmp/|\$TMPDIR/|\./|"
-            r"[a-zA-Z0-9_./-]*node_modules|\.venv|__pycache__|dist/|build/))"
+            # ``\b`` aligns C1.1 with C1.2-C1.7 so wrapper / absolute-path
+            # forms (``/bin/rm``, ``exec rm``, ``\rm``, ``time rm``,
+            # ``nice rm``, ``command rm``) cannot bypass the rule via the
+            # narrower ``(?:^|[|;&])`` anchor that earlier shipped.
+            r"\brm\s+(?:-[a-zA-Z]*[rRfF][a-zA-Z]*\s+)+"
+            r"(?!"
+            r"(?:/tmp/|/var/tmp/|\$TMPDIR/|\./)"
+            r"|"
+            r"(?:[a-zA-Z0-9_./-]*?/)?"
+            r"(?:node_modules|\.venv|__pycache__|dist|build)"
+            r"(?:/|\s|$)"
+            r")"
         ),
         message=("rm -rf outside ephemeral paths is denied. If intended, run manually."),
     ),
@@ -225,8 +244,14 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.1-cat-ssh-private-key",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes, plus the ``head`` /
+        # ``tail`` reading verbs (cat is not the only way to leak a private
+        # key). Linux ``/home/<u>/`` continues to match.
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?\.ssh[\\/]"
             r"(?:id_[a-z0-9]+(?!\.pub)\b|authorized_keys)"
         ),
         message="Reading SSH private key / authorized_keys — denied.",
@@ -234,8 +259,12 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.2-cat-aws-credentials",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/root|/home/[^/\s]+)?/?\.aws/"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?\.aws[\\/]"
             r"(?:credentials|config)\b"
         ),
         message="Reading AWS credentials — denied.",
@@ -243,16 +272,22 @@ _C4_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C4.3-cat-credential-dotfile",
         category="exfiltration",
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes. Also extended the
+        # suffix alternation to include ``gnupg/<file>`` — the gnupg
+        # credential directory was previously only caught by C4.6 (scp).
         pattern=re.compile(
-            r"\bcat\s+(?:~|\$HOME|/home/[^/\s]+)?/?"
-            r"\.(?:netrc|pgpass|docker/config\.json|kube/config)\b"
+            r"\b(?:cat|head|tail)\s+"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.(?:netrc|pgpass|docker/config\.json|kube/config|gnupg/\S+)"
         ),
         message="Reading a credential dotfile — denied.",
     ),
     DenyRule(
         rule_id="C4.4-cat-env-file",
         category="exfiltration",
-        pattern=re.compile(r"\bcat\s+\.env(?:\.[a-z]+)?\b"),
+        pattern=re.compile(r"\b(?:cat|head|tail)\s+\.env(?:\.[a-z]+)?\b"),
         message="Reading a .env file — denied.",
     ),
     DenyRule(
@@ -271,9 +306,13 @@ _C4_RULES: tuple[DenyRule, ...] = (
         rule_id="C4.6-scp-credential-dir",
         category="exfiltration",
         # scp/rsync/sftp touching .ssh/.aws/.gnupg anywhere in the cmdline.
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
         pattern=re.compile(
-            r"\b(?:scp|rsync|sftp)\s+.*(?:~|\$HOME|/home/[^/\s]+)?/?"
-            r"\.(?:ssh|aws|gnupg)(?:/|\b)"
+            r"\b(?:scp|rsync|sftp)\s+.*"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.(?:ssh|aws|gnupg)(?:[\\/]|\b)"
         ),
         message="scp/rsync/sftp of credential directory — denied.",
     ),
@@ -389,7 +428,14 @@ _C5_RULES: tuple[DenyRule, ...] = (
     DenyRule(
         rule_id="C5.5-append-authorized-keys",
         category="priv-escalation",
-        pattern=re.compile(r">>?\s*(?:~|\$HOME|/home/[^/\s]+)?/?\.ssh/authorized_keys"),
+        # Extended to cover macOS ``/Users/<u>/`` and Windows
+        # ``[A-Za-z]:[\\/]Users[\\/]<u>`` home prefixes.
+        pattern=re.compile(
+            r">>?\s*"
+            r"(?:~|\$HOME|/home/[^/\s]+|/Users/[^/\s]+"
+            r"|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+)?[\\/]?"
+            r"\.ssh[\\/]authorized_keys"
+        ),
         message="Writing to ~/.ssh/authorized_keys.",
     ),
     DenyRule(
@@ -408,19 +454,11 @@ _C5_RULES: tuple[DenyRule, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# C6 shell-escape (6 WARN)
+# C6 shell-escape (8 WARN)
 #
-# Two C6 rules that used to live here — an $IFS space-substitution rule and a
-# Unicode-lookalike rule — were removed because they were structurally
-# unreachable. The pre-exec hook normalizes every command BEFORE any pattern is
-# evaluated (security_hooks._normalize): it runs unicodedata.normalize("NFKC", ...)
-# and then an explicit $IFS -> space substitution. That folds away exactly the
-# byte-patterns those two rules matched — the $IFS / ${IFS} / $IFS$9 tokens, and
-# the fullwidth / NBSP / zero-width codepoints — so the patterns could never see
-# a live target. Removing them does NOT weaken coverage: after normalization the
-# obfuscated command reduces to its plain form and the surviving DENY rules
-# (e.g. reading an SSH key, rm -rf) fire on it instead. See
-# tests/unit/test_security_normalize_neutralizes_obfuscation.py for the proof.
+# Ambiguity #4 locked: C6.6 covers ONLY
+#   U+00A0, U+2000-U+200F, U+2028-U+202F, U+FF01-U+FF5E.
+# Cyrillic is a documented blind spot.
 # ---------------------------------------------------------------------------
 
 
@@ -441,6 +479,13 @@ _C6_RULES: tuple[DenyRule, ...] = (
         message="base64 decode piped to shell/eval — encoded payload.",
     ),
     DenyRule(
+        rule_id="C6.3-ifs-bypass",
+        category="shell-escape",
+        # Covers $IFS, $IFS$9, ${IFS}.
+        pattern=re.compile(r"\$(?:IFS(?:\$[0-9])?|\{IFS\})"),
+        message="IFS bypass — space-substitution obfuscation.",
+    ),
+    DenyRule(
         rule_id="C6.4-brace-expansion",
         category="shell-escape",
         pattern=re.compile(r"\{[a-zA-Z]+,[/-]"),
@@ -451,6 +496,12 @@ _C6_RULES: tuple[DenyRule, ...] = (
         category="shell-escape",
         pattern=re.compile(r"/\?{2,}/|/\*/"),
         message="Wildcard in command path — evasion.",
+    ),
+    DenyRule(
+        rule_id="C6.6-unicode-lookalike",
+        category="shell-escape",
+        pattern=re.compile("[\u00a0\u2000-\u200f\u2028-\u202f\uff01-\uff5e]"),
+        message="Unicode lookalike character in command.",
     ),
     DenyRule(
         rule_id="C6.7-alias-function-redef",

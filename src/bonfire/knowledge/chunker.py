@@ -18,54 +18,6 @@ from bonfire.protocols import VaultEntry
 _FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*\n?", re.DOTALL)
 
 
-def _split_oversized_paragraph(
-    para: str,
-    *,
-    chain: str,
-    max_chunk_size: int,
-    out: list[tuple[str, str]],
-) -> str:
-    """Split a paragraph exceeding the budget by words; return the unflushed tail."""
-    word_chunk = ""
-    for word in para.split():
-        if word_chunk and len(word_chunk) + len(word) + 1 > max_chunk_size:
-            out.append((word_chunk.strip(), chain))
-            word_chunk = word
-        else:
-            word_chunk = word_chunk + " " + word if word_chunk else word
-    return word_chunk
-
-
-def _split_oversized_section(
-    section: str,
-    *,
-    chain: str,
-    max_chunk_size: int,
-) -> list[tuple[str, str]]:
-    """Split a section exceeding the budget at paragraph, then word boundaries."""
-    out: list[tuple[str, str]] = []
-    current = ""
-    for para in section.split("\n\n"):
-        # If a single paragraph exceeds max, split it by words
-        if len(para) > max_chunk_size:
-            if current.strip():
-                out.append((current.strip(), chain))
-                current = ""
-            word_tail = _split_oversized_paragraph(
-                para, chain=chain, max_chunk_size=max_chunk_size, out=out
-            )
-            if word_tail.strip():
-                current = word_tail
-        elif current and len(current) + len(para) + 2 > max_chunk_size:
-            out.append((current.strip(), chain))
-            current = para
-        else:
-            current = current + "\n\n" + para if current else para
-    if current.strip():
-        out.append((current.strip(), chain))
-    return out
-
-
 def chunk_markdown(
     content: str,
     *,
@@ -109,9 +61,31 @@ def chunk_markdown(
 
         # If section is too large, split at paragraph boundaries
         if len(section) > max_chunk_size:
-            chunks_raw.extend(
-                _split_oversized_section(section, chain=chain, max_chunk_size=max_chunk_size)
-            )
+            paragraphs = section.split("\n\n")
+            current = ""
+            for para in paragraphs:
+                # If a single paragraph exceeds max, split it by words
+                if len(para) > max_chunk_size:
+                    if current.strip():
+                        chunks_raw.append((current.strip(), chain))
+                        current = ""
+                    words = para.split()
+                    word_chunk = ""
+                    for word in words:
+                        if word_chunk and len(word_chunk) + len(word) + 1 > max_chunk_size:
+                            chunks_raw.append((word_chunk.strip(), chain))
+                            word_chunk = word
+                        else:
+                            word_chunk = word_chunk + " " + word if word_chunk else word
+                    if word_chunk.strip():
+                        current = word_chunk
+                elif current and len(current) + len(para) + 2 > max_chunk_size:
+                    chunks_raw.append((current.strip(), chain))
+                    current = para
+                else:
+                    current = current + "\n\n" + para if current else para
+            if current.strip():
+                chunks_raw.append((current.strip(), chain))
         else:
             chunks_raw.append((section.strip(), chain))
 

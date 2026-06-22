@@ -46,7 +46,6 @@ Per the dispatch contract: this file may reference BON-513 in docstrings
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import inspect
 from typing import Any
@@ -112,7 +111,7 @@ def _make_handler():
         backend=None,
         github_client=None,
         config=None,
-        repo_path=Path("/fake/spine"),
+        repo_path=Path("/tmp/bon-513-spine"),
     )
 
 
@@ -799,14 +798,16 @@ class TestDispatchToolRestriction:
         )
         handler = _make_handler(backend=backend, classifier=classifier)
 
-        # Per StageHandler contract handle() never raises, but mocks may
-        # short-circuit; we still inspect what reached the backend.
-        with contextlib.suppress(Exception):
+        try:
             await handler.handle(
                 stage=_make_stage(),
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
+        except Exception:
+            # Per StageHandler contract handle() never raises, but mocks may
+            # short-circuit; we still inspect what reached the backend.
+            pass
 
         # backend.execute (or .dispatch) was called with DispatchOptions.
         # Locate the DispatchOptions in the call args and assert tools is
@@ -846,12 +847,14 @@ class TestDispatchToolRestriction:
         )
         handler = _make_handler(backend=backend, classifier=classifier)
 
-        with contextlib.suppress(Exception):
+        try:
             await handler.handle(
                 stage=_make_stage(),
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
+        except Exception:
+            pass
 
         if backend.execute.called or backend.dispatch.called:
             mock_call = backend.execute.call_args or backend.dispatch.call_args
@@ -880,12 +883,14 @@ class TestDispatchToolRestriction:
         )
         handler = _make_handler(backend=backend, classifier=classifier)
 
-        with contextlib.suppress(Exception):
+        try:
             await handler.handle(
                 stage=_make_stage(),
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
+        except Exception:
+            pass
 
         if backend.execute.called or backend.dispatch.called:
             mock_call = backend.execute.call_args or backend.dispatch.call_args

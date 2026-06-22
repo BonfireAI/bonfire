@@ -25,7 +25,7 @@ Tests use ``tmp_path`` fixtures — no real ``~/.bonfire/`` is touched.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — runtime constructor type
 
 import pytest
 

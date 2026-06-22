@@ -12,11 +12,30 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Max byte/char length of a single ``user_message.text`` frame. Bounds a
+# CPU-DoS shape against the WebSocket front-door: ``websockets`` defaults
+# to 1 MiB per frame, and ``ConversationEngine`` analyzers iterate
+# ``text.lower().split()`` on the single event loop, so an attacker-sized
+# frame would stall the loop.
+#
+# Unified with ``bonfire.onboard.server._WS_MAX_FRAME_BYTES`` (the
+# websockets ``max_size`` floor wired by W9 Lane B). One value, one
+# reason: the Pydantic validator and the WS server share this single
+# source of truth, so a ≥ 8 KiB frame is rejected once with a single
+# diagnostic (``ServerError`` ``message_too_long`` from the Pydantic
+# path) and a ≥ 8 KiB hard-limit close (1009) from the WS path. 8 KiB
+# is long enough for the real Q1/Q2/Q3 free-text answers (W9 Lane B's
+# acceptance bracket) and short enough to bound per-frame analyzer cost.
+# Widening (or shrinking) requires a fresh DoS bracket AND a parallel
+# update to ``_WS_MAX_FRAME_BYTES`` so the two stay equal.
+MAX_USER_MESSAGE_LEN: Final = 8192
 
 __all__ = [
+    "MAX_USER_MESSAGE_LEN",
     "AllScansComplete",
     "ConfigGenerated",
     "ConversationStart",
@@ -26,6 +45,7 @@ __all__ = [
     "ScanComplete",
     "ScanStart",
     "ScanUpdate",
+    "ServerError",
     "UserMessage",
     "parse_client_message",
     "parse_server_message",
@@ -106,16 +126,35 @@ class ConfigGenerated(FrontDoorMessage):
     annotations: dict[str, str]
 
 
+class ServerError(FrontDoorMessage):
+    """A typed error frame from the server.
+
+    Used by the flow layer to surface application-level errors (e.g. attempting
+    to send a user_message after the conversation has completed) back to the
+    browser client.
+    """
+
+    type: Literal["server_error"] = "server_error"
+    code: str
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Client -> Server
 # ---------------------------------------------------------------------------
 
 
 class UserMessage(FrontDoorMessage):
-    """User's free-text response in the conversation."""
+    """User's free-text response in the conversation.
+
+    ``text`` is capped at ``MAX_USER_MESSAGE_LEN`` (8 KiB — unified with
+    the WS server ``max_size``) at construction time. Overlong
+    payloads raise ``pydantic.ValidationError`` before any downstream
+    analyzer sees them, closing the WebSocket CPU-DOS surface.
+    """
 
     type: Literal["user_message"] = "user_message"
-    text: str
+    text: Annotated[str, Field(max_length=MAX_USER_MESSAGE_LEN)]
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +169,7 @@ _SERVER_TYPES: dict[str, type[FrontDoorMessage]] = {
     "conversation_start": ConversationStart,
     "falcor_message": FalcorMessage,
     "config_generated": ConfigGenerated,
+    "server_error": ServerError,
 }
 
 _CLIENT_TYPES: dict[str, type[FrontDoorMessage]] = {

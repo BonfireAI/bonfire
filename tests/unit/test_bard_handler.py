@@ -53,11 +53,6 @@ try:
 except ImportError:  # pragma: no cover
     _slugify_task = None  # type: ignore[assignment]
 
-try:
-    from bonfire.git.workflow import BranchCollisionError  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    BranchCollisionError = None  # type: ignore[assignment,misc]
-
 from bonfire.agent.roles import AgentRole
 from bonfire.models.config import PipelineConfig
 from bonfire.models.envelope import (
@@ -123,7 +118,7 @@ def bard_stage() -> StageSpec:
 
 
 @pytest.fixture()
-def github_client():
+def github_client():  # noqa: ANN201
     return MockGitHubClient()
 
 
@@ -156,7 +151,7 @@ def empty_envelope() -> Envelope:
 
 
 @pytest.fixture()
-def handler(git_workflow: AsyncMock, github_client) -> Any:
+def handler(git_workflow: AsyncMock, github_client) -> Any:  # noqa: ANN001
     return BardHandler(git_workflow=git_workflow, github_client=github_client)
 
 
@@ -245,7 +240,7 @@ class TestHappyPath:
     @pytest.mark.asyncio
     async def test_returns_completed_envelope(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
     ) -> None:
@@ -257,7 +252,7 @@ class TestHappyPath:
     @pytest.mark.asyncio
     async def test_stages_artifact_paths_to_commit(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
         git_workflow: AsyncMock,
@@ -271,7 +266,7 @@ class TestHappyPath:
     @pytest.mark.asyncio
     async def test_populates_bard_metadata(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
     ) -> None:
@@ -290,7 +285,7 @@ class TestHappyPath:
         self,
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Call ordering: rev_parse -> create_branch -> commit -> push."""
         call_log: list[str] = []
@@ -325,7 +320,7 @@ class TestHappyPath:
     @pytest.mark.asyncio
     async def test_status_is_enum_not_string(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
     ) -> None:
         """``is`` TaskStatus.COMPLETED (enum identity, not str equality)."""
@@ -343,7 +338,7 @@ class TestEmptyArtifactsShortCircuit:
     @pytest.mark.asyncio
     async def test_empty_returns_failed_with_structured_token(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         empty_envelope: Envelope,
     ) -> None:
@@ -357,7 +352,7 @@ class TestEmptyArtifactsShortCircuit:
     @pytest.mark.asyncio
     async def test_empty_message_identifies_envelope_and_stage(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         empty_envelope: Envelope,
     ) -> None:
@@ -371,7 +366,7 @@ class TestEmptyArtifactsShortCircuit:
     @pytest.mark.asyncio
     async def test_empty_writes_staging_failure_reason_metadata(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         empty_envelope: Envelope,
     ) -> None:
@@ -388,7 +383,7 @@ class TestEmptyArtifactsShortCircuit:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Upstream metadata keys survive into the FAILED envelope."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -406,7 +401,7 @@ class TestEmptyArtifactsShortCircuit:
     @pytest.mark.asyncio
     async def test_empty_makes_no_git_calls(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         empty_envelope: Envelope,
         git_workflow: AsyncMock,
@@ -421,10 +416,10 @@ class TestEmptyArtifactsShortCircuit:
     @pytest.mark.asyncio
     async def test_empty_makes_no_github_calls(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         empty_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """No create_pr on the empty path."""
         await handler.handle(bard_stage, empty_envelope, {})
@@ -442,7 +437,7 @@ class TestArtifactFiltering:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Only file_written/file_modified survive filtering."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -467,7 +462,7 @@ class TestArtifactFiltering:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Zero survivors after filtering -> empty_artifacts."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -493,7 +488,7 @@ class TestArtifactFiltering:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Artifact order preserved through filtering."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -514,7 +509,7 @@ class TestArtifactFiltering:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """No dedup — duplicates reach commit (git add is idempotent)."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -539,7 +534,7 @@ class TestBranchNaming:
     @pytest.mark.asyncio
     async def test_excludes_bonfire_prefix(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
         git_workflow: AsyncMock,
@@ -554,7 +549,7 @@ class TestBranchNaming:
     @pytest.mark.asyncio
     async def test_exact_slug_form(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
         git_workflow: AsyncMock,
@@ -707,7 +702,7 @@ class TestSlugifyTask:
     async def test_slug_differs_when_envelope_id_differs_at_handler(
         self,
         bard_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Integration: two envelopes -> two distinct branch names."""
         artifacts = [Artifact(name="src/a.py", content="", artifact_type="file_written")]
@@ -764,7 +759,7 @@ class TestPhantomCommitDetection:
         self,
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """SHA equality -> FAILED + error_type=no_diff_after_commit."""
         phantom = "x" * 40
@@ -787,7 +782,7 @@ class TestPhantomCommitDetection:
         self,
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Every Bard metadata key present on phantom path; no PR."""
         phantom = "x" * 40
@@ -815,7 +810,7 @@ class TestPhantomCommitDetection:
         self,
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """SHA-match short-circuits pre-push and pre-PR."""
         phantom = "x" * 40
@@ -836,7 +831,7 @@ class TestPhantomCommitDetection:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """staged_files is ``json.dumps(list)`` — string, not a list literal."""
         git_workflow.rev_parse = AsyncMock(return_value="f" * 40)
@@ -859,44 +854,6 @@ class TestPhantomCommitDetection:
 # ---------------------------------------------------------------------------
 
 
-_BRANCH_COLLISION_XFAIL = pytest.mark.xfail(
-    condition=BranchCollisionError is None,
-    reason="typed BranchCollisionError not yet defined in bonfire.git.workflow",
-    strict=False,
-)
-
-
-def _make_collision_error(branch: str = "bonfire/bard/x") -> RuntimeError:
-    """Build the typed collision error the handler now catches.
-
-    Falls back to a plain RuntimeError carrying the legacy 'already exists'
-    substring while the typed class is absent, so the suite stays importable
-    in the RED phase.
-    """
-    stderr = f"fatal: A branch named '{branch}' already exists."
-    if BranchCollisionError is None:  # pragma: no cover - RED phase only
-        return RuntimeError(stderr)
-    return BranchCollisionError(branch=branch, stderr=stderr)
-
-
-class TestBranchCollisionErrorType:
-    """The typed error contract lives in bonfire.git.workflow."""
-
-    @_BRANCH_COLLISION_XFAIL
-    def test_branch_collision_error_is_runtime_error_subclass(self) -> None:
-        """BranchCollisionError must subclass RuntimeError (catch-compatible)."""
-        assert BranchCollisionError is not None
-        assert issubclass(BranchCollisionError, RuntimeError)
-
-    @_BRANCH_COLLISION_XFAIL
-    def test_branch_collision_error_carries_branch_and_stderr(self) -> None:
-        """Typed error exposes structured branch + stderr attributes."""
-        assert BranchCollisionError is not None
-        err = BranchCollisionError(branch="bonfire/bard/x", stderr="fatal: ... already exists.")
-        assert err.branch == "bonfire/bard/x"
-        assert err.stderr == "fatal: ... already exists."
-
-
 class TestBranchCollision:
     @_BARD_META_XFAIL
     @pytest.mark.asyncio
@@ -904,12 +861,14 @@ class TestBranchCollision:
         self,
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
-        """create_branch BranchCollisionError -> branch_collision token."""
+        """create_branch RuntimeError -> branch_collision token."""
         wf = AsyncMock()
         wf.rev_parse = AsyncMock(return_value="a" * 40)
-        wf.create_branch = AsyncMock(side_effect=_make_collision_error())
+        wf.create_branch = AsyncMock(
+            side_effect=RuntimeError("fatal: A branch named 'bonfire/bard/x' already exists.")
+        )
         wf.commit = AsyncMock(return_value="b" * 40)
         wf.push = AsyncMock(return_value=None)
 
@@ -926,10 +885,12 @@ class TestBranchCollision:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Collision path has BRANCH + BASE_SHA but NO COMMIT_SHA."""
-        git_workflow.create_branch = AsyncMock(side_effect=_make_collision_error())
+        git_workflow.create_branch = AsyncMock(
+            side_effect=RuntimeError("fatal: A branch named 'bonfire/bard/x' already exists."),
+        )
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
         envelope = _make_envelope("Implement r")
         result = await handler.handle(bard_stage, envelope, {})
@@ -944,57 +905,6 @@ class TestBranchCollision:
         assert META_BARD_STAGED_FILES not in result.metadata
         git_workflow.commit.assert_not_awaited()
 
-    @_BRANCH_COLLISION_XFAIL
-    @pytest.mark.asyncio
-    async def test_typed_collision_caught_specifically(
-        self,
-        bard_stage: StageSpec,
-        artifacts_envelope: Envelope,
-        github_client,
-    ) -> None:
-        """A typed BranchCollisionError is mapped to error_type='branch_collision'."""
-        wf = AsyncMock()
-        wf.rev_parse = AsyncMock(return_value="a" * 40)
-        wf.create_branch = AsyncMock(side_effect=_make_collision_error())
-        wf.commit = AsyncMock(return_value="b" * 40)
-        wf.push = AsyncMock(return_value=None)
-
-        handler = BardHandler(git_workflow=wf, github_client=github_client)
-        result = await handler.handle(bard_stage, artifacts_envelope, {})
-        assert result.status is TaskStatus.FAILED
-        assert result.error is not None
-        assert result.error.error_type == "branch_collision"
-        wf.commit.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_plain_runtime_error_is_not_a_collision(
-        self,
-        bard_stage: StageSpec,
-        artifacts_envelope: Envelope,
-        github_client,
-    ) -> None:
-        """A non-collision RuntimeError falls through to the generic handler.
-
-        This is the regression guard for the substring->typed narrowing: a
-        plain RuntimeError whose message merely happens to mention 'already
-        exists' must NOT be misclassified as a branch_collision once the
-        handler catches the typed error specifically.
-        """
-        wf = AsyncMock()
-        wf.rev_parse = AsyncMock(return_value="a" * 40)
-        wf.create_branch = AsyncMock(
-            side_effect=RuntimeError("fatal: remote already exists in some other sense")
-        )
-        wf.commit = AsyncMock(return_value="b" * 40)
-        wf.push = AsyncMock(return_value=None)
-
-        handler = BardHandler(git_workflow=wf, github_client=github_client)
-        result = await handler.handle(bard_stage, artifacts_envelope, {})
-        assert result.status is TaskStatus.FAILED
-        assert result.error is not None
-        assert result.error.error_type == "RuntimeError"
-        wf.commit.assert_not_awaited()
-
 
 # ---------------------------------------------------------------------------
 # Mid-pipeline failures
@@ -1007,7 +917,7 @@ class TestMidPipelineFailures:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """rev_parse raises -> FAILED; no create_branch/commit/push/create_pr."""
         git_workflow.rev_parse = AsyncMock(side_effect=RuntimeError("fatal: unknown revision"))
@@ -1026,7 +936,7 @@ class TestMidPipelineFailures:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """commit() raises -> FAILED; push + create_pr NOT invoked."""
         git_workflow.commit = AsyncMock(side_effect=RuntimeError("fatal: permission denied"))
@@ -1046,7 +956,7 @@ class TestMidPipelineFailures:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """push() raises -> FAILED; partial metadata kept."""
         git_workflow.push = AsyncMock(side_effect=RuntimeError("remote rejected"))
@@ -1102,7 +1012,7 @@ class TestHostileInputSurvival:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Unicode/special chars in task reach create_pr; branch slug ASCII-only."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -1127,7 +1037,7 @@ class TestConfigThreading:
     def test_config_kwarg_accepted_and_stored(
         self,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """``config=`` threaded onto ``self._config``."""
         cfg = PipelineConfig(model="X")
@@ -1138,7 +1048,7 @@ class TestConfigThreading:
     def test_explicit_none_config_stored_as_none(
         self,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client, config=None)
         assert handler._config is None
@@ -1148,7 +1058,7 @@ class TestConfigThreading:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """slug_max_len + suffix_chars are module-scope constants, not config knobs."""
         cfg = PipelineConfig(model="claude-opus-4-7")
@@ -1171,7 +1081,7 @@ class TestConfigThreading:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """config stored but unused; empty path survives exotic values."""
         cfg = PipelineConfig(model="", max_turns=1, max_budget_usd=0.0)
@@ -1196,7 +1106,7 @@ class TestPushKeywordOnly:
     @pytest.mark.asyncio
     async def test_push_uses_keyword_only_branch(
         self,
-        handler,
+        handler,  # noqa: ANN001
         bard_stage: StageSpec,
         artifacts_envelope: Envelope,
         git_workflow: AsyncMock,
@@ -1220,7 +1130,7 @@ class TestFailedPathEnumIdentity:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Every FAILED path uses TaskStatus.FAILED enum, not string literal."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -1285,7 +1195,7 @@ class TestIdentitySealInvariants:
         self,
         bard_stage: StageSpec,
         git_workflow: AsyncMock,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Every code path returns an Envelope."""
         handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
@@ -1334,10 +1244,102 @@ class TestIdentitySealInvariants:
 
 def test_bard_handler_satisfies_stage_handler_protocol(
     git_workflow: AsyncMock,
-    github_client,
+    github_client,  # noqa: ANN001
 ) -> None:
     """BardHandler instances pass runtime_checkable StageHandler isinstance."""
     from bonfire.protocols import StageHandler
 
     handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
     assert isinstance(handler, StageHandler)
+
+
+# ---------------------------------------------------------------------------
+# ``base_branch`` default is ``"main"`` (modern OSS convention)
+# ---------------------------------------------------------------------------
+
+
+class TestBaseBranchDefault:
+    """The ``base_branch`` default must be ``"main"`` for v0.1 first-impression.
+
+    Pre-fix the default was ``"master"``, which made ``bonfire`` look stale on
+    modern OSS repos (GitHub's default has been ``main`` since 2020). These
+    tests pin both the constructor default AND that the default is actually
+    EXERCISED on the happy path (``rev_parse`` + ``create_pr`` both receive
+    ``"main"``).
+    """
+
+    def test_constructor_default_base_branch_is_main(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """``BardHandler()`` with no ``base_branch=`` kwarg defaults to ``"main"``."""
+        handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
+        assert handler._base_branch == "main"
+
+    @pytest.mark.asyncio
+    async def test_default_base_branch_exercised_in_rev_parse(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Happy-path call to ``rev_parse`` passes ``"main"`` when default is used.
+
+        Patches a value-check (not just a default assertion) so a future
+        refactor that drops the default-to-attribute wiring would still trip
+        this test.
+        """
+        handler = BardHandler(git_workflow=git_workflow, github_client=github_client)
+        await handler.handle(bard_stage, artifacts_envelope, {})
+        git_workflow.rev_parse.assert_awaited_once_with("main")
+
+    @pytest.mark.asyncio
+    async def test_default_base_branch_exercised_in_create_pr(
+        self,
+        bard_stage: StageSpec,
+        artifacts_envelope: Envelope,
+        git_workflow: AsyncMock,
+    ) -> None:
+        """Happy-path call to ``create_pr`` passes ``"main"`` as the base.
+
+        ``MockGitHubClient.actions`` records every operation as a dict;
+        the ``create_pr`` entry has a ``"base"`` key that must be ``"main"``.
+        """
+        gh = MockGitHubClient()
+        handler = BardHandler(git_workflow=git_workflow, github_client=gh)
+        await handler.handle(bard_stage, artifacts_envelope, {})
+        create_pr_actions = [a for a in gh.actions if a.get("type") == "create_pr"]
+        assert len(create_pr_actions) == 1, (
+            f"Expected exactly one create_pr action; got {create_pr_actions!r}"
+        )
+        assert create_pr_actions[0]["base"] == "main", (
+            f"create_pr was called with base={create_pr_actions[0]['base']!r}; expected 'main'."
+        )
+
+    def test_explicit_master_override_still_honored(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Repos still on ``master`` can pass ``base_branch="master"`` explicitly."""
+        handler = BardHandler(
+            git_workflow=git_workflow,
+            github_client=github_client,
+            base_branch="master",
+        )
+        assert handler._base_branch == "master"
+
+    def test_explicit_arbitrary_branch_override_honored(
+        self,
+        git_workflow: AsyncMock,
+        github_client,  # noqa: ANN001
+    ) -> None:
+        """Caller-specified branch name passes through unchanged."""
+        handler = BardHandler(
+            git_workflow=git_workflow,
+            github_client=github_client,
+            base_branch="release/v2",
+        )
+        assert handler._base_branch == "release/v2"

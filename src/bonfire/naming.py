@@ -50,6 +50,14 @@ ROLE_DISPLAY: dict[str, DisplayNames] = {
     "closer": DisplayNames("Release Agent", "Steward"),
     "synthesizer": DisplayNames("Synthesis Agent", "Sage"),
     "analyst": DisplayNames("Analysis Agent", "Architect"),
+    # Ratified gamified-key alias for the verifier role (ADR-001 §
+    # Ratified Exceptions). ``standard_build()`` emits
+    # ``StageSpec(role="prover", ...)`` and ``GAMIFIED_TO_GENERIC`` maps
+    # ``"prover" -> AgentRole.VERIFIER``; the display entry mirrors the
+    # verifier's display strings so any code path that looks up the raw
+    # factory-emitted role string still resolves cleanly. New gamified-
+    # keyed surfaces require amending ADR-001 § Ratified Exceptions.
+    "prover": DisplayNames("Verify Agent", "Cleric"),
 }
 
 # ---------------------------------------------------------------------------

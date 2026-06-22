@@ -15,37 +15,26 @@ DEFAULT_LEDGER_PATH: Path = Path.home() / ".bonfire" / "cost" / "cost_ledger.jso
 
 
 class DispatchRecord(BaseModel):
-    """One agent dispatch with its cost.
-
-    ``status`` distinguishes a dispatch that completed successfully from one
-    that failed after burning tokens — both must be summed by the analyzer, so
-    a failed dispatch is recorded with ``status="failed"`` rather than dropped.
-    """
+    """One agent dispatch with its cost."""
 
     type: Literal["dispatch"] = "dispatch"
     timestamp: float
     session_id: str
     agent_name: str
     cost_usd: float
-    duration_seconds: float = 0.0
+    duration_seconds: float
     model: str = ""
-    status: Literal["completed", "failed"] = "completed"
 
 
 class PipelineRecord(BaseModel):
-    """One pipeline completion with total cost.
-
-    ``status`` marks a pipeline that ran to completion versus one that failed
-    mid-run after spending on completed stages; both are real spend.
-    """
+    """One pipeline completion with total cost."""
 
     type: Literal["pipeline"] = "pipeline"
     timestamp: float
     session_id: str
     total_cost_usd: float
-    duration_seconds: float = 0.0
-    stages_completed: int = 0
-    status: Literal["completed", "failed"] = "completed"
+    duration_seconds: float
+    stages_completed: int
 
 
 class SessionCost(BaseModel):

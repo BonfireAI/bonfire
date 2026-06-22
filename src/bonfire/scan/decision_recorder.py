@@ -10,7 +10,6 @@ Scans markdown files for decision patterns (ADR format, "Use X not Y",
 
 from __future__ import annotations
 
-import logging
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -21,11 +20,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = ["DecisionRecorder"]
-
-# Module logger so an unreadable document leaves a trail instead of vanishing
-# silently from the decision index. Mirrors the scanner idiom elsewhere in the
-# codebase (bonfire.onboard.scanners.mcp_servers).
-_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Pattern definitions
@@ -102,11 +96,7 @@ class DecisionRecorder:
         for file_path in files:
             try:
                 text = file_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                # Skip files we cannot decode so one bad document does not abort
-                # the whole scan — but narrate the skip so the dropped file is
-                # discoverable in logs rather than silently missing.
-                _log.debug("DecisionRecorder skipping unreadable file %s: %s", file_path, exc)
+            except (OSError, UnicodeDecodeError):
                 continue
             if not text.strip():
                 continue

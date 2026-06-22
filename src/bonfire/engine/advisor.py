@@ -7,8 +7,8 @@ Advisory-only, never blocking. Queries the vault for error patterns matching
 the current stage and returns formatted markdown. Fail-open: returns ``""``
 on any failure (exception, timeout, non-list payload, empty results).
 
-VaultAdvisor is NOT re-exported from ``bonfire.engine`` (mirrors V1); it is
-importable only from ``bonfire.engine.advisor``.
+VaultAdvisor is NOT re-exported from ``bonfire.engine``; it is importable
+only from ``bonfire.engine.advisor``.
 """
 
 from __future__ import annotations

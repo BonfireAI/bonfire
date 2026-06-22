@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 __all__ = ["run_scan"]
 
-logger = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def _get_scanners() -> list[tuple[str, ModuleType]]:
@@ -104,7 +104,7 @@ async def _run_one(
     try:
         count = await module.scan(project_path, _narrow_emit)
     except Exception:
-        logger.exception("Scanner %s failed", panel)
+        _log.exception("Scanner %s failed", panel)
         count = 0
 
     await emit(ScanComplete(panel=panel, item_count=count))

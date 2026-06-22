@@ -15,7 +15,6 @@ import shutil
 from typing import TYPE_CHECKING
 
 from bonfire.onboard.protocol import ScanCallback, ScanUpdate
-from bonfire.timeouts import resolve_timeout
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -50,12 +49,8 @@ TOOLS: list[str] = [
 ]
 
 _VERSION_RE = re.compile(r"\d+\.\d+[\.\d]*")
-# Timeouts resolved through the shared resolver. Values are identical to the
-# prior literals (``DEFAULT_TIMEOUTS["version"] == 5.0`` /
-# ``["capability"] == 2.0``); routing through the resolver standardizes the
-# source of truth without changing behavior.
-_VERSION_TIMEOUT = resolve_timeout("version")
-_CAPABILITY_TIMEOUT = resolve_timeout("capability")
+_VERSION_TIMEOUT = 5.0
+_CAPABILITY_TIMEOUT = 2.0
 _PANEL = "cli_toolchain"
 
 # Capability checks: tool_name -> (args, success_detail, timeout)

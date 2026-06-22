@@ -1,4 +1,4 @@
-"""BON-637 smoke: ensure no plural workflows references remain post-rename."""
+"""Smoke: ensure no plural workflows references remain post-rename."""
 
 import subprocess
 from pathlib import Path
@@ -26,6 +26,34 @@ def test_no_plural_bonfire_workflows_imports() -> None:
     )
     # grep exits 1 when no match found — that is the success state
     assert result.returncode == 1, f"Found plural bonfire.workflows references:\n{result.stdout}"
+
+
+def test_no_plural_bonfire_workflows_in_docs() -> None:
+    """Docs surface must also stay on the singular form.
+
+    The historical-lineage subtree at ``docs/_lore/`` is grandfathered:
+    ADR amendments and Sage memos there describe the pre-rename world
+    by design and would generate false positives.
+    """
+    result = subprocess.run(
+        [
+            "grep",
+            "-rn",
+            "--exclude-dir=_lore",
+            "bonfire.workflows",
+            "docs/",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # grep exits 1 when no match found — that is the success state.
+    # When it matches (exit 0), stdout names the offending file:line so
+    # the failure message points the contributor straight at the leak.
+    assert result.returncode == 1, (
+        f"Found plural bonfire.workflows references in docs/:\n{result.stdout}"
+    )
 
 
 def test_singular_workflow_directory_exists() -> None:

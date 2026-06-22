@@ -465,7 +465,7 @@ class TestClassifierEdgeCases:
             junit_xml=None,
         )
         assert dataclasses.is_dataclass(result)
-        assert result.__class__.__dataclass_params__.frozen
+        assert getattr(result.__class__, "__dataclass_params__").frozen
 
 
 # ---------------------------------------------------------------------------

@@ -24,26 +24,11 @@ from bonfire.onboard.protocol import (
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-__all__ = [
-    "ConversationAlreadyComplete",
-    "ConversationEngine",
-    "ConversationNotStarted",
-]
+__all__ = ["ConversationCompleteError", "ConversationEngine"]
 
 
-# ---------------------------------------------------------------------------
-# Typed lifecycle exceptions (subclass RuntimeError for back-compat with
-# the pre-fix bare-RuntimeError catch sites — existing `except RuntimeError`
-# blocks continue to catch these unchanged).
-# ---------------------------------------------------------------------------
-
-
-class ConversationNotStarted(RuntimeError):
-    """Raised when ``handle_answer`` is called before ``start()``."""
-
-
-class ConversationAlreadyComplete(RuntimeError):
-    """Raised when ``handle_answer`` is called after all 3 questions are answered."""
+class ConversationCompleteError(RuntimeError):
+    """Raised when handle_answer is called after the 3-question conversation has completed."""
 
 
 # ---------------------------------------------------------------------------
@@ -391,20 +376,11 @@ _ANALYZERS: list[Callable[[str], tuple[str, dict[str, str]]]] = [
 
 @dataclass
 class ConversationEngine:
-    """Scripted 3-question conversation for profiling.
-
-    ``handle_answer`` acquires ``_lock`` (an ``asyncio.Lock``) for its full
-    body so back-to-back WS messages that arrive while a prior ``emit(...)``
-    is suspended in ``broadcast(...)`` cannot interleave reads of ``_turn``
-    and corrupt the question-emission sequence.
-    """
+    """Scripted 3-question conversation for profiling."""
 
     _turn: int = 0  # 0=not started, 1-3=waiting for answer to Q1-Q3
     _profile: dict[str, str] = field(default_factory=dict)
-    # Per-instance asyncio.Lock — serializes handle_answer calls so the
-    # await on emit() inside the handler can't be raced by a second call
-    # that lands on the same WS connection while the first is suspended.
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _lock: asyncio.Lock | None = field(default=None)
 
     @property
     def is_complete(self) -> bool:
@@ -421,6 +397,7 @@ class ConversationEngine:
         emit: Callable[[FrontDoorMessage], Awaitable[None]],
     ) -> None:
         """Emit ConversationStart + first question."""
+        self._lock = asyncio.Lock()
         await emit(ConversationStart())
         await emit(FalcorMessage(text=_QUESTIONS[0], subtype="question"))
         self._turn = 1
@@ -430,25 +407,16 @@ class ConversationEngine:
         text: str,
         emit: Callable[[FrontDoorMessage], Awaitable[None]],
     ) -> None:
-        """Process answer: analyze, reflect, ask next or finish.
-
-        Acquires ``self._lock`` for the full body — a second concurrent
-        call blocks until the first releases, so the ``await emit(...)``
-        suspension points inside the body can't be raced by a sibling call
-        that reads stale ``_turn`` and double-advances past the same question.
-
-        Lifecycle violations raise typed exceptions (``ConversationNotStarted``,
-        ``ConversationAlreadyComplete``) that subclass ``RuntimeError`` so
-        existing bare-``RuntimeError`` catchers in the WS handler continue
-        to work while typed handlers can catch the specific lifecycle case.
-        """
+        """Process answer: analyze, reflect, ask next or finish."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             if self._turn == 0:
                 msg = "Cannot handle answer before start() has been called."
-                raise ConversationNotStarted(msg)
+                raise RuntimeError(msg)
             if self._turn > 3:
                 msg = "Conversation is already complete."
-                raise ConversationAlreadyComplete(msg)
+                raise ConversationCompleteError(msg)
 
             question_index = self._turn - 1  # 0-based
 

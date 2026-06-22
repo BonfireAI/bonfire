@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from bonfire.models.envelope import Envelope
+from bonfire.models.envelope import Envelope  # noqa: TC001 — Pydantic needs runtime access
 
 
 class DispatchResult(BaseModel):

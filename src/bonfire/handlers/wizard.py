@@ -36,8 +36,8 @@ from bonfire.agent.roles import AgentRole
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.model_resolver import resolve_dispatch_model
-from bonfire.handlers._pr_number import extract_pr_number
 from bonfire.models.envelope import (
+    META_PR_NUMBER,
     META_REVIEW_SEVERITY,
     META_REVIEW_VERDICT,
     Envelope,
@@ -47,7 +47,7 @@ from bonfire.models.envelope import (
 from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
-    from bonfire.events.bus import EventBus
+    from bonfire.events.bus import EventBus  # noqa: TC004 -- only for type hints
     from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.models.plan import StageSpec
 
@@ -131,6 +131,31 @@ FAIL_SAFE_BODY_TEMPLATE = """## Code Review -- CHANGES REQUESTED (parse-failure 
 # ---------------------------------------------------------------------------
 # Module-scope helpers
 # ---------------------------------------------------------------------------
+
+
+def _extract_pr_number(prior_results: dict[str, Any], envelope: Any) -> int | None:
+    """Extract PR number from prior_results or envelope metadata."""
+    raw = prior_results.get(META_PR_NUMBER)
+    if raw is not None:
+        try:
+            return int(raw)
+        except (ValueError, TypeError):
+            pass
+
+    bard_val = prior_results.get("bard", "")
+    if bard_val:
+        m = re.search(r"/pull/(\d+)", str(bard_val))
+        if m:
+            return int(m.group(1))
+
+    meta_val = envelope.metadata.get(META_PR_NUMBER)
+    if meta_val is not None:
+        try:
+            return int(meta_val)
+        except (ValueError, TypeError):
+            pass
+
+    return None
 
 
 def _parse_verdict(text: str) -> tuple[str, str | None]:
@@ -253,7 +278,7 @@ class WizardHandler:
     ) -> Envelope:
         """Read diff, dispatch review agent, post verdict."""
         try:
-            pr_number = extract_pr_number(prior_results, envelope)
+            pr_number = _extract_pr_number(prior_results, envelope)
             if pr_number is None:
                 return envelope.with_error(
                     ErrorDetail(
@@ -285,8 +310,9 @@ class WizardHandler:
             # Wizard call site preserves the canonical ``ROLE.value``
             # ("reviewer") -- gamified passthrough at executor + pipeline
             # uses ``stage.role``, but the reviewer handler is locked to
-            # the canonical string per Sage memo §K and the existing
-            # ``tests/unit/test_wizard_handler.py:586`` assertion contract.
+            # the canonical string by the
+            # ``tests/unit/test_wizard_handler.py`` assertion contract
+            # (reviewer-role wire-format pin).
             review_envelope = Envelope(
                 task=prompt,
                 agent_name="review-agent",
@@ -301,21 +327,27 @@ class WizardHandler:
 
             thinking_depth = stage.metadata.get("thinking_depth_override", "thorough")
 
-            # ``max_budget_usd=0.0`` is the v0.1 non-nullable contract; the
-            # v1 parity value is ``None`` (uncapped). Widening the protocol
-            # is deferred to BON-W5.3-protocol-widen.
+            # Thread the user-configured budget through to the review
+            # dispatch -- previously hard-coded to ``0.0`` which silently
+            # bypassed the configured cap. The v0.1 protocol keeps
+            # ``max_budget_usd`` non-nullable (float), so we plumb the
+            # ``PipelineConfig`` value directly. A future widening to
+            # ``None`` (uncapped) for the reviewer-as-final-gate semantics
+            # is xfail-pinned in tests but out of scope here.
             options = DispatchOptions(
                 model=review_envelope.model,
                 max_turns=5,
-                max_budget_usd=0.0,
+                max_budget_usd=self._config.max_budget_usd,
                 thinking_depth=thinking_depth,
                 tools=["Read", "Grep", "Glob"],
                 permission_mode="dontAsk",
                 role=ROLE.value,
             )
 
-            # Timeout routing is deferred to BON-W5.3-protocol-widen -- the
-            # v0.1 ``PipelineConfig`` has no ``dispatch_timeout_seconds``.
+            # Timeout routing -- the v0.1 ``PipelineConfig`` has no
+            # ``dispatch_timeout_seconds`` field; ``getattr`` lets users
+            # opt in via a subclass / settings override without a hard
+            # dependency on the field being present.
             timeout_seconds = getattr(self._config, "dispatch_timeout_seconds", None)
 
             dispatch_result = await execute_with_retry(
@@ -400,7 +432,6 @@ class WizardHandler:
             return enriched_envelope
 
         except Exception as exc:
-            logger.exception("wizard.handler_failed stage=%s", stage.name)
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

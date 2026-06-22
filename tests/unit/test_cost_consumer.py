@@ -292,12 +292,17 @@ class TestConsumerEdge:
     async def test_session_id_with_unusual_chars_roundtrips(
         self, consumer: CostLedgerConsumer, bus: EventBus, ledger_path: Path
     ) -> None:
-        """Session ids come from user-controllable code paths. They may
-        contain dashes, underscores, digits, quotes, or unicode. Whatever
-        they contain, the JSONL line MUST stay parseable — the JSON
-        encoder escapes quotes and newlines inside strings.
+        """Session ids span the full allow-list (alphanumerics + dash + underscore).
+
+        Wave 9 Lane C tightened ``BonfireEvent.session_id`` to refuse
+        path-traversal smuggling: only ``[a-zA-Z0-9_-]{1,64}`` plus the
+        empty-string sentinel are accepted at the model layer. Quotes,
+        unicode, slashes, and other shell-meaningful characters are
+        rejected before the consumer ever sees the event. The remaining
+        roundtrip contract: whatever the allow-list permits MUST stay
+        parseable through the JSONL encoder.
         """
-        weird = 'ses-"quote"_2026\u00e9'
+        weird = "ses-dashed_2026-XYZ_99"
         await bus.emit(
             DispatchCompleted(
                 session_id=weird,

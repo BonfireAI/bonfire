@@ -13,8 +13,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from bonfire.errors import IsolationError
-
 __all__ = [
     "IsolationViolation",
     "PathGuard",
@@ -44,7 +42,7 @@ class IsolationViolation:
     severity: str  # "error" | "warning"
 
 
-class PathGuardError(IsolationError):
+class PathGuardError(Exception):
     """Raised when PathGuard in 'block' mode detects absolute paths."""
 
     def __init__(self, message: str, violations: list[IsolationViolation]) -> None:

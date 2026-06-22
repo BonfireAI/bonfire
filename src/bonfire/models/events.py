@@ -12,11 +12,61 @@ Depends only on pydantic. Python 3.12+.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
+
+# ---------------------------------------------------------------------------
+# session_id validation
+# ---------------------------------------------------------------------------
+# ``session_id`` is interpolated into filesystem paths at multiple sites
+# (``session/persistence.py`` writes ``{session_id}.jsonl``; ``engine/
+# checkpoint.py`` writes ``{session_id}.json``). Without validation, an
+# attacker-controlled session_id of ``../../etc/passwd`` or
+# ``..\\..\\Windows`` would yield arbitrary-path interpolation —
+# path-traversal smuggling into operator-controlled write sites.
+#
+# Pattern: alphanumerics + ``_`` + ``-``, 1-64 chars. Permissive enough for
+# uuid4-hex (default, 12 chars), human-readable slugs, and existing test
+# fixtures (``sess-1``, ``ses_001``, ``session_under_attack``). Strict
+# enough to reject ``..``, ``/``, ``\\``, null bytes, control chars, and
+# any other path-traversal smuggling shape.
+#
+# The empty-string sentinel is preserved separately for ``BonfireEvent``
+# subclasses (``AxiomLoaded``) that legitimately emit outside session
+# context — see ``_validate_session_id`` below.
+#
+# The anchor MUST be ``\Z`` (true end-of-string), not ``$``.
+# In MULTILINE mode ``$`` matches at any line boundary; in default mode
+# it matches just before a single trailing ``\n``. A session_id of
+# ``abc\n`` would slip through the ``$`` form and be interpolated into
+# filesystem paths with the newline preserved (a log-injection /
+# display-corruption shape). ``\Z`` anchors at the actual end of the
+# string and refuses the trailing-newline shape outright.
+_SESSION_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}\Z")
+
+
+def _validate_session_id(value: str) -> str:
+    """Reject path-traversal and other dangerous shapes in session_id.
+
+    Empty string is allowed for ``AxiomLoaded`` and other events that
+    legitimately emit outside session context (default-state sentinel).
+    Non-empty strings must match ``_SESSION_ID_RE``.
+    """
+    if value == "":
+        return value
+    if not _SESSION_ID_RE.match(value):
+        msg = (
+            f"invalid session_id {value!r}: must match {_SESSION_ID_RE.pattern} "
+            f"(alphanumerics, '_', '-'; 1-64 chars). Rejected to prevent "
+            "path-traversal smuggling into session/checkpoint file paths."
+        )
+        raise ValueError(msg)
+    return value
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,6 +103,16 @@ class BonfireEvent(BaseModel):
     sequence: int
     # event_type is defined per-subclass as a Literal field
 
+    # session_id is interpolated into filesystem paths downstream
+    # (session/persistence.py, engine/checkpoint.py). Reject path-traversal
+    # shapes (``..``, ``/``, ``\\``, null) at the model boundary so the
+    # write sites cannot be smuggled past their parent directory. Empty
+    # string is allowed for AxiomLoaded and similar outside-session events.
+    @field_validator("session_id")
+    @classmethod
+    def _session_id_must_be_path_safe(cls, v: str) -> str:
+        return _validate_session_id(v)
+
     @property
     def category(self) -> str:
         """Return the category prefix of the event_type (e.g. 'pipeline')."""
@@ -81,7 +141,36 @@ class PipelineFailed(BonfireEvent):
     event_type: Literal["pipeline.failed"] = "pipeline.failed"
     failed_stage: str
     error_message: str
+    # Cumulative cost the engine accounted for through the halt point.
+    # Symmetric with ``PipelineCompleted.total_cost_usd`` so bus
+    # observers can reconstruct ``PipelineResult.total_cost_usd`` on
+    # either the success OR the failure path. Default ``0.0`` keeps
+    # legacy emitters round-tripping without raising.
     total_cost_usd: float = 0.0
+    # Bounce-target identity on bounce-target halt paths. When a stage's
+    # gate fails and the engine bounces to ``on_gate_failure`` which
+    # itself fails (target raises, target's own gate fails after the
+    # second eval, or the retry fails), ``failed_stage`` continues to
+    # name the ORIGINAL stage whose contract broke; ``failed_handler``
+    # names the bounce target that actually died. Default ``None`` keeps
+    # legacy emitters round-tripping without raising; populated
+    # explicitly on bounce-target halt branches in
+    # ``engine/pipeline.py``.
+    failed_handler: str | None = None
+    # Wall-clock duration of the pipeline run through the halt point.
+    # Symmetric with ``PipelineCompleted.duration_seconds`` so the cost
+    # ledger row reflects the real run length on the failure path
+    # (instead of every failed session looking instant). Computed at
+    # every halt-branch emit site as ``time.monotonic() - start``.
+    # Default ``0.0`` keeps legacy emitters round-tripping.
+    duration_seconds: float = 0.0
+    # Stage-count progress at halt time. Symmetric with
+    # ``PipelineCompleted.stages_completed`` so the XP consumer can
+    # distinguish stage-1 vs stage-19 failures (the calculator's
+    # penalty is sensitive to progress made before the halt).
+    # Populated at every halt-branch emit site as ``len(stages_done)``.
+    # Default ``0`` keeps legacy emitters round-tripping.
+    stages_completed: int = 0
 
 
 class PipelinePaused(BonfireEvent):
@@ -145,6 +234,12 @@ class DispatchFailed(BonfireEvent):
     event_type: Literal["dispatch.failed"] = "dispatch.failed"
     agent_name: str
     error_message: str
+    # Accumulated cost the runner charged across every attempt that ran
+    # before this failure was emitted. Symmetric with
+    # ``DispatchCompleted.cost_usd`` so a single subscriber that sums
+    # both events reconstructs total dispatch spend even on flaky-but-
+    # eventually-failed paths. Default ``0.0`` keeps legacy emitters
+    # round-tripping without raising.
     cost_usd: float = 0.0
 
 

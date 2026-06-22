@@ -32,15 +32,15 @@ import pytest
 from pydantic import ValidationError
 
 from bonfire.models.envelope import Envelope, TaskStatus
-from bonfire.models.plan import StageSpec, WorkflowSpec, WorkflowType
+from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 
 # ---------------------------------------------------------------------------
 # Helpers — mirror V1 test_checkpoint.py style
 # ---------------------------------------------------------------------------
 
 
-def _make_plan(name: str = "ck-plan") -> WorkflowSpec:
-    return WorkflowSpec(
+def _make_plan(name: str = "ck-plan") -> WorkflowPlan:
+    return WorkflowPlan(
         name=name,
         workflow_type=WorkflowType.STANDARD,
         stages=[
@@ -71,7 +71,7 @@ def _make_completed() -> dict[str, Envelope]:
     }
 
 
-def _make_result(session_id: str = "sess-abc"):
+def _make_result(session_id: str = "sess-abc"):  # noqa: ANN202 — built lazily, depends on impl
     from bonfire.engine.pipeline import PipelineResult
 
     return PipelineResult(
@@ -594,7 +594,7 @@ class TestCorruptFileHandling:
         (tmp_path / "bad.json").write_text("{not json")
 
         mgr = CheckpointManager(checkpoint_dir=tmp_path)
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017 — JSONDecodeError or ValidationError
             mgr.load("bad")
 
 

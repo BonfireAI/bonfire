@@ -19,18 +19,20 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 -- runtime use in constructor
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from bonfire.models.envelope import Envelope
+from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
+from bonfire._safe_write import safe_write_text
+from bonfire.models.envelope import Envelope  # noqa: TC001 -- Pydantic needs runtime access
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from bonfire.engine.pipeline import PipelineResult
-    from bonfire.models.plan import WorkflowSpec
+    from bonfire.models.plan import WorkflowPlan
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +91,7 @@ class CheckpointManager:
         self,
         session_id: str,
         result: PipelineResult,
-        plan: WorkflowSpec,
+        plan: WorkflowPlan,
     ) -> Path:
         """Persist pipeline state to JSON with atomic write.
 
@@ -111,7 +113,39 @@ class CheckpointManager:
         tmp_path = self._dir / f"{session_id}.json.tmp"
 
         payload = json.dumps(data.model_dump(mode="json"), indent=2)
-        tmp_path.write_text(payload)
+        # ``Path.write_text`` follows symlinks: a malicious symlink at
+        # ``{session_id}.json.tmp`` (operator-controlled name via
+        # ``session_id``) would redirect the JSON payload to the
+        # symlink target — arbitrary-write primitive. Route through
+        # ``safe_write_text`` which refuses any symlink at the path
+        # and uses O_NOFOLLOW defense-in-depth. The tmp path may
+        # legitimately exist from a previous failed run; the original
+        # contract was to overwrite, so ``allow_existing=True``.
+        safe_write_text(tmp_path, payload, allow_existing=True)
+
+        # ``os.replace`` follows symlinks at the *destination*: if
+        # ``{session_id}.json`` is a symlink to (e.g.) ``~/.ssh/authorized_keys``,
+        # the rename atomically replaces the symlink target with our JSON
+        # payload — same defect-family as the tmp-path primitive, missed
+        # at the final rename step. Reject any symlink at ``final_path``
+        # before the rename. The ``"symlink"`` substring preserves the
+        # W7.M log-grep contract so callers and log scrapers handle
+        # tmp-path and final-path symlink refusals identically.
+        if final_path.is_symlink():
+            # Best-effort cleanup of our freshly-written tmp file so we
+            # don't leak it on the refusal path. Swallow OSError because
+            # cleanup failure must not mask the security signal.
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            msg = (
+                f"refusing to finalize checkpoint at {final_path}: "
+                "target is a symlink. Refusing to follow or overwrite a "
+                "symlinked path. Remove the symlink and re-run."
+            )
+            raise FileExistsError(msg)
+
         os.replace(str(tmp_path), str(final_path))
 
         return final_path
@@ -120,13 +154,20 @@ class CheckpointManager:
         """Load a checkpoint by session ID.
 
         Raises FileNotFoundError if the checkpoint file does not exist.
+
+        Uses ``safe_read_capped_text`` to refuse symlinks at the
+        checkpoint path (defends against a symlink planted at
+        ``{session_id}.json`` redirecting the read to (e.g.)
+        ``/etc/passwd``) and to cap the read at
+        ``MAX_CHECKPOINT_BYTES`` (defends against a planted oversized
+        file that would otherwise exhaust memory during ``json.loads``).
         """
         path = self._dir / f"{session_id}.json"
         if not path.exists():
             msg = f"No checkpoint found for session '{session_id}' at {path}"
             raise FileNotFoundError(msg)
 
-        raw = json.loads(path.read_text())
+        raw = json.loads(safe_read_capped_text(path, max_bytes=MAX_CHECKPOINT_BYTES))
         return CheckpointData.model_validate(raw)
 
     def latest(self) -> CheckpointData | None:
@@ -156,20 +197,28 @@ class CheckpointManager:
     def _load_all(self) -> list[CheckpointData]:
         """Load all checkpoint files from the directory.
 
-        Corrupt files (malformed JSON, schema violations, read errors) are
-        skipped with a ``logger.warning`` rather than poisoning the entire
-        scan. This ensures that one bad checkpoint file does not break
-        ``latest()`` or ``list_checkpoints()`` when valid checkpoints exist
-        alongside.
+        Corrupt files (malformed JSON, schema violations, read errors,
+        symlink-refusals, oversized files) are skipped with a
+        ``logger.warning`` rather than poisoning the entire scan. This
+        ensures that one bad checkpoint file does not break ``latest()``
+        or ``list_checkpoints()`` when valid checkpoints exist alongside.
+
+        Uses ``safe_read_capped_text`` so symlinks at any glob match are
+        refused (``FileExistsError`` — same as ``load``) and files
+        exceeding ``MAX_CHECKPOINT_BYTES`` raise ``ValueError`` (skipped
+        with the same WARN, so a planted oversized file does not exhaust
+        memory). ``FileExistsError`` is also a subclass of ``OSError`` so
+        the existing handler catches it; ``ValueError`` is added
+        explicitly for the cap-exceeded path.
         """
         if not self._dir.exists():
             return []
         results: list[CheckpointData] = []
         for path in self._dir.glob("*.json"):
             try:
-                raw = json.loads(path.read_text())
+                raw = json.loads(safe_read_capped_text(path, max_bytes=MAX_CHECKPOINT_BYTES))
                 results.append(CheckpointData.model_validate(raw))
-            except (json.JSONDecodeError, ValidationError, OSError) as exc:
+            except (json.JSONDecodeError, ValidationError, OSError, ValueError) as exc:
                 logger.warning(
                     "Skipping corrupt checkpoint file %s: %s",
                     path,

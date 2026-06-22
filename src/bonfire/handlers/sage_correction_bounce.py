@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
+from bonfire.dispatch.handler_runner import run_handler_dispatch
 from bonfire.models.envelope import (
     META_CLASSIFIER_VERDICT,
     META_CORRECTION_BRANCH,
@@ -165,6 +166,14 @@ class _CorrectionCycleOutcome:
     every status transition addressable as a single value -- testability
     via the integration suite improves and the routing logic on the
     return path stays linear.
+
+    ``cost_usd`` carries the dollars the backend reported through
+    ``backend_result.cost_usd``. Wave 11 Lane D — without this field,
+    ``_build_envelope_from_cycle_outcome`` returned an envelope with
+    ``cost_usd = 0.0`` regardless of how much Sage actually spent, and
+    the engine's per-iteration cost accumulator
+    (``engine/pipeline.py:565``) under-counted ``PipelineResult.total_cost_usd``
+    by every dollar Sage burned on correction cycles.
     """
 
     status: TaskStatus
@@ -174,11 +183,7 @@ class _CorrectionCycleOutcome:
     error_type: str = ""
     error_message: str = ""
     correction_branch: str = ""
-    # Structured detail captured via ErrorDetail.from_exception INSIDE the
-    # cycle's except blocks (live traceback). ``None`` on the non-exception
-    # paths (e.g. backend unavailable, re-verify red without a raise). The
-    # legacy ``error_type``/``error_message`` strings are kept for back-compat.
-    error: ErrorDetail | None = None
+    cost_usd: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +344,6 @@ class SageCorrectionBounceHandler:
             # (pipeline orchestration relies on cancellation surfacing).
             raise
         except Exception as exc:
-            logger.exception("sage_correction_bounce.handler_failed stage=%s", stage.name)
             return envelope.model_copy(
                 update={
                     "metadata": {
@@ -406,10 +410,10 @@ class SageCorrectionBounceHandler:
             try:
                 result = classify(prior_results.get("warrior", ""))
             except Exception:
-                logger.exception("sage_correction_bounce.classifier_invocation_failed")
+                logger.warning("sage_correction_bounce.classifier_invocation_failed")
                 return None
         except Exception:
-            logger.exception("sage_correction_bounce.classifier_invocation_failed")
+            logger.warning("sage_correction_bounce.classifier_invocation_failed")
             return None
 
         # Mock-tolerant verdict extraction: result.verdict could be a
@@ -552,7 +556,6 @@ class SageCorrectionBounceHandler:
             # (the parent pipeline relies on cancellation reaching it).
             raise
         except Exception as exc:
-            logger.exception("sage_correction_bounce.dispatch_failed")
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",
@@ -560,57 +563,39 @@ class SageCorrectionBounceHandler:
                 escalated=True,
                 error_type=type(exc).__name__,
                 error_message=f"sage_correction dispatch failed: {exc}",
-                error=ErrorDetail.from_exception(exc),
             )
+
+        # Pull the cost the backend charged so the returned envelope
+        # carries it (and the engine accumulator counts it). Without
+        # this, the handler swallowed every dollar Sage spent.
+        backend_cost = self._extract_backend_cost(backend_result)
 
         # Step 2: cherry-pick the correction commit.
         commit_sha = self._extract_commit_sha(backend_result)
-        cherry_pick_failure = await self._cherry_pick_correction(commit_sha, cycles_out)
-        if cherry_pick_failure is not None:
-            return cherry_pick_failure
+        if commit_sha and self._git_workflow is not None:
+            try:
+                cherry_pick_result = self._git_workflow.cherry_pick(commit_sha)
+                if asyncio.iscoroutine(cherry_pick_result):
+                    await cherry_pick_result
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # Cherry-pick failure -> abort + return FAILED. No re-verify.
+                self._safe_cherry_pick_abort()
+                return _CorrectionCycleOutcome(
+                    status=TaskStatus.FAILED,
+                    correction_verdict="escalated",
+                    cycles=cycles_out,
+                    escalated=True,
+                    error_type=_ERROR_CHERRY_PICK_FAILED,
+                    error_message=(f"cherry-pick of {commit_sha[:12]} failed: {exc}"),
+                    correction_branch=commit_sha,
+                    cost_usd=backend_cost,
+                )
 
-        # Step 3: re-verify pytest.
-        return await self._reverify_correction(commit_sha, cycles_out)
-
-    async def _cherry_pick_correction(
-        self,
-        commit_sha: str,
-        cycles_out: int,
-    ) -> _CorrectionCycleOutcome | None:
-        """Cherry-pick the correction commit; FAILED outcome on failure, else None."""
-        if not commit_sha or self._git_workflow is None:
-            return None
-        try:
-            cherry_pick_result = self._git_workflow.cherry_pick(commit_sha)
-            if asyncio.iscoroutine(cherry_pick_result):
-                await cherry_pick_result
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            # Cherry-pick failure -> abort + return FAILED. No re-verify.
-            logger.exception("sage_correction_bounce.cherry_pick_failed commit=%s", commit_sha[:12])
-            self._safe_cherry_pick_abort()
-            return _CorrectionCycleOutcome(
-                status=TaskStatus.FAILED,
-                correction_verdict="escalated",
-                cycles=cycles_out,
-                escalated=True,
-                error_type=_ERROR_CHERRY_PICK_FAILED,
-                error_message=(f"cherry-pick of {commit_sha[:12]} failed: {exc}"),
-                correction_branch=commit_sha,
-                error=ErrorDetail.from_exception(exc),
-            )
-        return None
-
-    async def _reverify_correction(
-        self,
-        commit_sha: str,
-        cycles_out: int,
-    ) -> _CorrectionCycleOutcome:
-        """Re-verify pytest. why: pull pytest args from prior warrior result
-        if structured; else fall back to the bare invocation. NEVER
-        ``shell=True``, ALWAYS tuple args.
-        """
+        # Step 3: re-verify pytest. why: pull pytest args from prior
+        # warrior result if structured; else fall back to the bare
+        # invocation. NEVER `shell=True`, ALWAYS tuple args.
         if self._pytest_runner is None:
             # No re-verify possible -> escalate (we cannot confirm correction).
             return _CorrectionCycleOutcome(
@@ -619,6 +604,7 @@ class SageCorrectionBounceHandler:
                 cycles=cycles_out,
                 escalated=True,
                 correction_branch=commit_sha,
+                cost_usd=backend_cost,
             )
 
         try:
@@ -626,7 +612,6 @@ class SageCorrectionBounceHandler:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.exception("sage_correction_bounce.reverify_pytest_failed")
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",
@@ -635,7 +620,7 @@ class SageCorrectionBounceHandler:
                 error_type=type(exc).__name__,
                 error_message=f"re-verify pytest failed: {exc}",
                 correction_branch=commit_sha,
-                error=ErrorDetail.from_exception(exc),
+                cost_usd=backend_cost,
             )
 
         returncode = self._extract_returncode(reverify_result)
@@ -646,6 +631,7 @@ class SageCorrectionBounceHandler:
                 cycles=cycles_out,
                 escalated=False,
                 correction_branch=commit_sha,
+                cost_usd=backend_cost,
             )
 
         return _CorrectionCycleOutcome(
@@ -654,6 +640,7 @@ class SageCorrectionBounceHandler:
             cycles=cycles_out,
             escalated=True,
             correction_branch=commit_sha,
+            cost_usd=backend_cost,
         )
 
     # -- backend / runner adapters ----------------------------------------
@@ -664,19 +651,31 @@ class SageCorrectionBounceHandler:
         envelope: Envelope,
         options: SageCorrectionDispatchOptions,
     ) -> Any:
-        """Invoke ``backend.execute`` or ``backend.dispatch`` (mock-tolerant).
+        """Invoke the backend through the shared handler-dispatch helper.
 
-        The protocol-conformant backend exposes ``async execute(envelope,
-        *, options)``. Tests inject ``AsyncMock`` whose ``.execute`` and
-        ``.dispatch`` are both AsyncMock attributes; we prefer ``execute``
-        and fall back to ``dispatch``.
+        Routes through :func:`bonfire.dispatch.handler_runner.run_handler_dispatch`
+        so the three ``Dispatch*`` events fire on the event bus and the
+        backend's ``cost_usd`` reaches bus observers (``CostTracker``,
+        ``CostLedgerConsumer``, the budget watchdog,
+        ``KnowledgeIngestConsumer``). Wave 11 Lane D parity fix —
+        without this routing the handler-seam silently bypassed every
+        observer that subscribed to the dispatch lifecycle.
+
+        Mock-tolerant: if the injected backend has no ``.execute``
+        attribute (test-double shape) but exposes ``.dispatch``, fall
+        back to that legacy call shape without event emission (preserves
+        the few legacy ``AsyncMock(spec=...)`` injections that elide
+        ``.execute``). The protocol-conformant production backend
+        always has ``.execute``.
         """
-        execute = getattr(self._backend, "execute", None)
-        if execute is not None:
-            result = execute(envelope, options=options)
-            if asyncio.iscoroutine(result):
-                return await result
-            return result
+        execute_attr = getattr(self._backend, "execute", None)
+        if execute_attr is not None:
+            return await run_handler_dispatch(
+                backend=self._backend,
+                envelope=envelope,
+                options=options,
+                event_bus=self._event_bus,
+            )
         dispatch = getattr(self._backend, "dispatch", None)
         if dispatch is not None:
             result = dispatch(envelope, options=options)
@@ -727,6 +726,29 @@ class SageCorrectionBounceHandler:
             if match is not None:
                 return match.group(1)
         return ""
+
+    @staticmethod
+    def _extract_backend_cost(backend_result: Any) -> float:
+        """Pull a ``cost_usd`` out of the backend result (mock-tolerant).
+
+        The protocol-conformant backend returns an :class:`Envelope`
+        with ``cost_usd`` populated; mock-based tests sometimes return
+        a ``MagicMock`` whose ``cost_usd`` attribute is itself a
+        ``MagicMock`` (truthy but not coercible to ``float``). Degrade
+        to ``0.0`` on shape mismatch so the cycle outcome envelope's
+        cost stays valid (``Envelope.cost_usd`` field validator
+        rejects negative + non-numeric values).
+        """
+        raw = getattr(backend_result, "cost_usd", None)
+        if raw is None:
+            return 0.0
+        try:
+            value = float(raw)
+        except (ValueError, TypeError):
+            return 0.0
+        if value < 0:
+            return 0.0
+        return value
 
     @staticmethod
     def _extract_returncode(reverify_result: Any) -> int:
@@ -838,7 +860,16 @@ class SageCorrectionBounceHandler:
         outcome: _CorrectionCycleOutcome,
         classifier_verdict: str,
     ) -> Envelope:
-        """Translate a :class:`_CorrectionCycleOutcome` into an Envelope."""
+        """Translate a :class:`_CorrectionCycleOutcome` into an Envelope.
+
+        Stamps ``outcome.cost_usd`` onto the returned envelope so the
+        engine's per-iteration cost accumulator
+        (``engine/pipeline.py:565`` —
+        ``cumulative_iteration_cost += result_env.cost_usd``) counts
+        every dollar the Sage backend charged. Wave 11 Lane D —
+        without this stamp, ``PipelineResult.total_cost_usd``
+        under-counted by every Sage correction-cycle spend.
+        """
         new_metadata: dict[str, Any] = {
             **envelope.metadata,
             META_CLASSIFIER_VERDICT: classifier_verdict,
@@ -851,25 +882,19 @@ class SageCorrectionBounceHandler:
             new_metadata[META_CORRECTION_BRANCH] = outcome.correction_branch
 
         if outcome.status == TaskStatus.FAILED:
-            # Prefer the detail captured inside the cycle's except block (it
-            # carries the live traceback); stamp the stage name onto it. Fall
-            # back to synthesizing from the legacy string fields when the
-            # failure path had no exception to capture.
-            if outcome.error is not None:
-                error_detail = outcome.error.model_copy(update={"stage_name": stage.name})
-            else:
-                error_detail = ErrorDetail(
-                    error_type=outcome.error_type or _ERROR_CORRECTION_EXHAUSTED,
-                    message=(
-                        outcome.error_message or "sage_correction_bounce: correction cycle failed"
-                    ),
-                    stage_name=stage.name,
-                )
             return envelope.model_copy(
                 update={
                     "metadata": new_metadata,
-                    "error": error_detail,
+                    "error": ErrorDetail(
+                        error_type=outcome.error_type or _ERROR_CORRECTION_EXHAUSTED,
+                        message=(
+                            outcome.error_message
+                            or "sage_correction_bounce: correction cycle failed"
+                        ),
+                        stage_name=stage.name,
+                    ),
                     "status": TaskStatus.FAILED,
+                    "cost_usd": outcome.cost_usd,
                 },
             )
 
@@ -881,6 +906,7 @@ class SageCorrectionBounceHandler:
                 "metadata": new_metadata,
                 "status": TaskStatus.COMPLETED,
                 "result": result_text,
+                "cost_usd": outcome.cost_usd,
             },
         )
 

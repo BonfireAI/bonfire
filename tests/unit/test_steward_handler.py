@@ -65,7 +65,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture()
-def github_client():
+def github_client():  # noqa: ANN201
     return MockGitHubClient()
 
 
@@ -92,7 +92,7 @@ def base_envelope() -> Envelope:
 
 
 @pytest.fixture()
-def handler(github_client) -> Any:
+def handler(github_client) -> Any:  # noqa: ANN001, ANN201
     return StewardHandler(github_client=github_client)
 
 
@@ -173,16 +173,16 @@ class TestGenericVocabularyDiscipline:
 class TestConstruction:
     def test_steward_handler_import(self) -> None:
         """StewardHandler is importable from bonfire.handlers.steward."""
-        from bonfire.handlers.steward import StewardHandler as _HH
+        from bonfire.handlers.steward import StewardHandler as _HH  # noqa: F401
 
         assert _HH is not None
 
-    def test_constructor_accepts_github_client(self, github_client) -> None:
+    def test_constructor_accepts_github_client(self, github_client) -> None:  # noqa: ANN001
         """Constructor accepts github_client kwarg."""
         handler = StewardHandler(github_client=github_client)
         assert handler is not None
 
-    def test_satisfies_stage_handler_protocol(self, github_client) -> None:
+    def test_satisfies_stage_handler_protocol(self, github_client) -> None:  # noqa: ANN001
         from bonfire.protocols import StageHandler
 
         handler = StewardHandler(github_client=github_client)
@@ -205,10 +205,10 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_returns_envelope(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """handle() returns an Envelope."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -222,10 +222,10 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_approve_verdict_merges_pr(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """verdict='approve' + pr_number -> merge_pr called."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -239,10 +239,10 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_approve_adds_completion_comment(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Completion comment posted on approved PR."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -256,10 +256,10 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_approve_closes_issue_default_path(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Default close_issue path fires on approved happy path."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -273,9 +273,9 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_approve_closes_ticket_when_ticket_ref_present(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """META_TICKET_REF drives close_issue with the right issue number."""
         pr_number = await _seed_pr(github_client)
@@ -290,9 +290,9 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_explicit_metadata_verdict_key_honored(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """META_REVIEW_VERDICT in prior_results drives merge behavior."""
         pr_number = await _seed_pr(github_client)
@@ -306,10 +306,10 @@ class TestMergeOnApprove:
     @pytest.mark.asyncio
     async def test_happy_path_status_completed(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Happy path returns a COMPLETED-status envelope."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -330,10 +330,10 @@ class TestNoMergePaths:
     @pytest.mark.asyncio
     async def test_request_changes_verdict_does_not_merge(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         await github_client.create_pr("feat", "feature/x", "master")
         prior = {
@@ -346,9 +346,9 @@ class TestNoMergePaths:
     @pytest.mark.asyncio
     async def test_reject_verdict_does_not_merge(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         pr_number = await _seed_pr(github_client)
         envelope = Envelope(task="close out")
@@ -359,9 +359,9 @@ class TestNoMergePaths:
     @pytest.mark.asyncio
     async def test_missing_verdict_does_not_merge(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         pr_number = await _seed_pr(github_client)
         envelope = Envelope(task="close out")
@@ -372,10 +372,10 @@ class TestNoMergePaths:
     @pytest.mark.asyncio
     async def test_approve_without_pr_number_returns_envelope_no_merge(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
         base_envelope: Envelope,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Missing pr_number + approve: no merge, returns envelope, no crash."""
         prior: dict[str, str] = {"wizard": "approve"}
@@ -449,9 +449,9 @@ class TestPRNumberExtraction:
     @pytest.mark.asyncio
     async def test_pr_number_garbage_is_treated_as_missing(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Non-parseable PR number -> no merge_pr, no crash."""
         envelope = Envelope(task="task")
@@ -524,9 +524,9 @@ class TestIdentitySealInvariants:
     @pytest.mark.asyncio
     async def test_never_mutates_input_envelope(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Envelope is frozen; returned envelope must be a new instance."""
         await github_client.create_pr("feat", "feature/x", "master")
@@ -545,9 +545,9 @@ class TestIdentitySealInvariants:
     @pytest.mark.asyncio
     async def test_handle_returns_envelope_on_all_paths(
         self,
-        handler,
+        handler,  # noqa: ANN001
         steward_stage: StageSpec,
-        github_client,
+        github_client,  # noqa: ANN001
     ) -> None:
         """Every path returns an Envelope instance."""
         pr_number = await _seed_pr(github_client)

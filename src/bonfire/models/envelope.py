@@ -10,13 +10,29 @@ via ``model_copy(update=...)``.
 
 from __future__ import annotations
 
-import traceback
+import re
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — Pydantic needs Path at runtime
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# ``envelope_id`` is interpolated into filesystem paths at multiple sites
+# (engine pipeline + executor pass it as ``session_id`` to checkpoint and
+# session persistence). Without validation, an attacker-controlled
+# envelope_id like ``../../etc/passwd`` would yield arbitrary-path
+# interpolation — path-traversal smuggling into operator-controlled write
+# sites. Pattern: alphanumerics + ``_`` + ``-``, 1-64 chars. Permissive
+# enough for uuid4-hex (default), human-readable slugs, and existing test
+# fixtures (``abc123456789``, ``aaaaaaaaaaaa``). Strict enough to reject
+# ``..``, ``/``, ``\\``, null bytes, control chars, and other traversal
+# shapes.
+#
+# The anchor MUST be ``\Z``. See the parallel rationale at
+# ``bonfire.models.events._SESSION_ID_RE``: ``$`` allows a trailing
+# ``\n`` to slip through, ``\Z`` does not.
+_ENVELOPE_ID_RE: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_-]{1,64}\Z")
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -45,22 +61,6 @@ class ErrorDetail(BaseModel, frozen=True):
     message: str
     traceback: str | None = None
     stage_name: str | None = None
-
-    @classmethod
-    def from_exception(cls, exc: BaseException, *, stage_name: str | None = None) -> ErrorDetail:
-        """Build a structured ErrorDetail from a caught exception.
-
-        Call this inside the ``except`` block: the traceback is captured via
-        ``traceback.format_exc()``, which reads the *currently handled*
-        exception. Called outside an active ``except``, ``traceback`` is the
-        meaningless string ``"NoneType: None\\n"``.
-        """
-        return cls(
-            error_type=type(exc).__name__,
-            message=str(exc),
-            traceback=traceback.format_exc(),
-            stage_name=stage_name,
-        )
 
 
 class Artifact(BaseModel, frozen=True):
@@ -110,6 +110,25 @@ class Envelope(BaseModel):
     def _cost_must_be_non_negative(cls, v: float) -> float:
         if v < 0:
             msg = "cost_usd must be >= 0"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("envelope_id")
+    @classmethod
+    def _envelope_id_must_be_path_safe(cls, v: str) -> str:
+        """Reject path-traversal shapes (``..``, ``/``, ``\\``, null).
+
+        envelope_id flows into checkpoint and session-persistence write
+        paths via the pipeline/executor. A traversal-bearing value would
+        let a caller smuggle writes outside the operator-controlled
+        directory.
+        """
+        if not _ENVELOPE_ID_RE.match(v):
+            msg = (
+                f"invalid envelope_id {v!r}: must match {_ENVELOPE_ID_RE.pattern} "
+                f"(alphanumerics, '_', '-'; 1-64 chars). Rejected to prevent "
+                "path-traversal smuggling into checkpoint/session file paths."
+            )
             raise ValueError(msg)
         return v
 

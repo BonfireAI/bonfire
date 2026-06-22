@@ -108,7 +108,7 @@ class _MockScratchFactory:
         raise_on_acquire: Exception | None = None,
         raise_on_enter: Exception | None = None,
     ) -> None:
-        self._info = info or _MockScratchInfo(path=Path("/fake/preflight-mock"))
+        self._info = info or _MockScratchInfo(path=Path("/tmp/preflight-mock"))
         self._raise_on_acquire = raise_on_acquire
         self._raise_on_enter = raise_on_enter
         self.acquire_calls: list[dict[str, Any]] = []
@@ -138,7 +138,7 @@ def _make_handler(
     return MergePreflightHandler(
         github_client=gh,
         scratch_worktree_factory=factory,
-        repo_path=repo_path or Path("/fake/repo"),
+        repo_path=repo_path or Path("/tmp/repo"),
         base_branch=base_branch,
     )
 
@@ -897,14 +897,14 @@ class TestJunitXmlParser:
         xml = """<?xml version="1.0" encoding="utf-8"?>
 <testsuites>
   <testsuite name="pytest" tests="3" errors="0" failures="2">
-    <testcase classname="tests.u.test_x" name="test_pass" file="tests/u/test_x.py" time="0.001"/>
-    <testcase classname="tests.u.test_x" name="test_fail_one" file="tests/u/test_x.py" time="0.002">
-      <failure message="AssertionError: expected 1 got 2">tests/u/test_x.py:42: in test_fail_one
+    <testcase classname="tests.unit.test_x" name="test_pass" file="tests/unit/test_x.py" time="0.001"/>
+    <testcase classname="tests.unit.test_x" name="test_fail_one" file="tests/unit/test_x.py" time="0.002">
+      <failure message="AssertionError: expected 1 got 2">tests/unit/test_x.py:42: in test_fail_one
     assert 1 == 2
 AssertionError</failure>
     </testcase>
-    <testcase classname="tests.u.test_y" name="test_fail_two" file="tests/u/test_y.py" time="0.003">
-      <failure message="ValueError">tests/u/test_y.py:10: in test_fail_two
+    <testcase classname="tests.unit.test_y" name="test_fail_two" file="tests/unit/test_y.py" time="0.003">
+      <failure message="ValueError">tests/unit/test_y.py:10: in test_fail_two
     raise ValueError</failure>
     </testcase>
   </testsuite>
@@ -917,8 +917,8 @@ AssertionError</failure>
         assert len(result) == 2
         assert all(isinstance(ft, FailingTest) for ft in result)
         files = {ft.file_path for ft in result}
-        assert "tests/u/test_x.py" in files
-        assert "tests/u/test_y.py" in files
+        assert "tests/unit/test_x.py" in files
+        assert "tests/unit/test_y.py" in files
 
     def test_malformed_xml_returns_empty_tuple_fail_safe(self, tmp_path) -> None:
         """Sage §D-CL.2 line 887: malformed XML -> empty tuple (fail-safe,

@@ -22,11 +22,11 @@ Two methods split the total/strict responsibilities:
 from __future__ import annotations
 
 import logging
+import re
 import tomllib
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — runtime constructor type
 
 from bonfire.agent.roles import AgentRole
-from bonfire.errors import SchemaError
 from bonfire.persona.base import BasePersona
 
 logger = logging.getLogger(__name__)
@@ -37,8 +37,19 @@ _REQUIRED_PERSONA_FIELDS = ("name", "display_name", "description", "version")
 _CANONICAL_ROLE_VALUES = frozenset(r.value for r in AgentRole)
 _KNOWN_TOPLEVEL_TABLES = frozenset({"persona", "display_names"})
 
+# Slug pattern shared with ``bonfire.integrations.loader._NAME_PATTERN`` —
+# lowercase letter start, then letters/digits/dashes/underscores. This
+# blocks path-traversal probes (``../``, ``/``, ``\\``), NUL bytes,
+# whitespace, leading dots, and uppercase variants.
+_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
-class PersonaSchemaError(SchemaError, ValueError):
+
+def _is_valid_persona_name(name: str) -> bool:
+    """Return ``True`` if *name* matches the slug pattern."""
+    return bool(_NAME_PATTERN.match(name))
+
+
+class PersonaSchemaError(ValueError):
     """Raised by :meth:`PersonaLoader.validate` for a malformed persona TOML.
 
     Inherits from :class:`ValueError` so callers handling generic data-shape
@@ -65,8 +76,23 @@ class PersonaLoader:
         the minimal safety net — first the ``minimal`` built-in if
         present, then a hardcoded ``BasePersona(name='minimal', phrases={})``.
 
+        Names that fail the slug pattern (path traversal, NUL bytes,
+        whitespace, etc.) are rejected before any filesystem probe to
+        avoid leaking existence signal through fallback semantics.
+
         This method is total. It never raises.
         """
+        if not _is_valid_persona_name(name):
+            logger.warning(
+                "Persona %r rejected as invalid name, falling back to minimal",
+                name,
+            )
+            # ``minimal`` is always a valid slug so this re-entry is safe.
+            minimal = self._try_load("minimal")
+            if minimal is not None:
+                return minimal
+            return _HARDCODED_MINIMAL
+
         persona = self._try_load(name)
         if persona is not None:
             return persona
@@ -101,6 +127,10 @@ class PersonaLoader:
         Unknown top-level tables (e.g. ``[metadata]``, ``[notes]``) are
         accepted with a ``logging.WARNING`` naming the table.
         """
+        if not _is_valid_persona_name(name):
+            raise PersonaSchemaError(
+                f"persona {name!r}: invalid name (must match {_NAME_PATTERN.pattern!r})"
+            )
         persona_dir = self._find_persona_dir(name)
         if persona_dir is None:
             raise PersonaSchemaError(f"persona {name!r} not found in user_dir or builtin_dir")
@@ -219,13 +249,7 @@ class PersonaLoader:
         Emits a warning for unknown top-level tables. Raises
         :class:`PersonaSchemaError` for every other shape violation.
         """
-        self._warn_unknown_tables(name, raw)
-        self._validate_persona_meta(name, raw)
-        self._validate_display_names(name, raw)
-
-    @staticmethod
-    def _warn_unknown_tables(name: str, raw: dict) -> None:
-        """Warn on unknown top-level tables (D1 lenient arm)."""
+        # ---- Warn on unknown top-level tables (D1 lenient arm) --------
         for top_key, top_val in raw.items():
             if top_key in _KNOWN_TOPLEVEL_TABLES:
                 continue
@@ -236,9 +260,7 @@ class PersonaLoader:
                     top_key,
                 )
 
-    @staticmethod
-    def _validate_persona_meta(name: str, raw: dict) -> None:
-        """[persona] required fields + types."""
+        # ---- [persona] required fields + types ------------------------
         persona_meta = raw.get("persona")
         if not isinstance(persona_meta, dict):
             raise PersonaSchemaError(f"persona {name!r}: missing [persona] table")
@@ -257,9 +279,7 @@ class PersonaLoader:
             if value == "":
                 raise PersonaSchemaError(f"persona {name!r}: [persona].{field} must be non-empty")
 
-    @staticmethod
-    def _validate_display_names(name: str, raw: dict) -> None:
-        """[display_names] coverage + strict extras rejection."""
+        # ---- [display_names] coverage + strict extras rejection -------
         if "display_names" not in raw:
             raise PersonaSchemaError(f"persona {name!r}: [display_names] table is required")
         display_names = raw["display_names"]

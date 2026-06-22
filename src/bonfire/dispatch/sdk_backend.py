@@ -14,13 +14,14 @@ everything.
 from __future__ import annotations
 
 import logging
+import os
+import tomllib
+import traceback as tb_module
 from contextlib import aclosing
-from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from bonfire.dispatch._cost import safe_cost_from_attr
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
-from bonfire.errors import AgentError, RateLimitError
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
@@ -50,73 +51,96 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class _StreamState:
-    """Accumulated facts from one ``query()`` message stream."""
+# ---------------------------------------------------------------------------
+# Traceback redaction
+#
+# Python tracebacks include local-frame ``repr`` data — for the SDK
+# backend that means the envelope's ``task`` (the user prompt, often
+# containing secrets) and the ``ClaudeAgentOptions`` (env-derived
+# values). Persisting the full traceback to JSONL leaks those into
+# on-disk logs. The default redaction emits a short single-frame
+# summary; setting ``BONFIRE_DEBUG_TRACEBACKS=1`` restores the full
+# multi-frame traceback for local debugging.
+# ---------------------------------------------------------------------------
 
-    text_parts: list[str] = field(default_factory=list)
-    cost_usd: float = 0.0
-    duration_seconds: float = 0.0
-    session_id: str | None = None
-    result_msg_text: str = ""
-    is_error: bool = False
-    errors: list[str] | None = None
-    rate_limit_detail: ErrorDetail | None = None
-
-
-def _ingest_assistant_message(
-    state: _StreamState,
-    msg: Any,
-    on_stream: Callable[[str], None] | None,
-) -> None:
-    """Collect assistant text blocks, forwarding each to the stream callback."""
-    for block in getattr(msg, "content", []):
-        block_text = getattr(block, "text", None)
-        if block_text:
-            state.text_parts.append(block_text)
-            if on_stream is not None:
-                on_stream(block_text)
+_TRACEBACK_DEBUG_ENV = "BONFIRE_DEBUG_TRACEBACKS"
 
 
-def _ingest_result_message(state: _StreamState, msg: Any) -> None:
-    """Capture cost/duration/session/result facts from the ResultMessage."""
-    state.cost_usd = safe_cost_from_attr(msg, "total_cost_usd")
-    duration_ms = getattr(msg, "duration_ms", 0) or 0
-    state.duration_seconds = duration_ms / 1000.0
-    state.session_id = getattr(msg, "session_id", None)
-    state.result_msg_text = getattr(msg, "result", None) or ""
-    state.is_error = getattr(msg, "is_error", False)
-    state.errors = getattr(msg, "errors", None)
+def _summarise_traceback(exc: BaseException) -> str | None:
+    """Return a single-line summary of *exc*'s deepest frame, or ``None``."""
+    tb = exc.__traceback__
+    if tb is None:
+        return None
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    frame = tb.tb_frame
+    return f"{frame.f_code.co_filename}:{tb.tb_lineno}: {type(exc).__name__}: {exc}"
 
 
-def _ingest_rate_limit_event(state: _StreamState, msg: Any) -> None:
-    """Translate a rejected rate-limit event into a typed ErrorDetail."""
-    status = getattr(msg, "status", "")
-    if status == "rejected":
-        # Source the failure from the typed vocabulary: raise the
-        # taxonomy class and capture it via from_exception so the
-        # detail is self-describing (populated traceback). The
-        # error_type string equals the class name unchanged.
-        try:
-            raise RateLimitError("Rate limit exceeded — request rejected by API")
-        except RateLimitError as exc:
-            state.rate_limit_detail = ErrorDetail.from_exception(exc)
-    elif status == "allowed_warning":
-        logger.warning("Rate limit warning: approaching limit")
+def _format_error_traceback(exc: BaseException) -> str | None:
+    """Format *exc*'s traceback per the redaction policy.
+
+    Returns the full ``traceback.format_exc()`` output if the
+    ``BONFIRE_DEBUG_TRACEBACKS=1`` env var is set; otherwise returns a
+    short single-frame summary (or ``None`` if no traceback exists).
+    """
+    if os.environ.get(_TRACEBACK_DEBUG_ENV) == "1":
+        return tb_module.format_exc()
+    return _summarise_traceback(exc)
 
 
-def _agent_error_detail(errors: list[str] | None, final_text: str) -> ErrorDetail:
-    """Typed ErrorDetail for a ResultMessage that carries ``is_error``."""
-    error_msgs = [str(e) for e in errors] if errors else []
-    agent_message = "; ".join(error_msgs) if error_msgs else (final_text or "Agent reported error")
-    # Source the failure from the typed vocabulary: raise the taxonomy
-    # class and capture it via from_exception so the detail is
-    # self-describing (populated traceback). The error_type string
-    # equals the class name unchanged.
+def _bonfire_toml_opts_in(cwd_path: Path) -> bool:
+    """Return ``True`` iff ``cwd_path/bonfire.toml`` explicitly opts in.
+
+    The required opt-in is a literal boolean ``true`` at
+    ``[bonfire].trust_project_settings``. File presence alone is NOT
+    sufficient — a malicious clone shipping an empty ``[bonfire]`` table
+    must not silently trust the repo's ``CLAUDE.md`` /
+    ``.claude/settings.json``.
+
+    Strict-bool: string ``"true"`` / int ``1`` are NOT honored. Malformed
+    TOML and missing-table cases return ``False`` (fail-safe deny).
+    """
+    toml_path = cwd_path / "bonfire.toml"
+    if not toml_path.is_file():
+        return False
     try:
-        raise AgentError(agent_message)
-    except AgentError as exc:
-        return ErrorDetail.from_exception(exc)
+        with toml_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    section = data.get("bonfire")
+    if not isinstance(section, dict):
+        return False
+    value = section.get("trust_project_settings")
+    # Strict-bool check: ``isinstance(True, int)`` is True in Python, so we
+    # must filter on ``type is bool`` to keep ``1`` from passing as truthy.
+    return type(value) is bool and value is True
+
+
+def _resolve_setting_sources(cwd: str | None) -> list[str]:
+    """Return ``['project']`` iff the cwd opts into Bonfire, else ``[]``.
+
+    Gate behind (any one is sufficient):
+      * empty cwd (``None`` or ``""``) — the caller's own cwd, trusted by
+        default (the bonfire-public-tree dogfood path).
+      * ``BONFIRE_TRUST_PROJECT_SETTINGS`` env var set to exactly ``"1"``
+        (strict equality — no normalization). The operator escape hatch.
+      * a co-located ``bonfire.toml`` containing
+        ``[bonfire].trust_project_settings = true`` (literal boolean).
+        File presence ALONE is NOT enough.
+
+    Foreign repos (and repos with a non-opted-in ``bonfire.toml``) return
+    ``[]`` — their ``CLAUDE.md`` and ``.claude/`` contents are NOT ingested
+    into the dispatched agent's system prompt.
+    """
+    if cwd is None or cwd == "":
+        return ["project"]
+    if os.environ.get("BONFIRE_TRUST_PROJECT_SETTINGS") == "1":
+        return ["project"]
+    if _bonfire_toml_opts_in(Path(cwd)):
+        return ["project"]
+    return []
 
 
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
@@ -160,8 +184,13 @@ class ClaudeSDKBackend:
         try:
             return await self._do_execute(envelope, options=options, on_stream=on_stream)
         except Exception as exc:
-            logger.exception("sdk_backend.execute_failed; returning FAILED envelope")
-            return envelope.with_error(ErrorDetail.from_exception(exc))
+            return envelope.with_error(
+                ErrorDetail(
+                    error_type=type(exc).__name__,
+                    message=str(exc),
+                    traceback=_format_error_traceback(exc),
+                )
+            )
 
     async def _do_execute(
         self,
@@ -188,7 +217,7 @@ class ClaudeSDKBackend:
                 bus=self._bus,
                 envelope=envelope,
             ),
-            setting_sources=["project"],
+            setting_sources=_resolve_setting_sources(options.cwd),
             thinking=thinking_config,
             effort=effort_level,
             stderr=lambda line: logger.warning("[CLI stderr] %s", line),
@@ -198,35 +227,72 @@ class ClaudeSDKBackend:
         # Wrap in aclosing() to ensure cleanup on early return (e.g. rate limit).
         message_stream = query(prompt=envelope.task, options=agent_options)
 
-        state = _StreamState()
+        text_parts: list[str] = []
+        cost_usd: float = 0.0
+        duration_seconds: float = 0.0
+        session_id: str | None = None
+        result_msg_text: str = ""
+        is_error: bool = False
+        errors: list[str] | None = None
+
         async with aclosing(message_stream) as stream:
             async for msg in stream:
                 if AssistantMessage is not None and isinstance(msg, AssistantMessage):
-                    _ingest_assistant_message(state, msg, on_stream)
-                elif ResultMessage is not None and isinstance(msg, ResultMessage):
-                    _ingest_result_message(state, msg)
-                elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
-                    _ingest_rate_limit_event(state, msg)
-                    if state.rate_limit_detail is not None:
-                        return envelope.with_error(state.rate_limit_detail)
+                    for block in getattr(msg, "content", []):
+                        block_text = getattr(block, "text", None)
+                        if block_text:
+                            text_parts.append(block_text)
+                            if on_stream is not None:
+                                on_stream(block_text)
 
-        final_text = "".join(state.text_parts)
+                elif ResultMessage is not None and isinstance(msg, ResultMessage):
+                    cost_usd = getattr(msg, "total_cost_usd", None) or 0.0
+                    duration_ms = getattr(msg, "duration_ms", 0) or 0
+                    duration_seconds = duration_ms / 1000.0
+                    session_id = getattr(msg, "session_id", None)
+                    result_msg_text = getattr(msg, "result", None) or ""
+                    is_error = getattr(msg, "is_error", False)
+                    errors = getattr(msg, "errors", None)
+
+                elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
+                    status = getattr(msg, "status", "")
+                    if status == "rejected":
+                        return envelope.with_error(
+                            ErrorDetail(
+                                error_type="RateLimitError",
+                                message="Rate limit exceeded — request rejected by API",
+                            )
+                        )
+                    elif status == "allowed_warning":
+                        logger.warning("Rate limit warning: approaching limit")
+
+        final_text = "".join(text_parts)
         # Fallback: use ResultMessage.result if no text from assistant messages
-        if not final_text and state.result_msg_text:
-            final_text = state.result_msg_text
+        if not final_text and result_msg_text:
+            final_text = result_msg_text
 
         # Check is_error flag from ResultMessage
-        if state.is_error:
-            return envelope.with_error(_agent_error_detail(state.errors, final_text))
+        if is_error:
+            error_msgs = [str(e) for e in errors] if errors else []
+            return envelope.with_error(
+                ErrorDetail(
+                    error_type="AgentError",
+                    message=(
+                        "; ".join(error_msgs)
+                        if error_msgs
+                        else (final_text or "Agent reported error")
+                    ),
+                )
+            )
 
         # Success path — set duration + session_id metadata then enrich with result.
-        enriched = envelope.with_result(result=final_text, cost_usd=state.cost_usd)
+        enriched = envelope.with_result(result=final_text, cost_usd=cost_usd)
         return enriched.model_copy(
             update={
                 "metadata": {
                     **enriched.metadata,
-                    "duration_seconds": state.duration_seconds,
-                    "session_id": state.session_id,
+                    "duration_seconds": duration_seconds,
+                    "session_id": session_id,
                 },
             },
         )

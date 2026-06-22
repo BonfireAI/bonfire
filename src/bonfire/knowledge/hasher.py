@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from pathlib import Path
+from pathlib import Path  # noqa: TC003 — used at runtime in file_hash()
 
 
 def content_hash(text: str) -> str:

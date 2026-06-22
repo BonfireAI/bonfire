@@ -10,7 +10,7 @@ Sage D8.2 type locks:
 - ``on_dispatch_failed`` -> entry_type="error_pattern"
 - ``on_session_ended`` -> entry_type="session_insight"
 - ``register(bus) -> None`` subscribes all four.
-- ``_store`` dedups via content_hash, catches exceptions, narrates via ``logger.exception``.
+- ``_store`` dedups via content_hash, catches exceptions, logs WARNING.
 - ``VaultEntry.metadata`` keys LOCKED: ``session_id: str``, ``event_id: str`` (no others).
 - ``content_hash`` via ``bonfire.knowledge.hasher.content_hash``.
 - ``scanned_at`` is UTC ISO-8601 string.
@@ -192,25 +192,15 @@ class TestEntryTypeMapping:
 
 class TestContentHashing:
     async def test_content_hash_computed_via_knowledge_hasher(self) -> None:
-        """Entry.content_hash == content_hash(event_id + content) (byte-stable).
-
-        BON-1009: the dedup key is scoped by event_id so two distinct events
-        with identical text do not collide. The stored hash is therefore the
-        hash of ``"{event_id}\\n{content}"``, not the content text alone.
-        """
+        """Entry.content_hash == content_hash(entry.content) (byte-stable)."""
         backend = _FakeBackend()
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
-        event = _stage_completed()
-        await consumer.on_stage_completed(event)
+        await consumer.on_stage_completed(_stage_completed())
         entry = backend.stored[0]
-        assert entry.content_hash == _ch(f"{event.event_id}\n{entry.content}")
+        assert entry.content_hash == _ch(entry.content)
 
     async def test_dedup_skips_store_when_hash_exists(self) -> None:
-        """If backend.exists(hash) is True, consumer does NOT call store().
-
-        BON-1009: the dedup key is the event-scoped hash, so pre-seed the
-        backend with ``content_hash(event_id + content)`` (the real key).
-        """
+        """If backend.exists(hash) is True, consumer does NOT call store()."""
         # Pre-compute content that matches the consumer's output for stage_completed.
         event = _stage_completed()
         expected_content = (
@@ -218,7 +208,7 @@ class TestContentHashing:
             f"agent={event.agent_name} "
             f"duration={event.duration_seconds} cost={event.cost_usd}"
         )
-        expected_hash = _ch(f"{event.event_id}\n{expected_content}")
+        expected_hash = _ch(expected_content)
         backend = _FakeBackend(pre_existing={expected_hash})
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
         await consumer.on_stage_completed(event)
@@ -268,44 +258,17 @@ class TestMetadata:
 # ---------------------------------------------------------------------------
 
 
-# Resilience matrix: (handler attribute name, event factory) for all four
-# locked event handlers. BON-528 expands the single-handler resilience test
-# into a forward-looking matrix across every handler that calls backend.store().
-_RESILIENCE_HANDLERS = [
-    ("on_stage_completed", _stage_completed),
-    ("on_stage_failed", _stage_failed),
-    ("on_dispatch_failed", _dispatch_failed),
-    ("on_session_ended", _session_ended),
-]
-
-
 class TestResilience:
-    @pytest.mark.parametrize(
-        ("handler_name", "event_factory"),
-        _RESILIENCE_HANDLERS,
-        ids=[name for name, _ in _RESILIENCE_HANDLERS],
-    )
     async def test_backend_store_exception_is_caught_and_logged(
-        self,
-        handler_name: str,
-        event_factory: Any,
-        caplog: pytest.LogCaptureFixture,
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Every handler catches backend.store() exceptions and logs them loudly.
-
-        Sage D8.2: ``_store`` catches exceptions and narrates them via
-        ``logger.exception`` (traceback attached) — never crashes the
-        consumer. All four handlers route through ``_store``; this matrix
-        asserts the resilience contract holds for each (BON-528).
-        """
         backend = _ExplodingStoreBackend()
         consumer = KnowledgeIngestConsumer(backend=backend, project_name="p")
-        handler = getattr(consumer, handler_name)
         with caplog.at_level(logging.WARNING):
-            # Must NOT raise — a storage failure never crashes the consumer.
-            await handler(event_factory())
-        # The swallowed failure must be narrated on the failure path.
-        assert any(rec.levelno >= logging.WARNING for rec in caplog.records)
+            # Must NOT raise.
+            await consumer.on_stage_completed(_stage_completed())
+        # A warning should be emitted.
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ GAMIFIED_TO_GENERIC: Mapping[str, AgentRole] = MappingProxyType(
         "knight": AgentRole.TESTER,
         "warrior": AgentRole.IMPLEMENTER,
         "cleric": AgentRole.VERIFIER,
-        "prover": AgentRole.VERIFIER,  # workflow alias -- see Sage memo D-CL.1
+        "prover": AgentRole.VERIFIER,  # workflow alias for the verifier role
         "bard": AgentRole.PUBLISHER,
         "wizard": AgentRole.REVIEWER,
         "steward": AgentRole.CLOSER,

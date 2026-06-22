@@ -31,7 +31,7 @@ import tomllib
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-import pytest
+import pytest  # noqa: TC002
 from typer.testing import CliRunner
 
 # RED import — bonfire.cli.app module does not exist yet (cli.py is a single-file stub)

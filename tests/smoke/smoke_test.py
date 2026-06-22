@@ -36,7 +36,6 @@ That is deferred to v0.1.1 / BON-633.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
@@ -86,7 +85,7 @@ def _run(
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``argv`` with captured text output and the prepared child env."""
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603 — argv is list[str], shell=False.
         list(argv),
         capture_output=True,
         text=True,
@@ -117,9 +116,8 @@ def step1_import_bonfire() -> None:
     """1. ``import bonfire`` → ``__version__`` non-empty string."""
     label = "step1: import bonfire + __version__"
     try:
-        import bonfire
+        import bonfire  # noqa: PLC0415 — runtime import is the test.
     except Exception as exc:  # pragma: no cover — failure path is the gate.
-        logging.exception("step1: import bonfire crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     version = getattr(bonfire, "__version__", None)
@@ -132,7 +130,7 @@ def step2_protocols_surface() -> None:
     """2. ``from bonfire.protocols import …`` six public names."""
     label = "step2: bonfire.protocols public surface"
     try:
-        from bonfire.protocols import (  # noqa: F401
+        from bonfire.protocols import (  # noqa: F401, PLC0415
             AgentBackend,
             DispatchOptions,
             QualityGate,
@@ -141,7 +139,6 @@ def step2_protocols_surface() -> None:
             VaultEntry,
         )
     except Exception as exc:
-        logging.exception("step2: bonfire.protocols import crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -151,9 +148,8 @@ def step3_engine_surface() -> None:
     """3. ``from bonfire.engine import PipelineEngine, PipelineResult``."""
     label = "step3: bonfire.engine public surface"
     try:
-        from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401
+        from bonfire.engine import PipelineEngine, PipelineResult  # noqa: F401, PLC0415
     except Exception as exc:
-        logging.exception("step3: bonfire.engine import crashed")
         _fail(label, f"import failed: {exc!r}")
         return
     _ok(label)
@@ -235,7 +231,6 @@ def step8_packaged_data_file() -> None:
     try:
         resource = files("bonfire.onboard").joinpath("ui.html")
     except Exception as exc:
-        logging.exception("step8: importlib.resources lookup crashed")
         _fail(label, f"importlib.resources lookup failed: {exc!r}")
         return
     if not resource.is_file():

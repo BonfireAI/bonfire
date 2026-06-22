@@ -41,18 +41,50 @@ from typing import TYPE_CHECKING
 
 from bonfire._safe_read import safe_read_capped_text
 from bonfire._safe_write import safe_write_text
+
+# Re-exported with redundant aliases so ruff F401 keeps them: callers and
+# tests import these moved helpers from this module's public surface.
 from bonfire.onboard.config_sections import (
-    _build_claude_memory,
-    _build_git,
-    _build_header,
-    _build_mcp,
-    _build_persona,
-    _build_project,
-    _build_tools,
-    _build_tools_sentinel,
-    _build_vault,
-    _collect_by_panel,
-    _format_toml_list,
+    _build_claude_memory as _build_claude_memory,
+)
+from bonfire.onboard.config_sections import (
+    _build_git as _build_git,
+)
+from bonfire.onboard.config_sections import (
+    _build_header as _build_header,
+)
+from bonfire.onboard.config_sections import (
+    _build_mcp as _build_mcp,
+)
+from bonfire.onboard.config_sections import (
+    _build_persona as _build_persona,
+)
+from bonfire.onboard.config_sections import (
+    _build_project as _build_project,
+)
+from bonfire.onboard.config_sections import (
+    _build_tools as _build_tools,
+)
+from bonfire.onboard.config_sections import (
+    _build_tools_sentinel as _build_tools_sentinel,
+)
+from bonfire.onboard.config_sections import (
+    _build_vault as _build_vault,
+)
+from bonfire.onboard.config_sections import (
+    _collect_by_panel as _collect_by_panel,
+)
+from bonfire.onboard.config_sections import (
+    _find_scan_value as _find_scan_value,
+)
+from bonfire.onboard.config_sections import (
+    _format_toml_list as _format_toml_list,
+)
+from bonfire.onboard.config_sections import (
+    _pick_git_remote as _pick_git_remote,
+)
+from bonfire.onboard.config_sections import (
+    _sanitize_toml_comment as _sanitize_toml_comment,
 )
 from bonfire.onboard.protocol import ConfigGenerated, ScanUpdate
 

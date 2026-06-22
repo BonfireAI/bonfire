@@ -171,24 +171,24 @@
     },
     {
       "file": "src/bonfire/handlers/merge_preflight.py",
-      "symbol_or_line": "368",
-      "rule": "S314",
-      "reason": "grandfathered at v1.0.1 cf-gate adoption 2026-06-22 (ratchet: BON-1757) — pre-existing under the kit ruff config; tracked for fix-forward",
-      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
-    },
-    {
-      "file": "src/bonfire/handlers/merge_preflight.py",
-      "symbol_or_line": "615",
+      "symbol_or_line": "277",
       "rule": "BLE001",
       "reason": "StageHandler boundary: any preflight failure becomes a typed ErrorDetail envelope.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
     },
     {
       "file": "src/bonfire/handlers/merge_preflight.py",
-      "symbol_or_line": "902",
+      "symbol_or_line": "564",
       "rule": "BLE001",
       "reason": "Best-effort baseline-pytest cache: any failure degrades to an empty baseline and must never block preflight.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
+    },
+    {
+      "file": "src/bonfire/handlers/preflight_pytest.py",
+      "symbol_or_line": "321",
+      "rule": "S314",
+      "reason": "grandfathered at v1.0.1 cf-gate adoption 2026-06-22 (ratchet: BON-1757) — pre-existing under the kit ruff config; tracked for fix-forward",
+      "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
     },
     {
       "file": "src/bonfire/handlers/sage_correction_bounce.py",

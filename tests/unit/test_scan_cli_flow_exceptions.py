@@ -75,7 +75,7 @@ class TestScanCatchesBrowserDisconnectedError:
         monkeypatch.chdir(tmp_path)
         assert not (tmp_path / "bonfire.toml").exists()
 
-        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+        async def fake_run_front_door(*args, **kwargs):
             raise BrowserDisconnectedError(
                 "Browser closed before the onboarding conversation completed."
             )
@@ -128,7 +128,7 @@ class TestScanCatchesConversationTimeoutError:
         monkeypatch.chdir(tmp_path)
         assert not (tmp_path / "bonfire.toml").exists()
 
-        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+        async def fake_run_front_door(*args, **kwargs):
             raise ConversationTimeoutError(
                 "Onboarding conversation did not complete within 300.0 seconds."
             )

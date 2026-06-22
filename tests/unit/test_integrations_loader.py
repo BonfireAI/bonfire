@@ -25,7 +25,7 @@ Tests use ``tmp_path`` fixtures — no real ``.bonfire/integrations/`` is touche
 from __future__ import annotations
 
 import logging
-from pathlib import Path  # noqa: TC003 — runtime constructor type
+from pathlib import Path
 
 import pytest
 

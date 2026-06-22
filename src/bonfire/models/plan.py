@@ -88,7 +88,7 @@ class WorkflowPlan(BaseModel):
     task_description: str = ""
 
     @model_validator(mode="after")
-    def _validate_dag(self) -> WorkflowPlan:
+    def _validate_dag(self) -> WorkflowPlan:  # noqa: C901
         """Ensure the stage graph is a valid DAG."""
         if not self.stages:
             if self.workflow_type == WorkflowType.SINGLE:

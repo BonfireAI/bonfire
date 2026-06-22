@@ -144,7 +144,7 @@ async def dispatch_user_message(
         conversation_done.set()
 
 
-async def run_front_door(
+async def run_front_door(  # noqa: C901,PLR0915
     server: FrontDoorServer,
     project_path: Path,
     *,
@@ -236,7 +236,7 @@ async def run_front_door(
         for task in pending:
             try:
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001,S110
                 # Swallow — we're already handling the race outcome.
                 pass
 

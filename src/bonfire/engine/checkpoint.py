@@ -19,14 +19,14 @@ import json
 import logging
 import os
 import time
-from pathlib import Path  # noqa: TC003 -- runtime use in constructor
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
 from bonfire._safe_write import safe_write_text
-from bonfire.models.envelope import Envelope  # noqa: TC001 -- Pydantic needs runtime access
+from bonfire.models.envelope import Envelope
 
 logger = logging.getLogger(__name__)
 

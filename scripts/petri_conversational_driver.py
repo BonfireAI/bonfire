@@ -378,8 +378,8 @@ async def main(argv: list[str] | None = None) -> int:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    assert proc.stdout is not None
-    assert proc.stderr is not None
+    assert proc.stdout is not None  # noqa: S101
+    assert proc.stderr is not None  # noqa: S101
 
     # Forward the subprocess stderr to our logger in the background.
     stderr_task = asyncio.create_task(_drain(proc.stderr, logger, "scan stderr"))

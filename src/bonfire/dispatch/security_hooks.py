@@ -536,7 +536,7 @@ def _is_case_insensitive_fs() -> bool:
 
 
 # recursion: bounded by finite path-prefix strips (one marker per call)
-def _match_write_edit_sensitive_path(file_path: str) -> bool:
+def _match_write_edit_sensitive_path(file_path: str) -> bool:  # noqa: C901
     r"""Return True if ``file_path`` resolves under any deny prefix.
 
     Also covers the ``.env`` family and the ``..`` cross-user / cross-root
@@ -840,7 +840,7 @@ def _extract_substitutions(segment: str) -> list[str]:
     return out
 
 
-def _peel_one(segment: str) -> str | None:
+def _peel_one(segment: str) -> str | None:  # noqa: C901
     """Try to peel a single unwrapper off ``segment``.
 
     Returns the inner body, or ``None`` if nothing was peeled.
@@ -892,7 +892,7 @@ def _peel_one(segment: str) -> str | None:
 _UNWRAP_EXHAUSTED_SENTINEL = "\x00__BONFIRE_UNWRAP_EXHAUSTED__\x00"
 
 
-def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
+def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:  # noqa: C901
     """Stage 2: recursively peel wrappers up to ``max_depth`` rounds.
 
     Returns a list of segments to be matched. The original command is
@@ -919,7 +919,7 @@ def _unwrap(command: str, *, max_depth: int = 5) -> list[str]:
         segments.extend(_split_chain(sub))
 
     work: list[str] = list(segments)
-    for depth in range(max_depth):
+    for depth in range(max_depth):  # noqa: B007
         next_round: list[str] = []
         for seg in work:
             peeled = _peel_one(seg)
@@ -978,7 +978,7 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
     if isinstance(cmd, bytes):
         try:
             return cmd.decode("utf-8", errors="replace")
-        except Exception:
+        except Exception:  # noqa: BLE001
             return ""
     if not isinstance(cmd, str):
         return ""
@@ -1081,7 +1081,7 @@ async def _safe_emit(
 # ---------------------------------------------------------------------------
 
 
-def build_preexec_hook(
+def build_preexec_hook(  # noqa: C901,PLR0915
     config: SecurityHooksConfig,
     *,
     bus: EventBus | None = None,
@@ -1118,7 +1118,7 @@ def build_preexec_hook(
         _user_patterns_compiled = None
         _user_patterns_error = exc
 
-    async def _hook(
+    async def _hook(  # noqa: C901,PLR0915
         input_data: dict,
         tool_use_id: str,
         context: dict,
@@ -1146,7 +1146,7 @@ def build_preexec_hook(
             if _user_patterns_error is not None:
                 raise _user_patterns_error
             user_patterns = _user_patterns_compiled
-            assert user_patterns is not None  # narrow for type-checker
+            assert user_patterns is not None  # narrow for type-checker  # noqa: S101
 
             # Write/Edit sensitive-path family: gate path-shape inputs that
             # the bash-shape C1-C7 catalogue would never match. Runs BEFORE

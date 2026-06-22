@@ -18,7 +18,7 @@ from bonfire.protocols import VaultEntry
 _FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n.*?\n---[ \t]*\n?", re.DOTALL)
 
 
-def chunk_markdown(
+def chunk_markdown(  # noqa: C901
     content: str,
     *,
     source_path: str,

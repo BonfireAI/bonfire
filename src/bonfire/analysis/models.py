@@ -19,8 +19,8 @@ Only ``pydantic`` + stdlib here.
 
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003 — Pydantic runtime type resolution
-from pathlib import Path  # noqa: TC003 — Pydantic runtime type resolution
+from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -241,7 +241,7 @@ class ProjectAnalysis(BaseModel):
         sniff the envelope without deserialising. ``gzip`` is imported
         lazily to keep ``models`` import-free of stdlib compression.
         """
-        import gzip  # noqa: PLC0415 — stdlib lazy import keeps models light
+        import gzip
 
         return gzip.compress(
             self.model_dump_json().encode("utf-8"),
@@ -256,6 +256,6 @@ class ProjectAnalysis(BaseModel):
         ``gzip.BadGzipFile`` / ``OSError`` on a corrupt envelope. Wave 2b
         cache reads catch those and fall back to a fresh scan.
         """
-        import gzip  # noqa: PLC0415
+        import gzip
 
         return cls.model_validate_json(gzip.decompress(data).decode("utf-8"))

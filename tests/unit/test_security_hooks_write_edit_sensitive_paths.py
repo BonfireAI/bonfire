@@ -272,8 +272,8 @@ BENIGN_PATHS = [
     "/home/user/projects/foo/bar.py",
     "/home/user/projects/.env.example",  # .env.example is documentation, not secrets
     "./README.md",
-    "/tmp/scratch",
-    "/tmp/build/output.log",
+    "/tmp/scratch",  # noqa: S108
+    "/tmp/build/output.log",  # noqa: S108
     "/home/user/notes.txt",
     "src/bonfire/dispatch/tool_policy.py",
     "tests/unit/test_security_hooks_factory.py",

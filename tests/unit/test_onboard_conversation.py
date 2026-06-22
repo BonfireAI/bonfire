@@ -83,7 +83,7 @@ class TestHandleAnswerConcurrency:
         # With the lock, calls are serialised:
         # first answer → _turn 1→2 (Q2 asked)
         # second answer → _turn 2→3 (Q3 asked)
-        assert engine._turn == 3, (  # noqa: PLR2004
+        assert engine._turn == 3, (
             f"After start() + two concurrent handle_answer calls, _turn must be 3 "
             f"(lock serialises: Q1-answer → _turn=2, Q2-answer → _turn=3); "
             f"got _turn={engine._turn}. Without the lock both calls can read "
@@ -96,7 +96,7 @@ class TestHandleAnswerConcurrency:
     ) -> None:
         """A 4th handle_answer after completion must raise ConversationCompleteError."""
         # Deferred import: ConversationCompleteError does not exist until Warrior implements it.
-        from bonfire.onboard.conversation import ConversationCompleteError  # noqa: PLC0415
+        from bonfire.onboard.conversation import ConversationCompleteError
 
         engine = ConversationEngine()
         await _drive_to_completion(engine)
@@ -122,7 +122,7 @@ class TestConversationCompleteError:
 
     def test_is_subclass_of_runtimeerror(self) -> None:
         """ConversationCompleteError must be a subclass of RuntimeError."""
-        from bonfire.onboard.conversation import ConversationCompleteError  # noqa: PLC0415
+        from bonfire.onboard.conversation import ConversationCompleteError
 
         assert issubclass(ConversationCompleteError, RuntimeError), (
             "ConversationCompleteError must subclass RuntimeError so existing "
@@ -131,13 +131,13 @@ class TestConversationCompleteError:
 
     def test_is_importable_from_conversation_module(self) -> None:
         """ConversationCompleteError must be importable from bonfire.onboard.conversation."""
-        from bonfire.onboard.conversation import ConversationCompleteError  # noqa: PLC0415
+        from bonfire.onboard.conversation import ConversationCompleteError
 
         assert ConversationCompleteError is not None
 
     def test_message_is_string_representable(self) -> None:
         """ConversationCompleteError instances must have a string representation."""
-        from bonfire.onboard.conversation import ConversationCompleteError  # noqa: PLC0415
+        from bonfire.onboard.conversation import ConversationCompleteError
 
         exc = ConversationCompleteError("Conversation is already complete.")
         assert "complete" in str(exc).lower(), (
@@ -228,7 +228,7 @@ class TestLockIsLazy:
 
         await engine.start(emit)
 
-        assert len(emitted) == 2, (  # noqa: PLR2004
+        assert len(emitted) == 2, (
             f"start() must emit exactly 2 messages (ConversationStart + Q1 question); "
             f"got {len(emitted)}"
         )

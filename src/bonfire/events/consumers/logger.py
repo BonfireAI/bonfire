@@ -25,7 +25,7 @@ class SessionLoggerConsumer:
         """Persist event. Never crash — log warning on failure."""
         try:
             self._persistence.append_event(event.session_id, event)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Failed to persist event %s", event.event_id, exc_info=True)
 
     def register(self, bus: EventBus) -> None:

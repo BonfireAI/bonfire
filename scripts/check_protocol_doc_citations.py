@@ -174,7 +174,7 @@ class CheckResult:
 # ---------------------------------------------------------------------------
 
 
-def _index_symbols(source_path: Path) -> SymbolIndex:
+def _index_symbols(source_path: Path) -> SymbolIndex:  # noqa: C901
     """Return name -> line-range map for every def/class in *source_path*.
 
     Top-level functions/classes are keyed by their bare name. Methods

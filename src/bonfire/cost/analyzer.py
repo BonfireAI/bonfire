@@ -126,7 +126,7 @@ class CostAnalyzer:
             return None
         return (st.st_mtime, st.st_size)
 
-    def _load_if_needed(self) -> None:
+    def _load_if_needed(self) -> None:  # noqa: C901
         """Read the ledger if it has changed since the last load.
 
         Caches parsed dicts under ``_raw_dispatches`` / ``_raw_pipelines`` and

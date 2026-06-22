@@ -422,7 +422,7 @@ class TestWsServerFlipsOversizeFlagOn1009:
             oversized = json.dumps({"type": "user_message", "text": "x" * (16 * 1024)})
             assert len(oversized.encode("utf-8")) > _WS_MAX_FRAME_BYTES
 
-            with pytest.raises(Exception):  # noqa: BLE001
+            with pytest.raises(Exception):
                 async with websockets.connect(server.ws_url) as ws:
                     await ws.send(oversized)
                     # If send didn't raise, recv definitely will once the

@@ -124,5 +124,5 @@ class KnowledgeIngestConsumer:
                 },
             )
             await self.backend.store(entry)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Vault store failed for %s event", entry_type, exc_info=True)

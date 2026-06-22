@@ -69,7 +69,7 @@ DEFAULT_EXCLUSIONS: set[str] = {
 }
 
 
-def _extract_pyproject_deps(text: str) -> set[str]:
+def _extract_pyproject_deps(text: str) -> set[str]:  # noqa: C901
     """Extract dependency package names from pyproject.toml text.
 
     Scans [project.dependencies], [project.optional-dependencies.*],
@@ -242,7 +242,7 @@ class TechScanner:
         rel = path.relative_to(self._project_path)
         return any(part in self._exclusions for part in rel.parts)
 
-    def _detect_frameworks(self) -> list[VaultEntry]:
+    def _detect_frameworks(self) -> list[VaultEntry]:  # noqa: C901
         """Detect frameworks from dependency files."""
         entries: list[VaultEntry] = []
         seen: set[str] = set()

@@ -183,7 +183,7 @@ class ClaudeSDKBackend:
         """
         try:
             return await self._do_execute(envelope, options=options, on_stream=on_stream)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,
@@ -192,7 +192,7 @@ class ClaudeSDKBackend:
                 )
             )
 
-    async def _do_execute(
+    async def _do_execute(  # noqa: C901
         self,
         envelope: Envelope,
         *,

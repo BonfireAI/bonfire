@@ -263,7 +263,7 @@ class TestScanNoBrowserSemantics:
             mock_server.shutdown_event = shutdown_event
 
             mock_server_cls.return_value = mock_server
-            mock_flow.return_value = "/tmp/bonfire.toml"
+            mock_flow.return_value = "/tmp/bonfire.toml"  # noqa: S108
 
             from bonfire.cli.commands.scan import _run_scan
 
@@ -311,7 +311,7 @@ class TestScanNoBrowserSemantics:
             mock_server.shutdown_event = shutdown_event
 
             mock_server_cls.return_value = mock_server
-            mock_flow.return_value = "/tmp/bonfire.toml"
+            mock_flow.return_value = "/tmp/bonfire.toml"  # noqa: S108
             mock_launch.return_value = 0
 
             from bonfire.cli.commands.scan import _run_scan

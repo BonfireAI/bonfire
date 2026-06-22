@@ -163,7 +163,7 @@ class StewardHandler:
                     "result": f"closer: verdict={verdict}, pr={pr_number}",
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

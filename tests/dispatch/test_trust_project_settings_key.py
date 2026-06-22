@@ -21,17 +21,17 @@ File presence alone is NOT enough. The env override
 
 Truth table the Warrior must satisfy:
 
-| cwd                                                  | trust_project_settings? | env var | result          |
+| cwd | trust_project_settings? | env var | result |
 |------------------------------------------------------|-------------------------|---------|-----------------|
-| ``""`` / ``None`` (dogfood)                          | n/a                     | n/a     | ``["project"]`` |
-| ``<dir with bonfire.toml, key=true>``                | true                    | unset   | ``["project"]`` |
-| ``<dir with bonfire.toml, key=false>``               | false                   | unset   | ``[]``          |
-| ``<dir with bonfire.toml, key missing>``             | (absent)                | unset   | ``[]``          |
-| ``<dir with bonfire.toml, [bonfire] table missing>`` | n/a                     | unset   | ``[]``          |
-| ``<dir with bonfire.toml, malformed TOML>``          | n/a                     | unset   | ``[]``          |
-| ``<foreign dir, no bonfire.toml>``                   | n/a                     | unset   | ``[]``          |
-| ``<foreign dir>``                                    | n/a                     | ``"1"`` | ``["project"]`` |
-| ``<dir with key=false but env="1">``                 | false                   | ``"1"`` | ``["project"]`` |
+| ``""`` / ``None`` (dogfood) | n/a | n/a | ``["project"]`` |
+| ``<dir with bonfire.toml, key=true>`` | true | unset | ``["project"]`` |
+| ``<dir with bonfire.toml, key=false>`` | false | unset | ``[]`` |
+| ``<dir with bonfire.toml, key missing>`` | (absent) | unset | ``[]`` |
+| ``<dir with bonfire.toml, [bonfire] table missing>`` | n/a | unset | ``[]`` |
+| ``<dir with bonfire.toml, malformed TOML>`` | n/a | unset | ``[]`` |
+| ``<foreign dir, no bonfire.toml>`` | n/a | unset | ``[]`` |
+| ``<foreign dir>`` | n/a | ``"1"`` | ``["project"]`` |
+| ``<dir with key=false but env="1">`` | false | ``"1"`` | ``["project"]`` |
 
 The env-override stays STRICT-``"1"`` (no normalization). The TOML key
 must be a literal boolean ``true``; ``"true"``/``"1"``/``1`` strings or

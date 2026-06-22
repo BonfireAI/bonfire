@@ -68,7 +68,7 @@ async def _run_cmd(
             proc.kill()
             try:
                 await proc.communicate()
-            except Exception:  # noqa: BLE001 — best-effort drain
+            except Exception:  # noqa: BLE001,S110,best-effort,drain,—
                 pass
             return (_RC_TIMEOUT, "")
         return (proc.returncode, stdout.decode(errors="replace").strip())
@@ -156,7 +156,7 @@ def _error_detail(rc: int | None, cmd: list[str]) -> str:
     return f"git {sub} failed (rc={rc})"
 
 
-async def scan(project_path: Path, emit: ScanCallback) -> int:
+async def scan(project_path: Path, emit: ScanCallback) -> int:  # noqa: C901
     """Scan git state and emit ScanUpdate events.
 
     Returns the total number of items emitted.  If *project_path* is not

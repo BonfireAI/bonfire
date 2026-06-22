@@ -163,7 +163,7 @@ _LINES: dict[str, list[str]] = {
 }
 
 
-def _category_key(event: ScanUpdate) -> str:
+def _category_key(event: ScanUpdate) -> str:  # noqa: C901
     """Derive a line-library category key from a scan event."""
     label_lower = event.label.lower()
     value_lower = event.value.lower()
@@ -299,4 +299,4 @@ class NarrationEngine:
         available = [line for line in pool if line not in self._used]
         if not available:
             return None
-        return random.choice(available)
+        return random.choice(available)  # noqa: S311

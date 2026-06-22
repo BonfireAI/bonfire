@@ -252,7 +252,7 @@ async def _scan_key_directories(project_path: Path, emit: ScanCallback) -> int:
     return count
 
 
-async def _scan_project_size(project_path: Path, emit: ScanCallback) -> int:
+async def _scan_project_size(project_path: Path, emit: ScanCallback) -> int:  # noqa: C901
     """Estimate total file count and rough LOC.
 
     Walks the tree without following symlinks so a symlink loop

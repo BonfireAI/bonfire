@@ -36,7 +36,7 @@ knowledge = ["lancedb>=0.15", "ollama>=0.4"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
-    "ruff==0.15.13",
+    "ruff==0.15.17",
     "coverage>=7.0",
 ]
 
@@ -75,3 +75,22 @@ select = ["E", "F", "I", "UP", "W"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["bonfire"]
+
+[tool.importlinter]
+root_packages = ["bonfire"]
+include_external_packages = false
+exclude_type_checking_imports = false
+
+[[tool.importlinter.contracts]]
+name = "models stay a leaf — the frozen contracts never import app layers"
+type = "forbidden"
+source_modules = ["bonfire.models"]
+forbidden_modules = [
+    "bonfire.cli",
+    "bonfire.engine",
+    "bonfire.handlers",
+    "bonfire.dispatch",
+    "bonfire.onboard",
+    "bonfire.scan",
+]
+unmatched_ignore_imports_alerting = "error"

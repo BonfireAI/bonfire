@@ -50,7 +50,7 @@ async def _http_get(url: str, origin: str | None = None) -> tuple[int, dict[str,
     ``urllib.error.HTTPError`` on non-2xx — callers that want to inspect the
     error status should wrap in ``pytest.raises`` and read ``excinfo.value``.
     """
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, method="GET")  # noqa: S310
     if origin is not None:
         req.add_header("Origin", origin)
     loop = asyncio.get_event_loop()
@@ -229,7 +229,8 @@ class TestHandoffEndpoint:
             await server.stop()
 
     async def test_handoff_endpoint_response_headers_no_referrer(self) -> None:
-        """200 response carries ``Referrer-Policy: no-referrer`` and ``Cache-Control: no-store, no-cache``.
+        """200 response carries ``Referrer-Policy: no-referrer`` and ``Cache-Control: no-store,
+        no-cache``.
 
         Pins that the served token can't escape via referrer or browser
         cache. Without these headers, a navigation away from the served
@@ -410,7 +411,7 @@ class TestArgvLeakAudit:
                 new_callable=AsyncMock,
             ) as mock_flow,
         ):
-            mock_flow.return_value = "/tmp/bonfire.toml"
+            mock_flow.return_value = "/tmp/bonfire.toml"  # noqa: S108
             mock_launch.return_value = 0
 
             from bonfire.cli.commands.scan import _run_scan
@@ -434,7 +435,7 @@ class TestArgvLeakAudit:
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, BaseException):
+                except (asyncio.CancelledError, BaseException):  # noqa: BLE001,S110
                     pass
 
             asyncio.run(_drive())
@@ -546,7 +547,7 @@ class TestNoBrowserStdout:
             mock_server.shutdown_event = shutdown_event
 
             mock_server_cls.return_value = mock_server
-            mock_flow.return_value = "/tmp/bonfire.toml"
+            mock_flow.return_value = "/tmp/bonfire.toml"  # noqa: S108
             mock_launch.return_value = 0
 
             from bonfire.cli.commands.scan import _run_scan
@@ -602,7 +603,7 @@ class TestNoBrowserStdout:
             mock_server.shutdown_event = shutdown_event
 
             mock_server_cls.return_value = mock_server
-            mock_flow.return_value = "/tmp/bonfire.toml"
+            mock_flow.return_value = "/tmp/bonfire.toml"  # noqa: S108
             mock_launch.return_value = 0
 
             from bonfire.cli.commands.scan import _run_scan

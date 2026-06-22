@@ -103,7 +103,7 @@ async def _run_one(
 
     try:
         count = await module.scan(project_path, _narrow_emit)
-    except Exception:
+    except Exception:  # noqa: BLE001
         _log.exception("Scanner %s failed", panel)
         count = 0
 

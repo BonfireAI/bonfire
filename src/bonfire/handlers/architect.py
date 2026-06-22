@@ -69,7 +69,7 @@ class ArchitectHandler:
         self._git_hash = git_hash
         self._exclude_patterns = exclude_patterns
 
-    async def handle(
+    async def handle(  # noqa: C901
         self,
         stage: StageSpec,
         envelope: Envelope,
@@ -211,7 +211,7 @@ class ArchitectHandler:
             }
 
             return envelope.with_result(json.dumps(summary))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,

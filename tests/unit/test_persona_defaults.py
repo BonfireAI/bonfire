@@ -282,8 +282,8 @@ class TestVaultPhrasesShipped:
     def test_persona_has_vault_phrases(self, loader: PersonaLoader, persona_name: str) -> None:
         """Each built-in persona ships at least one phrase per vault lifecycle key."""
         persona = loader.load(persona_name)
-        bank = persona._bank  # noqa: SLF001 — direct read for schema check
-        phrases_map = bank._phrases  # noqa: SLF001 — direct read for schema check
+        bank = persona._bank
+        phrases_map = bank._phrases
 
         for key in self._VAULT_KEYS:
             assert key in phrases_map, (

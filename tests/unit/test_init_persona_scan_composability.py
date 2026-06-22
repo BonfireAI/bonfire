@@ -23,7 +23,8 @@ overwrite refusal, and that pin must keep passing after the W8.F fix.
 
 The Knight chose this narrow widening (persona-key-only) over the
 broader "stub + at most one key" shape Anta floated, because the broader
-shape would regress ``test_init_scan_composability.py::TestQuickstartIntegration::test_quickstart_full_flow_preserves_user_edits_after_init``
+shape would regress
+``test_init_scan_composability.py::TestQuickstartIntegration::test_quickstart_full_flow_preserves_user_edits_after_init``
 (test #15). Flagged in the W8.F Knight handoff for Ishtar's review.
 
 Cross-lane note (OL-3): W8.G is touching ``config_generator.py`` in the

@@ -365,12 +365,12 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
     PYTEST_COLLECTION_ERROR.
     """
     try:
-        tree = ET.parse(str(path))
+        tree = ET.parse(str(path))  # noqa: S314
     except (FileNotFoundError, OSError):
         return ()
     except ET.ParseError:
         return ()
-    except Exception:  # pragma: no cover - belt-and-suspenders
+    except Exception:  # pragma: no cover - belt-and-suspenders  # noqa: BLE001
         return ()
 
     root = tree.getroot()
@@ -484,7 +484,7 @@ async def detect_sibling_prs(
         prs = await client.list_open_prs(base, exclude=current_pr_number)
     except RuntimeError:
         return ({}, "error")
-    except Exception:  # pragma: no cover - defensive
+    except Exception:  # pragma: no cover - defensive  # noqa: BLE001
         return ({}, "error")
 
     files_by_pr: dict[int, frozenset[str]] = {}
@@ -616,7 +616,7 @@ class MergePreflightHandler:
                     pr_number=pr_number,
                 )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return envelope.with_error(
                 ErrorDetail(
                     error_type=type(exc).__name__,
@@ -696,7 +696,7 @@ class MergePreflightHandler:
                 sibling_diff = await self._github_client.get_pr_diff(
                     sibling_pr_n,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "merge_preflight.sibling_diff_fetch_failed pr=%d",
                     sibling_pr_n,
@@ -903,7 +903,7 @@ class MergePreflightHandler:
                 if not failing and result.returncode != 0:
                     failing = parse_pytest_stdout_fallback(result.stdout_tail)
                 baseline = frozenset(ft.file_path for ft in failing)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "merge_preflight.baseline_compute_failed base_sha=%s",
                 base_sha[:12],

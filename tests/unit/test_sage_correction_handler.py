@@ -111,7 +111,7 @@ def _make_handler():
         backend=None,
         github_client=None,
         config=None,
-        repo_path=Path("/tmp/bon-513-spine"),
+        repo_path=Path("/tmp/bon-513-spine"),  # noqa: S108
     )
 
 
@@ -804,7 +804,7 @@ class TestDispatchToolRestriction:
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             # Per StageHandler contract handle() never raises, but mocks may
             # short-circuit; we still inspect what reached the backend.
             pass
@@ -853,7 +853,7 @@ class TestDispatchToolRestriction:
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
 
         if backend.execute.called or backend.dispatch.called:
@@ -889,7 +889,7 @@ class TestDispatchToolRestriction:
                 envelope=_make_envelope(),
                 prior_results={"warrior": "1 failed"},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001,S110
             pass
 
         if backend.execute.called or backend.dispatch.called:

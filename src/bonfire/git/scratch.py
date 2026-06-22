@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 PREFLIGHT_DIR_NAME: str = "preflight"
 
 _RANDOM_SUFFIX_BYTES: int = 4  # 4 bytes -> 8 hex chars
-_NO_PR_NUMBER_TOKEN: str = "0"
+_NO_PR_NUMBER_TOKEN: str = "0"  # noqa: S105
 
 # Allow-list regex for ``acquire(prefix=...)``. Hyphen + underscore +
 # alphanumerics, 1-32 chars. Same allow-list shape used elsewhere for

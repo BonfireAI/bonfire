@@ -343,7 +343,7 @@ class SageCorrectionBounceHandler:
             # Cancellation propagates -- the handler does NOT swallow it
             # (pipeline orchestration relies on cancellation surfacing).
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return envelope.model_copy(
                 update={
                     "metadata": {
@@ -409,10 +409,10 @@ class SageCorrectionBounceHandler:
             # Fallback signature: classifier expects the warrior text.
             try:
                 result = classify(prior_results.get("warrior", ""))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("sage_correction_bounce.classifier_invocation_failed")
                 return None
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("sage_correction_bounce.classifier_invocation_failed")
             return None
 
@@ -511,7 +511,7 @@ class SageCorrectionBounceHandler:
             classifier_verdict=verdict,
         )
 
-    async def _run_correction_cycle(
+    async def _run_correction_cycle(  # noqa: C901
         self,
         *,
         stage: StageSpec,
@@ -555,7 +555,7 @@ class SageCorrectionBounceHandler:
             # Async cancellation propagates; do not silently swallow
             # (the parent pipeline relies on cancellation reaching it).
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",
@@ -579,7 +579,7 @@ class SageCorrectionBounceHandler:
                     await cherry_pick_result
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # Cherry-pick failure -> abort + return FAILED. No re-verify.
                 self._safe_cherry_pick_abort()
                 return _CorrectionCycleOutcome(
@@ -611,7 +611,7 @@ class SageCorrectionBounceHandler:
             reverify_result = await self._call_pytest_runner(_DEFAULT_PYTEST_ARGS)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             return _CorrectionCycleOutcome(
                 status=TaskStatus.FAILED,
                 correction_verdict="escalated",

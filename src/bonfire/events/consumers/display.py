@@ -46,7 +46,7 @@ class DisplayConsumer:
                 await self._callback(message)
             else:
                 self._callback(message)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("Display callback failed", exc_info=True)
 
     async def _on_stage_completed(self, event: StageCompleted) -> None:

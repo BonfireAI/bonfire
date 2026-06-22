@@ -252,7 +252,7 @@ class TestScanRunHandlesPostFlowFileExistsError:
         # process created bonfire.toml between pre-flow check and write.
         # Simulate the TOCTOU side effect (file appears mid-flow) so the
         # filesystem state at exit matches reality.
-        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+        async def fake_run_front_door(*args, **kwargs):
             target.write_text('[bonfire]\nname = "raced"\n')
             raise FileExistsError(post_flow_msg)
 
@@ -311,7 +311,7 @@ class TestScanRunHandlesPostFlowFileExistsError:
         mock_server.url = "http://localhost:0"
         mock_server.ws_url = "ws://localhost:0/ws"
 
-        async def fake_run_front_door(*args, **kwargs):  # noqa: ARG001
+        async def fake_run_front_door(*args, **kwargs):
             raise RuntimeError("conversation engine exploded")
 
         with (

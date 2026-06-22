@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 import tomllib
-from pathlib import Path  # noqa: TC003 — runtime constructor type
+from pathlib import Path
 
 from bonfire.agent.roles import AgentRole
 from bonfire.persona.base import BasePersona
@@ -243,7 +243,7 @@ class PersonaLoader:
             display_names=display_names,
         )
 
-    def _validate_raw(self, name: str, raw: dict) -> None:
+    def _validate_raw(self, name: str, raw: dict) -> None:  # noqa: C901
         """Apply the strict schema rules to a parsed TOML dict.
 
         Emits a warning for unknown top-level tables. Raises

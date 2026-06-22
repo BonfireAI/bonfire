@@ -2,7 +2,8 @@
 
 Sage D8.2 type locks:
 - ``FileInfo`` (frozen): ``path, category, content_hash, size_bytes``.
-- ``ModuleSignature`` (frozen): ``module_path, source_path, classes, functions, imports, docstring``.
+- ``ModuleSignature`` (frozen): ``module_path, source_path, classes, functions, imports,
+docstring``.
 - ``ProjectManifest`` (non-frozen).
 - ``ProjectScanner(project_root, *, exclude_patterns=None, max_file_size=1_000_000)``.
 - ``DEFAULT_EXCLUDES`` includes ``".bonfire"``.

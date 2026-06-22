@@ -443,8 +443,8 @@ class FrontDoorServer:
     async def _ws_handler(self, websocket: ServerConnection) -> None:
         """Handle a single WebSocket connection lifecycle."""
         # _ws_handler only runs after start(), so the events are set.
-        assert self._client_connected is not None
-        assert self._shutdown_event is not None
+        assert self._client_connected is not None  # noqa: S101
+        assert self._shutdown_event is not None  # noqa: S101
         self._clients.add(websocket)
         self._had_clients = True
         self._client_connected.set()

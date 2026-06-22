@@ -1,8 +1,10 @@
 """RED tests — BON-341 W5.2 — `bonfire.knowledge.chunker` (innovative lens).
 
 Sage D8.2 type locks:
-- ``chunk_markdown(content, *, source_path, project_name="", git_hash="", max_chunk_size=2000) -> list[VaultEntry]``
-- ``chunk_source_file(content, *, source_path, project_name="", git_hash="", max_chunk_size=2000) -> list[VaultEntry]``
+- ``chunk_markdown(content, *, source_path, project_name="", git_hash="", max_chunk_size=2000) ->
+list[VaultEntry]``
+- ``chunk_source_file(content, *, source_path, project_name="", git_hash="", max_chunk_size=2000)
+-> list[VaultEntry]``
 - Each entry's ``entry_type == "code_chunk"``.
 - Each entry's ``content_hash == content_hash(<its content>)``.
 - ``metadata`` keys: ``chunk_index: int``, ``total_chunks: int``, ``header_chain: str``.

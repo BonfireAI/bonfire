@@ -261,7 +261,7 @@ class BardHandler:
                 },
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             partial_metadata: dict[str, Any] = {**envelope.metadata}
             if branch_name is not None:
                 partial_metadata[_META_BRANCH] = branch_name

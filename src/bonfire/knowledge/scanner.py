@@ -170,7 +170,7 @@ class ProjectScanner:
             total_size_bytes=total_size,
         )
 
-    def extract_signatures(self, manifest: ProjectManifest) -> list[ModuleSignature]:
+    def extract_signatures(self, manifest: ProjectManifest) -> list[ModuleSignature]:  # noqa: C901
         """Parse Python files via stdlib ast. Skip non-Python. Handle syntax errors gracefully."""
         signatures: list[ModuleSignature] = []
 

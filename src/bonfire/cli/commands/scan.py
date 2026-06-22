@@ -73,7 +73,7 @@ async def _run_scan(
             err=True,
         )
         await server.stop()
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1)  # noqa: B904
     except TypeError:
         # wait_for_client_connect is not awaitable (legacy mock or test double).
         # Fall back to a direct event wait when the method is not a coroutine.

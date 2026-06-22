@@ -26,7 +26,7 @@
     "tests/unit/test_events.py": 675,
     "tests/unit/test_git.py": 754,
     "tests/unit/test_github.py": 858,
-    "tests/unit/test_merge_preflight_handler.py": 1136,
+    "tests/unit/test_merge_preflight_handler.py": 1139,
     "tests/unit/test_onboard_scanner_claude_memory.py": 562,
     "tests/unit/test_onboard_scanner_cli_toolchain.py": 504,
     "tests/unit/test_onboard_scanner_mcp_servers.py": 863,
@@ -49,7 +49,7 @@
     "tests/unit/test_wave_11_security_cleanup.py": 634,
     "tests/unit/test_wizard_handler.py": 1343,
     "tests/unit/test_workflow.py": 897,
-    "tests/unit/test_ws_token_oob_handoff.py": 672,
+    "tests/unit/test_ws_token_oob_handoff.py": 673,
     "tests/unit/test_xp_consumer.py": 587
   },
   "packages": {
@@ -59,6 +59,6 @@
     "src/bonfire/onboard": 4328,
     "src/bonfire/prompt": 773,
     "tests/integration": 1363,
-    "tests/unit": 72057
+    "tests/unit": 72070
   }
 }

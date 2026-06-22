@@ -75,7 +75,7 @@ class LanceDBBackend:
 
         try:
             results = search.to_list()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Vault query failed: %s", exc)
             return []
 
@@ -98,7 +98,7 @@ class LanceDBBackend:
         try:
             results = self._table.search().where(f"content_hash = '{safe_hash}'").limit(1).to_list()
             return len(results) > 0
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:
@@ -114,7 +114,7 @@ class LanceDBBackend:
                 .to_list()
             )
             return [self._record_to_entry(r) for r in results]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Vault get_by_source failed: %s", exc)
             return []
 

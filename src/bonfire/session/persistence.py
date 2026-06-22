@@ -11,7 +11,7 @@ from pathlib import Path
 from bonfire._safe_read import MAX_CHECKPOINT_BYTES, safe_read_capped_text
 from bonfire._safe_write import safe_append_text
 from bonfire.models.events import (
-    BonfireEvent,  # noqa: TC001 — runtime use for model_dump()
+    BonfireEvent,
     _validate_session_id,
 )
 

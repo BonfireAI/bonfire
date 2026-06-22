@@ -65,11 +65,11 @@ class _CountingStr(str):
 
     eq_calls = 0
 
-    def __eq__(self, other: object) -> bool:  # noqa: D105
+    def __eq__(self, other: object) -> bool:
         type(self).eq_calls += 1
         return str.__eq__(self, other)
 
-    def __hash__(self) -> int:  # noqa: D105
+    def __hash__(self) -> int:
         return str.__hash__(self)
 
 
@@ -86,7 +86,7 @@ class _CountingLowerStr(str):
 
     lower_calls = 0
 
-    def lower(self) -> str:  # noqa: D102
+    def lower(self) -> str:
         type(self).lower_calls += 1
         return str.lower(self)
 

@@ -80,7 +80,7 @@ def detect_github_repo(repo_path: str | Path = ".") -> str:
     """
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
+            ["git", "remote", "get-url", "origin"],  # noqa: S607
             capture_output=True,
             text=True,
             cwd=str(repo_path),

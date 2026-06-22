@@ -270,7 +270,7 @@ def _make_engine(
     config: PipelineConfig | None = None,
     handlers: dict[str, Any] | None = None,
     gate_registry: dict[str, Any] | None = None,
-):  # noqa: ANN201 — engine is lazily imported
+):
     from bonfire.engine.pipeline import PipelineEngine
 
     return PipelineEngine(
@@ -442,7 +442,7 @@ class TestPipelineEngineConstructor:
             backend=_MockBackend(),
             bus=EventBus(),
             config=PipelineConfig(),
-            project_root="/tmp/proj",
+            project_root="/tmp/proj",  # noqa: S108
         )
         assert engine is not None
 

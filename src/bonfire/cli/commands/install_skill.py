@@ -85,7 +85,7 @@ def _bundled_skill_files() -> dict[str, bytes]:
     return files
 
 
-def install_skill(
+def install_skill(  # noqa: C901,PLR0915
     target: str = typer.Option(
         _DEFAULT_TARGET,
         "--target",

@@ -80,7 +80,7 @@ def _patch_available_with(monkeypatch: pytest.MonkeyPatch, names: list[str]) -> 
     CLI's f-string write path.
     """
 
-    def _fake_available(self):  # noqa: ANN001 — pytest monkeypatch contract
+    def _fake_available(self):
         return list(names)
 
     monkeypatch.setattr(

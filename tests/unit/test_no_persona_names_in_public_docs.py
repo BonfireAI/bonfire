@@ -159,12 +159,12 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # shifts these anchors and the test fires.
         (
             "README.md",
-            362,
+            366,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            363,
+            367,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----

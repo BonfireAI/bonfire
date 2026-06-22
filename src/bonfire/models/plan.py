@@ -145,7 +145,7 @@ class WorkflowPlan(BaseModel):
         color: dict[str, int] = {name: white for name in stage_names}
         parent: dict[str, str | None] = {name: None for name in stage_names}
 
-        # recursion: bounded by stage count — DFS colors each node once over a finite graph
+        # recursion: bounded by stage count (each node colored once)
         def _dfs(node: str) -> list[str] | None:
             """Return the cycle path if found, else None."""
             color[node] = gray

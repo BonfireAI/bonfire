@@ -535,7 +535,7 @@ def _is_case_insensitive_fs() -> bool:
     return sys.platform == "darwin" or sys.platform == "win32"
 
 
-# recursion: bounded by finite path-prefix strips — each call removes one UNC/extended-length marker; no marker terminates
+# recursion: bounded by finite path-prefix strips (one marker per call)
 def _match_write_edit_sensitive_path(file_path: str) -> bool:
     r"""Return True if ``file_path`` resolves under any deny prefix.
 
@@ -794,7 +794,7 @@ def _split_chain(segment: str) -> list[str]:
     return [p for p in parts if p]
 
 
-# recursion: bounded by command-substitution nesting depth of a finite input segment
+# recursion: bounded by substitution nesting of a finite segment
 def _extract_substitutions(segment: str) -> list[str]:
     """Return the inner bodies of $(...) and `...` in ``segment``.
 

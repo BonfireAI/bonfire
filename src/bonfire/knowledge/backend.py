@@ -98,7 +98,7 @@ class LanceDBBackend:
         try:
             results = self._table.search().where(f"content_hash = '{safe_hash}'").limit(1).to_list()
             return len(results) > 0
-        except Exception:  # noqa: BLE001
+        except (RuntimeError, OSError, ValueError):
             return False
 
     async def get_by_source(self, source_path: str) -> list[VaultEntry]:

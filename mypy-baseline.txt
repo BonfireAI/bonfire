@@ -34,6 +34,7 @@ src/bonfire/handlers/merge_preflight.py:0: error: Argument "sibling_status" to "
 src/bonfire/dispatch/security_hooks.py:0: error: Unused "type: ignore" comment  [unused-ignore]
 src/bonfire/dispatch/security_hooks.py:0: error: List item 0 has incompatible type "Callable[[dict[Any, Any], str, dict[Any, Any]], Awaitable[dict[str, Any]]]"; expected "Callable[[PreToolUseHookInput | PostToolUseHookInput | PostToolUseFailureHookInput | UserPromptSubmitHookInput | StopHookInput | SubagentStopHookInput | PreCompactHookInput | NotificationHookInput | SubagentStartHookInput | PermissionRequestHookInput, str | None, HookContext], Awaitable[AsyncHookJSONOutput | SyncHookJSONOutput]]"  [list-item]
 src/bonfire/knowledge/backend.py:0: error: Cannot find implementation or library stub for module named "lancedb"  [import-not-found]
+src/bonfire/knowledge/backend.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 src/bonfire/knowledge/backend.py:0: error: Cannot find implementation or library stub for module named "pyarrow"  [import-not-found]
 src/bonfire/dispatch/pydantic_ai_backend.py:0: error: Cannot find implementation or library stub for module named "pydantic_ai"  [import-not-found]
 src/bonfire/dispatch/pydantic_ai_backend.py:0: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports

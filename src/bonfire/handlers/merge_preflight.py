@@ -370,8 +370,6 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
         return ()
     except ET.ParseError:
         return ()
-    except Exception:  # pragma: no cover - belt-and-suspenders  # noqa: BLE001
-        return ()
 
     root = tree.getroot()
     failing: list[FailingTest] = []
@@ -482,9 +480,7 @@ async def detect_sibling_prs(
 
     try:
         prs = await client.list_open_prs(base, exclude=current_pr_number)
-    except RuntimeError:
-        return ({}, "error")
-    except Exception:  # pragma: no cover - defensive  # noqa: BLE001
+    except (RuntimeError, OSError):
         return ({}, "error")
 
     files_by_pr: dict[int, frozenset[str]] = {}
@@ -696,7 +692,7 @@ class MergePreflightHandler:
                 sibling_diff = await self._github_client.get_pr_diff(
                     sibling_pr_n,
                 )
-            except Exception:  # noqa: BLE001
+            except (RuntimeError, OSError):
                 logger.warning(
                     "merge_preflight.sibling_diff_fetch_failed pr=%d",
                     sibling_pr_n,

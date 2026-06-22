@@ -3,8 +3,8 @@
     "src/bonfire/dispatch/security_hooks.py": 1329,
     "src/bonfire/dispatch/security_patterns.py": 521,
     "src/bonfire/engine/pipeline.py": 990,
-    "src/bonfire/handlers/merge_preflight.py": 1029,
-    "src/bonfire/handlers/sage_correction_bounce.py": 923,
+    "src/bonfire/handlers/merge_preflight.py": 1025,
+    "src/bonfire/handlers/sage_correction_bounce.py": 924,
     "src/bonfire/onboard/config_generator.py": 873,
     "src/bonfire/prompt/compiler.py": 520,
     "tests/integration/test_budget_enforcement.py": 508,
@@ -54,11 +54,11 @@
   },
   "packages": {
     "src/bonfire/dispatch": 2865,
-    "src/bonfire/engine": 1900,
-    "src/bonfire/handlers": 3123,
+    "src/bonfire/engine": 1903,
+    "src/bonfire/handlers": 3120,
     "src/bonfire/onboard": 4328,
     "src/bonfire/prompt": 773,
     "tests/integration": 1363,
-    "tests/unit": 72072
+    "tests/unit": 72935
   }
 }

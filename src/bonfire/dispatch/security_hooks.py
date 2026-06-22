@@ -978,7 +978,7 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
     if isinstance(cmd, bytes):
         try:
             return cmd.decode("utf-8", errors="replace")
-        except Exception:  # noqa: BLE001
+        except (UnicodeDecodeError, ValueError):
             return ""
     if not isinstance(cmd, str):
         return ""
@@ -1114,7 +1114,7 @@ def build_preexec_hook(  # noqa: C901,PLR0915
     try:
         _user_patterns_compiled = _compile_user_patterns(list(user_patterns_source))
         _user_patterns_error = None
-    except Exception as exc:  # noqa: BLE001 — surface as DENY in hook body
+    except (re.error, TypeError) as exc:
         _user_patterns_compiled = None
         _user_patterns_error = exc
 

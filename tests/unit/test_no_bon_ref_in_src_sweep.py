@@ -29,7 +29,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = _REPO_ROOT / "src" / "bonfire"
 
-# Regex matching the canonical ticket-ref shape (e.g. ``BON-338``).
+# Regex matching the canonical ticket-ref shape (e.g. ``BON-NNNN``).
 # Note: ``BON-W5.3``-style refs do NOT match (W is not a digit) — those
 # are intentionally out of scope for this sweep.
 _BON_REF = re.compile(r"BON-\d+")

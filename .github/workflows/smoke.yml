@@ -1,6 +1,6 @@
 name: Smoke
 
-# BON-354 — release-artifact smoke gate.
+# Release-artifact smoke gate.
 #
 # Builds the v0.1.0 wheel + sdist, twine-checks both, then installs each
 # into a fresh venv and runs `tests/smoke/smoke_test.py` (stdlib only, no
@@ -10,8 +10,7 @@ name: Smoke
 # Mocked-only: this workflow does NOT use any LLM API key. The real-key
 # leg lives in the local `tests/e2e/scripts/e2e-box.sh` per
 # `docs/release-gates.md` §"E2E box · Local execution only · Never runs
-# in CI." The `bonfire dispatch` CLI verb is deferred to v0.1.1 (BON-633)
-# per BON-354 comment 9503cd7f.
+# in CI." The `bonfire dispatch` CLI verb is deferred to a later release.
 
 on:
   push:
@@ -29,8 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         # Today only 3.12 is declared in `pyproject.toml` classifiers.
-        # Add 3.13 here once the classifier lands (scout report §5
-        # out-of-scope row 3, D-FT BON-354-FT-7).
+        # Add 3.13 here once the classifier lands in pyproject.toml.
         python-version: ["3.12"]
     steps:
       - name: Checkout

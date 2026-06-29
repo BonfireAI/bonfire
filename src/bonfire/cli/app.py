@@ -215,6 +215,26 @@ def scan(
     _lazy_run("bonfire.cli.commands.scan", "scan")(**scan_kwargs)
 
 
+@app.command("run")
+def run(
+    prompt: str = typer.Argument(..., help="The task for the build pipeline to perform."),
+    budget: float | None = typer.Option(
+        None,
+        "--budget",
+        "-b",
+        help="Maximum spend in USD for this run. Defaults to the plan's budget.",
+    ),
+    workflow: str = typer.Option(
+        "standard_build",
+        "--workflow",
+        "-w",
+        help="Workflow plan to run. Use a name from the built-in registry.",
+    ),
+) -> None:
+    """Drive a prompt through a workflow plan and the pipeline engine."""
+    _lazy_run("bonfire.cli.commands.run", "run")(prompt=prompt, budget=budget, workflow=workflow)
+
+
 @app.command("status")
 def status() -> None:
     """Show the most recent persisted Bonfire session: workflow, stage, cost."""

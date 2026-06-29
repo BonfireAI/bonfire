@@ -62,6 +62,9 @@
     "tests/unit/test_session_lifecycle_cli.py": {
       "purpose": "new e2e coverage for the status/resume/handoff verbs"
     },
+    "tests/unit/test_run_command.py": {
+      "purpose": "unit coverage for the run verb (prompt to plan to engine driver)"
+    },
     "tests/unit/test_sqlite_vault.py": {
       "purpose": "contract + persistence coverage for the sqlite vault backend"
     }

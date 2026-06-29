@@ -31,6 +31,8 @@ def get_vault_backend(
 
     - ``enabled=False`` → :class:`InMemoryVaultBackend`
     - ``backend="memory"`` → :class:`InMemoryVaultBackend`
+    - ``backend="sqlite"`` → :class:`SqliteVaultBackend` (persistent, stdlib
+      only; ``vault_path`` is the database file, ``":memory:"`` for ephemeral)
     - ``backend="lancedb"`` → :class:`LanceDBBackend`
     - anything else → :class:`InMemoryVaultBackend` (safe fallback)
     """
@@ -38,6 +40,11 @@ def get_vault_backend(
         from bonfire.knowledge.memory import InMemoryVaultBackend
 
         return InMemoryVaultBackend()
+
+    if backend == "sqlite":
+        from bonfire.knowledge.sqlite_backend import SqliteVaultBackend
+
+        return SqliteVaultBackend(db_path=vault_path)
 
     if backend == "lancedb":
         from bonfire.knowledge.backend import LanceDBBackend

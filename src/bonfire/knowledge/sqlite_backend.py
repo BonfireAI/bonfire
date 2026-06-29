@@ -13,9 +13,10 @@ Retrieval is **honest keyword search**, not semantic search. ``query`` does
 exactly what :class:`~bonfire.knowledge.memory.InMemoryVaultBackend` does: it
 splits the query into words and scores each entry by how many of those words
 appear as a case-insensitive substring of the entry's content -- no
-embeddings, no vectors. SQLite ``LIKE`` is used only as a parameterized
-prefilter to avoid scanning unmatched rows; the final scoring and ranking
-mirror the in-memory backend byte-for-byte.
+embeddings, no vectors. It reads the rows with a static ``SELECT`` (optionally
+narrowed by ``entry_type``) and does the scoring and ranking in Python, which
+mirrors the in-memory backend byte-for-byte. The SQL carries only bound
+parameters -- no value is ever formatted into a statement string.
 
 The async methods wrap synchronous ``sqlite3`` calls (the same pattern the
 in-memory backend uses) -- no ``aiosqlite`` or other added dependency.
@@ -29,17 +30,31 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import TYPE_CHECKING
 
 from bonfire.knowledge.hasher import content_hash as compute_hash
 from bonfire.protocols import VaultEntry
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-
 # Forward-only schema version. Bump only alongside a migration step in
 # ``_ensure_schema``; never rewrite history.
 _SCHEMA_VERSION = 1
+
+# Static statements. Every value is bound (``?``); no identifier or value is
+# ever formatted into the SQL string. The INSERT column order matches
+# ``_to_row`` (``_TEXT_FIELDS`` then ``tags``, ``metadata``).
+_INSERT_SQL = (
+    "INSERT INTO vault_entries "
+    "(entry_id, content, entry_type, source_path, project_name, "
+    "scanned_at, git_hash, content_hash, tags, metadata) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+    "ON CONFLICT(entry_id) DO UPDATE SET "
+    "content=excluded.content, entry_type=excluded.entry_type, "
+    "source_path=excluded.source_path, project_name=excluded.project_name, "
+    "scanned_at=excluded.scanned_at, git_hash=excluded.git_hash, "
+    "content_hash=excluded.content_hash, tags=excluded.tags, "
+    "metadata=excluded.metadata"
+)
+_SELECT_ALL = "SELECT * FROM vault_entries"
+_SELECT_BY_TYPE = "SELECT * FROM vault_entries WHERE entry_type = ?"
 
 # Ordered VaultEntry fields stored as their own columns. The two structured
 # fields (``tags`` -> JSON array, ``metadata`` -> JSON object) are handled
@@ -143,17 +158,9 @@ class SqliteVaultBackend:
         """
         if not entry.content_hash:
             entry = entry.model_copy(update={"content_hash": compute_hash(entry.content)})
-        columns = (*_TEXT_FIELDS, "tags", "metadata")
-        placeholders = ", ".join("?" for _ in columns)
-        column_list = ", ".join(columns)
         # Upsert by primary key so re-storing the same entry_id replaces the
         # row rather than failing on the PK constraint.
-        updates = ", ".join(f"{col}=excluded.{col}" for col in columns if col != "entry_id")
-        self._conn.execute(
-            f"INSERT INTO vault_entries ({column_list}) VALUES ({placeholders}) "
-            f"ON CONFLICT(entry_id) DO UPDATE SET {updates}",
-            self._to_row(entry),
-        )
+        self._conn.execute(_INSERT_SQL, self._to_row(entry))
         self._conn.commit()
         return entry.entry_id
 
@@ -170,14 +177,15 @@ class SqliteVaultBackend:
         lowercased and split into words; each candidate entry scores one point
         per distinct query word found as a substring of its (lowercased)
         content; only positive-scoring entries are returned, highest score
-        first, capped at *limit*. ``LIKE`` is used purely as a parameterized
-        prefilter; no semantic/vector matching is involved.
+        first, capped at *limit*. The rows are read with a static ``SELECT``
+        (optionally narrowed by ``entry_type``); no semantic/vector matching is
+        involved.
         """
         query_words = query.lower().split()
         if not query_words:
             return []
 
-        rows = self._candidate_rows(query_words, entry_type)
+        rows = self._candidate_rows(entry_type)
         scored: list[tuple[VaultEntry, int]] = []
         for row in rows:
             lowered = row["content"].lower()
@@ -187,33 +195,19 @@ class SqliteVaultBackend:
         scored.sort(key=lambda pair: pair[1], reverse=True)
         return [entry for entry, _ in scored[:limit]]
 
-    def _candidate_rows(
-        self,
-        query_words: Iterable[str],
-        entry_type: str | None,
-    ) -> list[sqlite3.Row]:
-        """Fetch rows where content matches ANY query word (parameterized).
+    def _candidate_rows(self, entry_type: str | None) -> list[sqlite3.Row]:
+        """Read the rows to score, optionally narrowed by ``entry_type``.
 
-        A row scores > 0 in :meth:`query` only if at least one (already
-        lowercased) query word is a substring of the entry's lowercased
-        content, so an OR of ``LIKE`` clauses against ``lower(content)`` is a
-        sound, loss-free prefilter -- it can only over-include. The
-        authoritative scoring in :meth:`query` re-checks every word in Python,
-        so the returned set and ranking match the in-memory backend exactly.
+        The authoritative scoring in :meth:`query` re-checks every query word
+        in Python, exactly as the in-memory backend does, so reading the full
+        table (or the ``entry_type`` slice of it) yields the same result set
+        and ranking. Both statements are static literals carrying only a bound
+        parameter.
         """
-        params: list[object] = []
-        like_clauses: list[str] = []
-        for word in query_words:
-            like_clauses.append("lower(content) LIKE '%' || ? || '%'")
-            params.append(word)
-        where = f"({' OR '.join(like_clauses)})"
-        if entry_type is not None:
-            where += " AND entry_type = ?"
-            params.append(entry_type)
-        cursor = self._conn.execute(
-            f"SELECT * FROM vault_entries WHERE {where}",
-            tuple(params),
-        )
+        if entry_type is None:
+            cursor = self._conn.execute(_SELECT_ALL)
+        else:
+            cursor = self._conn.execute(_SELECT_BY_TYPE, (entry_type,))
         return cursor.fetchall()
 
     async def exists(self, content_hash: str) -> bool:

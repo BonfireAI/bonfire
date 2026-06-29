@@ -84,30 +84,26 @@ class FrontDoorServer:
         self._server: Server | None = None
         self._clients: set[ServerConnection] = set()
         self._html: bytes = b""
-        # Created lazily in start() — an asyncio.Event binds to the loop
-        # current at construction time, so eager creation in __init__ would
-        # break reuse of a server instance across separate event loops.
+        # Created lazily in start() — an asyncio.Event binds to the loop live at
+        # construction, so eager creation here would break reuse of a server
+        # instance across separate event loops. stop() drops them back to None.
         self._shutdown_event: asyncio.Event | None = None
         self._client_connected: asyncio.Event | None = None
         self._had_clients: bool = False
-        # The gate token is generated lazily inside start() so each launch
-        # mints a fresh value (mirroring the lazy-event-binding pattern):
-        # even if a single FrontDoorServer is reused across asyncio.run blocks,
-        # a previous-launch URL cannot drive a current-launch session.
+        # The gate token is minted lazily in start() so each launch gets a fresh
+        # value (mirroring the lazy-event pattern): a reused instance's prior URL
+        # cannot drive a current session.
         self._token: str | None = None
         # Out-of-band token handoff state. ``GET /handoff`` is single-use and
         # has a 30s deadline. Both fields are minted in ``start()`` so each
         # launch gets a fresh window.
         self._handoff_consumed: bool = False
         self._handoff_deadline: float = 0.0
-        # W9 Lane B (H3): flips True when ``_ws_handler`` observes a
-        # client connection close with code 1009 (message-too-big). The
-        # flow layer reads this when ``shutdown_event`` fires so it can
-        # raise :class:`MessageTooLargeError` with a tailored remediation
-        # message ("max 8 KiB") instead of the generic
-        # :class:`BrowserDisconnectedError`. Stays False on normal closes
-        # (browser tab closed, client.close()), so the existing
-        # browser-disconnect surface is preserved.
+        # Flips True when ``_ws_handler`` observes a client close with code
+        # 1009 (message-too-big). The flow layer reads this when
+        # ``shutdown_event`` fires so it can raise :class:`MessageTooLargeError`
+        # ("max 8 KiB") instead of the generic :class:`BrowserDisconnectedError`.
+        # Stays False on normal closes, preserving the browser-disconnect surface.
         self._oversize_disconnect: bool = False
 
     # ------------------------------------------------------------------
@@ -132,45 +128,36 @@ class FrontDoorServer:
     def oversize_disconnect(self) -> bool:
         """True iff the last client disconnect was an oversize close (code 1009).
 
-        Set by ``_ws_handler`` when a ``ConnectionClosed`` carrying close-code
-        1009 (message-too-big) is observed; left False on every other close
-        path (graceful disconnect, ``await ws.close()``, network drop, etc.).
-        Read by ``run_front_door`` after ``shutdown_event`` fires so an
-        oversize close is surfaced with a tailored "max 8 KiB" message
-        instead of the generic browser-disconnect message.
-
-        Reset on every ``start()`` so a re-used server instance does not
-        carry the flag across launches.
+        Set by ``_ws_handler`` on a ``ConnectionClosed`` carrying close-code
+        1009 (message-too-big); left False on every other close path. Read by
+        ``run_front_door`` after ``shutdown_event`` fires so an oversize close
+        is surfaced with a tailored "max 8 KiB" message instead of the generic
+        browser-disconnect message. Reset on every ``start()`` so a re-used
+        instance does not carry the flag across launches.
         """
         return self._oversize_disconnect
 
     async def start(self) -> int:
         """Start the server and return the bound port."""
-        # Create the events here so they bind to the loop running start() —
-        # this also rebinds them when a server instance is reused across loops.
+        # Create the events here so they bind to the loop running start()
+        # (also rebinds them when a server instance is reused across loops).
         self._shutdown_event = asyncio.Event()
         self._client_connected = asyncio.Event()
-        # Reset the oversize-disconnect flag for the new launch so a stale
-        # value from a prior start() cannot leak into this session.
+        # Reset the oversize flag so a stale value from a prior start() can't leak.
         self._oversize_disconnect = False
-        # Mint a fresh per-launch URL-safe gate token. 16 bytes of entropy
-        # (~22 chars of urlsafe-base64) defeats brute-force from same-host
-        # processes during the short scan lifetime. Regenerated on every
-        # start() so re-using a server instance does NOT re-open the
-        # previous launch's CSWSH window.
+        # Mint a fresh per-launch URL-safe gate token (16 bytes of entropy
+        # defeats same-host brute-force over the short scan lifetime).
+        # Regenerated every start() so re-use never re-opens a prior CSWSH window.
         self._token = secrets.token_urlsafe(16)
-        # Reset single-use flag and mint a fresh 30s deadline for the
-        # handoff endpoint. Both are per-launch.
+        # Reset single-use flag + mint a fresh 30s handoff deadline (per-launch).
         self._handoff_consumed = False
         self._handoff_deadline = time.monotonic() + 30.0
         self._html = _load_html()
-        # Origin enforcement happens in ``_process_request`` (rather than via
-        # the ``serve(origins=...)`` kwarg) because the allow-list must
-        # include the bound port, which isn't known until ``serve`` returns
-        # for the random-port case (``port=0``). ``_process_request`` runs
-        # AFTER bind and BEFORE the WS upgrade, so it can enforce both the
-        # Origin allow-list and the token gate in one place for both HTTP
-        # and WS paths.
+        # Origin enforcement lives in ``_process_request`` (not the
+        # ``serve(origins=...)`` kwarg) because the allow-list must include the
+        # bound port, unknown until ``serve`` returns for ``port=0``.
+        # ``_process_request`` runs after bind and before the WS upgrade, so it
+        # gates both the Origin allow-list and the token in one place.
         self._server = await serve(
             self._ws_handler,
             self._host,
@@ -185,12 +172,26 @@ class FrontDoorServer:
         return self._port
 
     async def stop(self) -> None:
-        """Gracefully shut down the server."""
+        """Gracefully shut down the server, symmetric with ``start()``.
+
+        Tears down the network half (``serve`` handle + live-client set) AND
+        resets the per-launch lifecycle latches ``start()`` minted, so a
+        started-then-stopped instance behaves like a never-started one: the
+        event handles drop (their properties raise "unavailable before
+        start()" again, and ``start()`` rebinds them to the next loop) and
+        ``_had_clients`` clears, so a re-used instance does not carry a stale
+        set ``shutdown_event`` or ``_had_clients`` into the next launch.
+        """
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
             self._clients.clear()
+        # Reset lifecycle latches unconditionally so stop() always leaves
+        # never-started state, even on a never-started server.
+        self._shutdown_event = None
+        self._client_connected = None
+        self._had_clients = False
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         """Send a JSON message to all connected WebSocket clients."""
@@ -406,8 +407,7 @@ class FrontDoorServer:
             )
 
         self._handoff_consumed = True
-        # ``self._token`` is guaranteed non-None here because start() mints
-        # it before serve() begins accepting requests.
+        # ``self._token`` is non-None here: start() mints it before serve() accepts.
         body = json.dumps({"token": self._token}).encode("utf-8")
         return Response(
             200,

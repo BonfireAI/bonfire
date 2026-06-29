@@ -215,21 +215,21 @@ def scan(
     _lazy_run("bonfire.cli.commands.scan", "scan")(**scan_kwargs)
 
 
-@app.command("status", help="(stub -- implementation lands in 0.1.x)")
+@app.command("status")
 def status() -> None:
-    """Show current Bonfire session status (stub -- implementation lands in 0.1.x)."""
+    """Show the most recent persisted Bonfire session: workflow, stage, cost."""
     _lazy_run("bonfire.cli.commands.status", "status")()
 
 
-@app.command("resume", help="(stub -- implementation lands in 0.1.x)")
+@app.command("resume")
 def resume() -> None:
-    """Resume a previous Bonfire session (stub -- implementation lands in 0.1.x)."""
+    """Reload the latest checkpoint and re-enter its workflow at the remaining stages."""
     _lazy_run("bonfire.cli.commands.resume", "resume")()
 
 
-@app.command("handoff", help="(stub -- implementation lands in 0.1.x)")
+@app.command("handoff")
 def handoff() -> None:
-    """Generate a session handoff document (stub -- implementation lands in 0.1.x)."""
+    """Render a handoff document from the latest persisted session."""
     _lazy_run("bonfire.cli.commands.handoff", "handoff")()
 
 

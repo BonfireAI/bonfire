@@ -1,61 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Regression tests for ``bonfire handoff`` honesty (W5.F).
+"""Discoverability + honest-labeling tests for the session-lifecycle verbs.
 
-The handoff command is a v0.1 stub that performs no work. The Day-1 release-day
-contract is that the stub must NOT lie about doing work it did not do. These
-tests guard the honest copy: invocation reports the absence-of-state, and the
-``--help`` surface continues to work for discoverability.
+The empty-store / document-rendering honesty contracts live in
+``test_session_lifecycle_cli.py``; this file pins what that one cannot reach
+from the rendered help surface: the verbs stay registered AND no longer
+mislabel themselves as stubs now that they do real work.
 """
 
 from __future__ import annotations
 
-from typer.testing import CliRunner
-
 from bonfire.cli.app import app
 
-runner = CliRunner()
-
-
-class TestHandoffHonesty:
-    """The handoff stub must not claim to have done work it did not do."""
-
-    def test_handoff_invocation_output_is_truthful(self) -> None:
-        """`bonfire handoff` must not lie about generating anything."""
-        result = runner.invoke(app, ["handoff"])
-        assert result.exit_code == 0
-        output_lower = result.output.lower()
-        # MUST NOT claim work was done.
-        assert "generated" not in output_lower, (
-            f"handoff stub must not claim 'generated'; got: {result.output!r}"
-        )
-        # MUST signal absence-of-state. Any of these honest markers is fine.
-        honest_markers = ("not", "no session", "stub", "unimplemented")
-        assert any(marker in output_lower for marker in honest_markers), (
-            f"handoff stub must signal absence-of-state; got: {result.output!r}"
-        )
-
-    def test_handoff_help_still_exits_zero(self) -> None:
-        """`bonfire handoff --help` must continue to work."""
-        result = runner.invoke(app, ["handoff", "--help"])
-        assert result.exit_code == 0
-
-
 # ---------------------------------------------------------------------------
-# Stub commands must label themselves as stubs in ``bonfire --help``
+# The session-lifecycle commands are real now (not stubs) — they must stay
+# discoverable AND must NOT mislabel themselves as stubs in ``bonfire --help``.
 # ---------------------------------------------------------------------------
 
 
 class TestStubCommandLabeling:
-    """``bonfire status / resume / handoff`` are v0.1 stubs.
+    """``bonfire status / resume / handoff`` are real session-lifecycle verbs.
 
     They must:
       1. STILL be registered (discoverability -- users can find them).
-      2. NOT lie in ``bonfire --help`` -- the short-help string must signal
-         that the command is a stub. Pre-fix, the help strings were active-
-         voice promises ("Show current Bonfire session status.") which
-         misled users into expecting working behavior.
+      2. NOT call themselves stubs in ``bonfire --help`` -- they do real work
+         now, so the prior "(stub -- implementation lands in 0.1.x)" labels
+         would be the lie. The help text must describe the real behaviour.
     """
 
     def test_status_command_still_registered(self) -> None:
@@ -93,21 +64,21 @@ class TestStubCommandLabeling:
                 return c.help or (c.callback.__doc__ if c.callback else None) or ""
         return ""
 
-    def test_top_level_help_marks_status_as_stub(self) -> None:
-        """``status`` command's registered help text marks it as a stub."""
+    def test_top_level_help_does_not_mislabel_status_as_stub(self) -> None:
+        """``status`` is real now; its help must not call it a stub."""
         help_text = self._command_help_text("status").lower()
-        assert "stub" in help_text, (
-            f"status help text must mark the command as a stub; got: {help_text!r}"
+        assert "stub" not in help_text, (
+            f"status help text must not call the real command a stub; got: {help_text!r}"
         )
 
-    def test_top_level_help_marks_resume_as_stub(self) -> None:
+    def test_top_level_help_does_not_mislabel_resume_as_stub(self) -> None:
         help_text = self._command_help_text("resume").lower()
-        assert "stub" in help_text, (
-            f"resume help text must mark the command as a stub; got: {help_text!r}"
+        assert "stub" not in help_text, (
+            f"resume help text must not call the real command a stub; got: {help_text!r}"
         )
 
-    def test_top_level_help_marks_handoff_as_stub(self) -> None:
+    def test_top_level_help_does_not_mislabel_handoff_as_stub(self) -> None:
         help_text = self._command_help_text("handoff").lower()
-        assert "stub" in help_text, (
-            f"handoff help text must mark the command as a stub; got: {help_text!r}"
+        assert "stub" not in help_text, (
+            f"handoff help text must not call the real command a stub; got: {help_text!r}"
         )

@@ -49,7 +49,16 @@
     "tests/unit/test_wizard_handler.py": 1343,
     "tests/unit/test_workflow.py": 897,
     "tests/unit/test_ws_token_oob_handoff.py": 673,
-    "tests/unit/test_xp_consumer.py": 587
+    "tests/unit/test_xp_consumer.py": 587,
+    "tests/unit/test_session_store.py": {
+      "purpose": "new coverage for the shared session-read store layer"
+    },
+    "tests/unit/test_session_handoff_doc.py": {
+      "purpose": "new coverage for the handoff-document renderer"
+    },
+    "tests/unit/test_session_lifecycle_cli.py": {
+      "purpose": "new e2e coverage for the status/resume/handoff verbs"
+    }
   },
   "packages": {
     "src/bonfire/dispatch": 2865,

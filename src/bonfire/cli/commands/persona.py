@@ -15,7 +15,15 @@ import typer
 from bonfire._safe_read import safe_read_capped_text
 from bonfire._safe_write import safe_write_text
 from bonfire.persona._toml_writer import emit_persona_assignment
-from bonfire.persona.loader import PersonaLoader
+from bonfire.persona.loader import PersonaLoader, _is_valid_persona_name
+
+# Matches a TOML basic string, consuming backslash-escaped characters
+# (including escaped ``\"``) as part of the value. The naive ``"[^"]*"``
+# class stops at the first ``"`` — even one this module's own writer
+# emitted as ``\\"`` — so an in-place rewrite over an escaped-quote value
+# would replace only the truncated prefix and corrupt the file. This
+# pattern keeps the rewrite whole.
+_TOML_BASIC_STRING = r'"(?:[^"\\]|\\.)*"'
 
 # Hard byte cap on the bonfire.toml read in ``persona set``. The file
 # carries a small TOML config; 1 MiB is comfortably beyond any honest
@@ -91,6 +99,27 @@ def persona_set(
         )
         raise typer.Exit(1)
 
+    # Set/load parity warning. ``PersonaLoader.load`` (and ``validate``)
+    # reject names that fail the slug pattern — path traversal, NUL bytes,
+    # whitespace, uppercase, leading dot/digit — and silently fall back to
+    # ``minimal``. ``available()`` returns persona-directory names verbatim
+    # (no slug filter), so a directory whose name breaks the slug pattern
+    # can be discovered and selected here yet never actually load. Surface
+    # that asymmetry to the operator using the loader's own predicate so the
+    # two surfaces can't drift. This is a warning, not a hard refusal: the
+    # write below still routes the name through the TOML basic-string
+    # escaper, so a hostile or non-slug name yields a parseable bonfire.toml
+    # rather than a corrupt one.
+    if not _is_valid_persona_name(name):
+        typer.echo(
+            f"Warning: persona '{name}' is not a valid persona name "
+            "(must start with a lowercase letter and contain only lowercase "
+            "letters, digits, dashes, or underscores). It will be written to "
+            "bonfire.toml but the loader will reject it and fall back to the "
+            "minimal persona.",
+            err=True,
+        )
+
     toml_path = Path.cwd() / "bonfire.toml"
 
     persona_line = emit_persona_assignment(name)
@@ -146,7 +175,7 @@ def persona_set(
             # are NOT interpreted as re backreferences.
             old_section = bonfire_section.group()
             new_section = re.sub(
-                r'^persona\s*=\s*"[^"]*"',
+                rf"^persona\s*=\s*{_TOML_BASIC_STRING}",
                 lambda _m: persona_line,
                 old_section,
                 count=1,

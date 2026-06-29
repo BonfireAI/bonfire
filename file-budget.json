@@ -31,6 +31,9 @@
     "tests/unit/test_onboard_scanner_mcp_servers.py": 863,
     "tests/unit/test_onboard_scanner_vault_seed.py": 532,
     "tests/unit/test_onboard_server.py": 996,
+    "tests/unit/test_persona_cli_hardening.py": {
+      "purpose": "persona set escaped-quote rewrite + slug-validation parity contract"
+    },
     "tests/unit/test_persona_loader.py": 526,
     "tests/unit/test_plan.py": 655,
     "tests/unit/test_prompt_compiler.py": 1256,

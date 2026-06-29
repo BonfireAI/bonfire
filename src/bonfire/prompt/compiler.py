@@ -79,10 +79,17 @@ class PromptCompiler:
 
         Two-tier discovery (same as templates):
         1. ``self.project_root / "agents" / role / "identity_block.md"``
-        2. Bundled default at ``bonfire.prompt.templates/{role}_identity.md``
+        2. Bundled default in the ``bonfire/prompt/templates/`` package data
+           directory as ``{role}_identity.md``.
+
+        The bundled tier anchors on the ``bonfire.prompt`` package and then
+        descends into the ``templates`` data directory. It deliberately does
+        NOT anchor on ``bonfire.prompt.templates`` directly: that name is
+        shadowed by the sibling ``templates.py`` module, so resolving it would
+        point at the package root instead of the data directory.
 
         Args:
-            role: The agent role name (e.g., "scout", "knight").
+            role: The agent role name (e.g., "researcher", "tester").
 
         Returns:
             A parsed PromptTemplate, or ``None`` if no identity block exists.
@@ -93,9 +100,11 @@ class PromptCompiler:
             if local_path.exists():
                 return PromptTemplate.from_file(local_path)
 
-        # Tier 2: bundled defaults
+        # Tier 2: bundled defaults (templates/ data dir, anchored on the package)
         try:
-            resource = importlib.resources.files("bonfire.prompt.templates") / f"{role}_identity.md"
+            resource = (
+                importlib.resources.files("bonfire.prompt") / "templates" / f"{role}_identity.md"
+            )
             with importlib.resources.as_file(resource) as bundled_path:
                 if bundled_path.exists():
                     return PromptTemplate.from_file(bundled_path)
@@ -149,7 +158,15 @@ class PromptCompiler:
 
         Two-tier discovery:
         1. ``self.project_root / "agents" / role / "prompt.md"``
-        2. Bundled default at ``bonfire.prompt.templates/{role}.md``
+        2. Bundled default in the ``bonfire/prompt/templates/`` package data
+           directory as ``{role}.md``.
+
+        Like ``load_identity_block``, the bundled tier anchors on the
+        ``bonfire.prompt`` package and descends into the ``templates`` data
+        directory. It deliberately does NOT anchor on
+        ``bonfire.prompt.templates`` directly: that name is shadowed by the
+        sibling ``templates.py`` module, so resolving it would point at the
+        package root instead of the data directory.
 
         Args:
             role: The agent role name (e.g., "scout", "knight").
@@ -167,9 +184,9 @@ class PromptCompiler:
             if local_path.exists():
                 return PromptTemplate.from_file(local_path)
 
-        # Tier 2: bundled defaults
+        # Tier 2: bundled defaults (templates/ data dir, anchored on the package)
         try:
-            resource = importlib.resources.files("bonfire.prompt.templates") / f"{role}.md"
+            resource = importlib.resources.files("bonfire.prompt") / "templates" / f"{role}.md"
             with importlib.resources.as_file(resource) as bundled_path:
                 if bundled_path.exists():
                     return PromptTemplate.from_file(bundled_path)

@@ -75,8 +75,25 @@ docker build \
   "$REPO_ROOT/tests/e2e"
 
 FIXTURE_DIR="$OUT_DIR/target"
-echo "==> Cloning fixture on host (SSH — credentials never enter the box)"
-git clone git@github.com:BonfireAI/bonfire-e2e-fixture.git "$FIXTURE_DIR"
+# Fixture source. Materialized host-side and bind-mounted into the container, so
+# no host credential (SSH key, gh token, git credential helper) ever enters the
+# box — the credential-isolation property. Transport is configurable so the box
+# runs in HTTPS-only / no-SSH environments:
+#   - FIXTURE_SRC_DIR: path to a pre-cloned fixture checkout. Cloned locally (a
+#     throwaway per-run copy) so the operator's source dir is never mutated and
+#     no network fetch is needed at all.
+#   - FIXTURE_URL: remote to clone from. Defaults to HTTPS (the gh token
+#     authenticates it via git's credential helper); the historical SSH URL
+#     required an SSH key on the host and dies with "Permission denied
+#     (publickey)" on a keyless box.
+FIXTURE_URL="${FIXTURE_URL:-https://github.com/BonfireAI/bonfire-e2e-fixture.git}"
+if [ -n "${FIXTURE_SRC_DIR:-}" ]; then
+    echo "==> Cloning fixture from pre-cloned FIXTURE_SRC_DIR=$FIXTURE_SRC_DIR (host-side; credentials never enter the box)"
+    git clone "$FIXTURE_SRC_DIR" "$FIXTURE_DIR"
+else
+    echo "==> Cloning fixture on host ($FIXTURE_URL — credentials never enter the box)"
+    git clone "$FIXTURE_URL" "$FIXTURE_DIR"
+fi
 (cd "$FIXTURE_DIR" && git checkout "$FIXTURE_REF")
 
 echo "==> Running box — run_id=$RUN_ID wave=$WAVE fixture=$FIXTURE_REF auth=$AUTH_MODE"

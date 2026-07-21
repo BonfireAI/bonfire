@@ -51,10 +51,28 @@ elif [ -f "$HOME/.claude/.credentials.json" ]; then
     # may refresh tokens during the run; we don't want to mutate the host file.
     AUTH_MODE="oauth"
     OAUTH_COPY="$OUT_DIR/.credentials.json"
-    cp "$HOME/.claude/.credentials.json" "$OAUTH_COPY"
+    # Copy ONLY the claudeAiOauth block into the container-mounted credential
+    # file. The host's ~/.claude/.credentials.json also holds unrelated OAuth
+    # tokens (e.g. designOauth, and mcpOAuth for Vercel/Stripe/Supabase/Linear/
+    # MercadoPago/Sanity); none of those belong in the box. claude-cli reads and
+    # refreshes only the claudeAiOauth block, so the stripped file is sufficient
+    # for in-container auth while carrying no unrelated secrets. Create the file
+    # empty at mode 0600 BEFORE writing the token so it is never momentarily
+    # world-readable ('w' truncates but preserves the pre-set mode).
+    : > "$OAUTH_COPY"
     chmod 0600 "$OAUTH_COPY"
+    python3 -c "
+import json, sys
+src, dst = sys.argv[1], sys.argv[2]
+with open(src) as fh:
+    creds = json.load(fh)
+if 'claudeAiOauth' not in creds:
+    sys.exit('FAIL: no claudeAiOauth block in ' + src)
+with open(dst, 'w') as fh:
+    json.dump({'claudeAiOauth': creds['claudeAiOauth']}, fh)
+" "$HOME/.claude/.credentials.json" "$OAUTH_COPY"
     AUTH_ARGS+=(-v "$OAUTH_COPY:/home/box/.claude/.credentials.json")
-    echo "==> Auth mode: Claude Max OAuth (via $HOME/.claude/.credentials.json)"
+    echo "==> Auth mode: Claude Max OAuth (claudeAiOauth block only, via $HOME/.claude/.credentials.json)"
 else
     echo "FAIL: no auth available on host." >&2
     echo "  Provide ONE of:" >&2

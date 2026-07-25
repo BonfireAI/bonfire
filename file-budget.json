@@ -67,6 +67,18 @@
     },
     "tests/unit/test_sqlite_vault.py": {
       "purpose": "contract + persistence coverage for the sqlite vault backend"
+    },
+    "tests/e2e/scripts/e2e-runner.sh": {
+      "purpose": "release-gate box runner: one linear phase sequence (install the wheel under test, prove its provenance and its dependency floors, execute bonfire run, observe, grade, arbitrate the verdict). Over the 500-line guideline and shrink-only: the phases share the trap-guaranteed verdict emitter and the failure-reason vocabulary, so splitting them across files would duplicate that state rather than reduce it, and roughly half the file is the comment surface a reviewer needs to answer which artifact was installed and which command was run.",
+      "baseline": 779,
+      "measured": 968,
+      "note": "THE BASELINE IS NOT MOVED BY THIS WORK, and the file is over it. 779 already understated the file before this defect pass touched it (it measured 843 at the parent commit); the balance to 968 is this pass's own growth \u2014 the container-side WAVE shape check, the gate-verdict quarantine, and carrying the runner's failure reasons into a verdict the fixture gate already wrote. Recorded as declared debt rather than as a re-baseline: raising a shrink-only number by the very change it constrains is a ratchet loosening, and only a maintainer may ratify one. Bringing this file back under 779 is a standalone refactor, not a rider on a defect pass \u2014 and it must not be paid for by deleting the comment surface this entry names as the reason for the size. NOTE: the file-budget gate walks .py files only, so this entry is a documented, self-imposed budget rather than a gate-enforced one."
+    },
+    "tests/e2e/scripts/e2e-box.sh": {
+      "purpose": "release-gate box host driver: auth detection, wheel build + provenance manifest, image build with an explicit cache policy, container launch, verdict readout. Shrink-only, and under the 500-line SOLID guideline.",
+      "baseline": 357,
+      "measured": 373,
+      "note": "THE BASELINE IS NOT MOVED BY THIS WORK, and the file is 16 lines over it. Those lines are the <wave> usage guard \u2014 a missing, empty or non-integer argument now exits 7 rather than taking bash's ${1:?...} status of 1, which is the code reserved for a FAIL verdict \u2014 plus its rationale comment. Declared as debt for a maintainer to rule on rather than folded into a raised number. NOTE: the file-budget gate walks .py files only, so this entry is a documented, self-imposed budget rather than a gate-enforced one."
     }
   },
   "packages": {

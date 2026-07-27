@@ -99,21 +99,21 @@ def _build_header(project_name: str) -> tuple[str, dict[str, str]]:
     return "\n".join(lines), {}
 
 
-def _build_persona(
+def _build_profile(
     profile: dict[str, str],
 ) -> tuple[str, dict[str, str]] | None:
-    """Build [bonfire.persona] section from conversation profile."""
+    """Build [bonfire.profile] (NOT persona: see test_config_round_trip.py)."""
     if not profile:
         return None
     annotations: dict[str, str] = {}
     lines = [
         "",
-        "[bonfire.persona]",
+        "[bonfire.profile]",
         "# Derived from conversation",
     ]
     for key, value in profile.items():
         lines.append(f'{key} = "{escape_basic_string(value)}"')
-        annotations[f"persona.{key}"] = "Conversation"
+        annotations[f"profile.{key}"] = "Conversation"
     return "\n".join(lines), annotations
 
 

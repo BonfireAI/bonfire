@@ -45,20 +45,71 @@ def _get_loader() -> PersonaLoader:
     return PersonaLoader(builtin_dir=builtin_dir, user_dir=user_dir)
 
 
-def _get_active_persona() -> str:
-    """Read the active persona from bonfire.toml, or return default."""
+def _get_active_persona() -> str | None:
+    """Read the active persona from bonfire.toml.
+
+    Returns the configured name, ``_DEFAULT_PERSONA`` when no config
+    exists (the default genuinely applies), or ``None`` when a config
+    exists and could not be read.
+
+    ``None`` rather than the default in that last case, because the two
+    are not the same claim. Falling back to the default made
+    ``persona list`` print ``falcor (active)`` off an unreadable file —
+    a statement about the project's state derived from no state at all.
+    A caller that cannot find out has to say it cannot find out.
+    """
     toml_path = Path.cwd() / "bonfire.toml"
     if toml_path.exists():
         try:
             with toml_path.open("rb") as f:
                 data = tomllib.load(f)
-            return data.get("bonfire", {}).get("persona", _DEFAULT_PERSONA)
-        except (tomllib.TOMLDecodeError, OSError):
+        except (tomllib.TOMLDecodeError, OSError) as exc:
+            typer.echo(f"Error: cannot read bonfire.toml: {exc}", err=True)
+            return None
+        persona = data.get("bonfire", {}).get("persona", _DEFAULT_PERSONA)
+        # A ``[bonfire.persona]`` table parses fine and is not a name.
+        # Reporting a dict as the active persona would be the same
+        # invented-state failure one layer down.
+        if not isinstance(persona, str):
             typer.echo(
-                "Warning: bonfire.toml failed to parse; falling back to default persona.",
+                "Error: bonfire.toml sets 'bonfire.persona' to a table, not a "
+                "persona name. Rename that section to '[bonfire.profile]' and "
+                "re-run.",
                 err=True,
             )
+            return None
+        return persona
     return _DEFAULT_PERSONA
+
+
+def _reject_unparseable_rewrite(content: str, toml_path: Path) -> None:
+    """Exit non-zero if *content* is not loadable TOML, leaving disk alone.
+
+    Raises:
+        typer.Exit: Code 1 when *content* does not parse. The file at
+            *toml_path* is not touched, so a refused ``persona set``
+            leaves the operator exactly where they started rather than
+            one step further into a broken config.
+    """
+    try:
+        tomllib.loads(content)
+    except tomllib.TOMLDecodeError as exc:
+        typer.echo(
+            f"Error: rewriting {toml_path} would produce invalid TOML "
+            f"({exc}). Nothing was written.",
+            err=True,
+        )
+        # The one shape this is known to hit in the wild: configs written
+        # by ``bonfire scan`` on 1.0.1 carry a ``[bonfire.persona]``
+        # table, and TOML cannot hold a key and a table under one name.
+        if re.search(r"^\s*\[bonfire\.persona\]", content, re.MULTILINE):
+            typer.echo(
+                "This config has a '[bonfire.persona]' section, which collides "
+                "with the 'persona' key this command sets. Rename that section "
+                "to '[bonfire.profile]' and re-run.",
+                err=True,
+            )
+        raise typer.Exit(code=1) from None
 
 
 @persona_app.command("list")
@@ -74,13 +125,23 @@ def persona_list() -> None:
 
     typer.echo("Available personas:")
     for name in available:
-        if name == active:
+        if active is not None and name == active:
             typer.echo(f"  ▸ {name} (active)")
         else:
             typer.echo(f"    {name}")
 
     user_dir = Path.home() / ".bonfire" / "personas"
     typer.echo(f"\nInstall custom personas to: {user_dir}")
+
+    # Listing what is installed still succeeded; reporting which one is
+    # active did not. Exit non-zero so a script reading the status code
+    # is not told the whole command worked.
+    if active is None:
+        typer.echo(
+            "\nThe active persona is unknown because bonfire.toml could not be read.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @persona_app.command("set")
@@ -192,6 +253,15 @@ def persona_set(
         else:
             # No [bonfire] section — append it
             content += f"\n[bonfire]\n{persona_line}\n"
+        # Verify the rewrite before committing it to disk. Every branch
+        # above is a text edit -- regex substitution or string splice --
+        # over a file this command did not write and does not model. A
+        # text edit that produces invalid TOML is indistinguishable from
+        # a successful one until something tries to read the result, and
+        # the something is the user, later. Parsing here is what turns
+        # "wrote bytes" into "wrote a config", and it is what the
+        # ``Persona set to:`` line below is allowed to claim.
+        _reject_unparseable_rewrite(content, toml_path)
         # ``allow_existing=True`` — we read this file's content one
         # line above and are deliberately rewriting it. The symlink
         # refusal is unconditional inside ``safe_write_text``; only

@@ -4,6 +4,44 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `bonfire scan` wrote a `bonfire.toml` the runtime could not load. The
+  onboarding answers were emitted as a `[bonfire.persona]` sub-table
+  while `bonfire.persona` is the persona *name*, a string, so every
+  generated config failed validation. The answers now go to
+  `[bonfire.profile]`, which the settings model declares, and a config
+  written by `scan` loads back with the values intact.
+- `bonfire persona set <name>` corrupted `bonfire.toml` into
+  unparseable TOML while printing `Persona set to: <name>` and exiting
+  0. It now parses the rewritten content before writing, and refuses
+  with exit 1 and an actionable message rather than replacing a working
+  config with a broken one.
+- `bonfire persona list` reported a persona as active when it had
+  failed to read `bonfire.toml`, printing the fallback name next to the
+  warning saying the file was unreadable. It now marks nothing active
+  and exits non-zero when the config cannot be read.
+- Configs written by `bonfire scan` on 1.0.1 are migrated on load: a
+  legacy `[bonfire.persona]` table is relocated to `bonfire.profile`.
+
+### Changed
+
+- README: the "What's Not There Yet" list is re-derived against the
+  current tree. `bonfire run` exists and is documented; `status`,
+  `resume` and `handoff` are implementations rather than stubs; four
+  bundled identity blocks ship; a persistent SQLite knowledge backend
+  ships in the base install. The list now names what is actually
+  missing, including that the `standard_build` workflow does not reach
+  its last stage.
+
+### Added
+
+- A version-truth guard: `pyproject.toml`, what `bonfire --version`
+  prints, the `__version__` import fallback and the newest CHANGELOG
+  release heading must all agree, checked on every run of the suite.
+
 ## [1.0.1] — 2026-05-17
 
 Docs-only release. README repositioned for marketing impact on the

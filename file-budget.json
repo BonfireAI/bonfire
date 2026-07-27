@@ -94,6 +94,12 @@
     },
     "tests/integration/test_claude_workflow_author_guard.py": {
       "purpose": "structural guard on the agent workflow's author_association allow-list, derived from the workflow's own on: block so a trigger added without a guard fails here"
+    },
+    "tests/integration/test_config_round_trip.py": {
+      "purpose": "writes bonfire.toml with the real generator and loads it with the real BonfireSettings, which the per-fragment emitter tests structurally cannot: they parse each builder's output in isolation, so a section that was valid TOML and unloadable passed them. Also pins that persona set refuses rather than corrupting, and that persona list never reports an active persona off a config it could not read"
+    },
+    "tests/unit/test_version_truth.py": {
+      "purpose": "pins pyproject's version, what bonfire --version prints, the __version__ import fallback and the newest CHANGELOG heading to one value, restoring on every run the guard that release.yml lost when the tree was reconciled to the published product line"
     }
   },
   "packages": {

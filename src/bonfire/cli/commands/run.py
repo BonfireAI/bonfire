@@ -49,23 +49,20 @@ class _EngineFactory(Protocol):
 def _default_engine(plan: WorkflowPlan) -> PipelineEngine:
     """Wire a :class:`PipelineEngine` around the live SDK backend.
 
-    This is the real-network path: it builds the Claude Agent SDK backend,
-    a fresh event bus, and pulls the pipeline config from the loaded
-    settings. Unit tests never call this — they inject their own factory.
-    """
-    from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
-    from bonfire.engine.factory import load_settings_or_default
-    from bonfire.engine.pipeline import PipelineEngine
-    from bonfire.events.bus import EventBus
+    This is the real-network path, and it is what a user gets. The wiring
+    itself lives in :mod:`bonfire.engine.composition` so that it can be
+    called by tests directly rather than only through an injected factory:
+    a composition root nothing exercises is a composition root nothing
+    catches, and this one previously shipped without ``handlers=``,
+    ``gate_registry=``, ``tool_policy=`` or ``project_root=``.
 
-    settings = load_settings_or_default()
-    bus = EventBus()
-    return PipelineEngine(
-        backend=ClaudeSDKBackend(bus=bus),
-        bus=bus,
-        config=settings.bonfire,
-        settings=settings,
-    )
+    Raises:
+        WiringError: If the plan names a handler or gate the built-in
+            registries cannot supply. Raised before anything is dispatched.
+    """
+    from bonfire.engine.composition import build_default_engine
+
+    return build_default_engine(plan)
 
 
 def _select_plan(prompt: str, *, budget: float | None, workflow: str) -> WorkflowPlan:
@@ -117,8 +114,11 @@ def _run(
 
     Raises:
         typer.Exit: Always — code 0 on success, 1 on failure, 2 on an
-            unknown ``--workflow`` name.
+            unknown ``--workflow`` name or a plan the engine cannot be
+            wired for.
     """
+    from bonfire.engine.composition import WiringError
+
     try:
         plan = _select_plan(prompt, budget=budget, workflow=workflow)
     except KeyError as exc:
@@ -126,7 +126,17 @@ def _run(
         typer.echo(str(exc).strip("\"'"), err=True)
         raise typer.Exit(2) from None
 
-    engine = build_engine(plan)
+    # A plan naming an unregistered handler or gate is a configuration
+    # problem, not a run failure: nothing was dispatched and nothing was
+    # billed, so it exits 2 alongside the unknown-workflow case rather than
+    # 1. Without this the two omissions fail asymmetrically — a missing
+    # handler as a mid-run stage error, a missing gate not at all.
+    try:
+        engine = build_engine(plan)
+    except WiringError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from None
+
     result = asyncio.run(engine.run(plan))
     _render(result)
 

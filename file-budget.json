@@ -7,6 +7,9 @@
     "src/bonfire/handlers/sage_correction_bounce.py": 924,
     "src/bonfire/onboard/config_generator.py": 560,
     "tests/integration/test_budget_enforcement.py": 508,
+    "tests/integration/test_claude_workflow_trust_gate.py": {
+      "purpose": "Pins the author_association allow-list on .github/workflows/claude.yml: every trigger in `on:` is gated on the association of the author supplying the prompt, each check is an exact fromJSON membership test rather than a substring match, and the allow-list equals OWNER/MEMBER/COLLABORATOR. Declared rather than drawn against the tests/integration package total, which sits exactly at its frozen 1363. 156 measured lines, well under the 500-line new-file cap, and asserted against the trigger list rather than the expression text so that adding a fifth trigger without a filter fails here."
+    },
     "tests/unit/test_architect_handler.py": 630,
     "tests/unit/test_bard_handler.py": 1345,
     "tests/unit/test_bon_1072_cost_accounting_close.py": 862,

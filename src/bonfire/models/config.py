@@ -53,8 +53,10 @@ class PipelineConfig(BaseModel):
     # giving are reachable instead of silently dropped on load. Kept as
     # a free-form string map because the question set is not a stable
     # contract yet — pinning the keys here would break every config the
-    # day a question is added.
-    profile: dict[str, str] = {}  # noqa: RUF012 - pydantic deep-copies field defaults
+    # day a question is added. The bare ``{}`` default is safe and
+    # matches ``BonfireSettings.agents`` below: pydantic deep-copies
+    # field defaults per instance rather than sharing one object.
+    profile: dict[str, str] = {}
     # Explicit opt-in to ingest the project's ``CLAUDE.md`` /
     # ``.claude/settings.json`` into the dispatched agent's system prompt.
     # File presence alone is NOT enough; this key MUST be ``true``.

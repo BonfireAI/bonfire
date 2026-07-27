@@ -27,7 +27,38 @@
     },
     "bonfire_version": {
       "type": "string",
-      "description": "Installed bonfire-ai version string, e.g. 0.1.0rc1"
+      "description": "Version of the bonfire-ai artifact the box installed and executed, read back from the installed package (not from the prompt, not from PyPI metadata)."
+    },
+    "artifact_under_test": {
+      "type": "object",
+      "description": "Identity of the artifact the box graded. Written host-side by e2e-box.sh when it builds the wheel, verified by sha256 inside the container before install, and merged into this verdict by e2e-runner.sh. A verdict without this block graded an unknown artifact.",
+      "properties": {
+        "wheel": { "type": "string", "description": "Wheel filename, e.g. bonfire_ai-1.0.1-py3-none-any.whl" },
+        "distribution": { "type": "string" },
+        "version": { "type": "string" },
+        "sha256": { "type": "string", "description": "Digest of the wheel file the container installed." },
+        "source_commit": { "type": "string", "description": "Commit the wheel was built from, or 'unknown' outside a git checkout." },
+        "source_dirty": { "type": "string", "enum": ["true", "false", "unknown"], "description": "Whether the source tree had uncommitted changes at build time." },
+        "built_by": { "type": "string", "description": "How the wheel was produced, or the operator-supplied path when BONFIRE_WHEEL was set." }
+      }
+    },
+    "bonfire_execution": {
+      "type": "object",
+      "description": "The `bonfire run` invocation that produced the graded artifacts. Absent means the artifact under test was never executed, which is itself a FAIL.",
+      "properties": {
+        "command": { "type": "string" },
+        "exit_code": { "type": "integer", "description": "Non-zero forces verdict=FAIL and a bonfire_run_failed failure reason." },
+        "duration_sec": { "type": "number", "minimum": 0 },
+        "stdout_path": { "type": "string", "description": "Path, relative to the run output directory, of the captured stdout." },
+        "stderr_path": { "type": "string", "description": "Path, relative to the run output directory, of the captured stderr." },
+        "session_log_path": { "type": "string", "description": "Session log Bonfire actually wrote, resolved after the run." },
+        "session_log_present": { "type": "boolean" },
+        "stderr_tail": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Last lines of Bonfire's stderr, so the verdict names the failure instead of a generic timeout."
+        }
+      }
     },
     "fixture": {
       "type": "object",
@@ -115,7 +146,10 @@
         "pr_url": { "type": "string" },
         "diff_path": { "type": "string" },
         "cost_log_path": { "type": "string" },
-        "review_verdict_path": { "type": "string" }
+        "review_verdict_path": { "type": "string" },
+        "bonfire_stdout_path": { "type": "string" },
+        "bonfire_stderr_path": { "type": "string" },
+        "session_log_path": { "type": "string" }
       }
     },
     "verdict": {

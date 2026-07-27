@@ -1,9 +1,18 @@
 # Bonfire E2E Release-Gate Box
 # LOCAL EXECUTION ONLY. Never in CI.
-# Validates: a clean-box Claude CLI can install Bonfire and ship a fixture ticket.
+#
+# Validates: the wheel built from the Bonfire working tree installs into a
+# clean box, imports, exposes its console script, and ships a fixture ticket
+# through `bonfire run`. The image carries the harness only — the artifact
+# under test arrives at runtime on the read-only /workspace/artifact mount,
+# so this image is never version-bound to a Bonfire build.
 #
 # Build:  docker build -t bonfire-e2e:local -f tests/e2e/Dockerfile tests/e2e
 # Run:    tests/e2e/scripts/e2e-box.sh <wave> [fixture-ref]
+#
+# Layer-cache policy is the driver's call, not this file's: e2e-box.sh passes
+# --no-cache --pull when BOX_BUILD_CACHE=off. A release-gate certification run
+# MUST use that mode — see docs/release-gates.md § "Build cache policy".
 
 FROM ubuntu:24.04
 
@@ -49,7 +58,10 @@ WORKDIR /workspace
 COPY scripts/e2e-runner.sh /usr/local/bin/e2e-runner
 RUN chmod +x /usr/local/bin/e2e-runner
 
-# Bake the in-box prompt template — claude-cli reads this verbatim.
+# Bake the in-box prompt template — claude-cli reads this verbatim. The prompt
+# drives the observer session ONLY; it carries no artifact templates, because
+# an agent that can copy an artifact out of its prompt can pass this gate
+# without the product ever running.
 COPY prompts/runner-prompt.md /usr/local/bin/e2e-prompt.txt
 
 # BOX_UID/BOX_GID default to 1000 (matches the GitHub Actions runner). The
@@ -66,10 +78,12 @@ ARG BOX_GID=1000
 # keeps the build idempotent if a future base image drops the default user.
 # /home/box/.claude is the OAuth credential mount target — operators on Claude
 # Max bind-mount their host's ~/.claude/.credentials.json into this directory.
+# /workspace/artifact is the read-only mount target for the wheel under test;
+# pre-creating it keeps ownership with `box` instead of root.
 RUN userdel -r ubuntu 2>/dev/null || true \
     && groupadd -g $BOX_GID box 2>/dev/null || true \
     && useradd -m -u $BOX_UID -g $BOX_GID box \
-    && mkdir -p /workspace/out /workspace/target /home/box/.claude \
+    && mkdir -p /workspace/out /workspace/target /workspace/artifact /home/box/.claude \
     && chown -R box:box /workspace /home/box/.claude
 
 USER box

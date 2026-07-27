@@ -11,12 +11,39 @@ on:
     types: [submitted]
 
 jobs:
+  # Every trigger this workflow accepts runs in the BASE repository context and
+  # therefore has access to ``secrets.CLAUDE_CODE_OAUTH_TOKEN``. The event body
+  # is also the agent's prompt. So the ``@claude`` mention alone is not a gate:
+  # without an author check, any account on the internet can both spend the
+  # repository owner's Claude budget and choose what the agent is told to do.
+  #
+  # Each clause below pairs the mention check with an ``author_association``
+  # allow-list. All four trigger types are covered, and each reads the
+  # association off the object that actually carries the ``@claude`` text:
+  #
+  #   issue_comment                -> github.event.comment.author_association
+  #   pull_request_review_comment  -> github.event.comment.author_association
+  #   pull_request_review          -> github.event.review.author_association
+  #   issues                       -> github.event.issue.author_association
+  #
+  # A filter on three of the four is a hole with extra steps, so the list is
+  # kept exhaustive against the ``on:`` block above -- adding a trigger there
+  # without adding a clause here leaves the job unreachable rather than
+  # unguarded, which is the failure direction we want.
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' &&
+        contains(github.event.review.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' &&
+        (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: read

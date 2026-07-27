@@ -359,7 +359,7 @@ export PATH="$VENV_DIR/bin:$PATH"
 install_step "artifact-and-deps" "$VENV_DIR/bin/python" -P -m pip install \
     --disable-pip-version-check --no-input "$WHEEL_PATH"
 install_step "fixture-deps" "$VENV_DIR/bin/python" -P -m pip install \
-    --disable-pip-version-check --no-input -e "$TARGET_DIR[dev]"
+    --disable-pip-version-check --no-input -e "${TARGET_DIR}[dev]"
 install_step "artifact-under-test" "$VENV_DIR/bin/python" -P -m pip install \
     --disable-pip-version-check --no-input --force-reinstall --no-deps "$WHEEL_PATH"
 "$VENV_DIR/bin/python" -P -m pip freeze > "$OUT_DIR/pip-freeze.txt" 2>&1 || true

@@ -47,7 +47,6 @@ rather than a stand-in for it.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -66,7 +65,6 @@ __all__ = [
     "build_default_engine",
     "build_default_gates",
     "build_default_handlers",
-    "detect_repo_slug",
     "resolve_project_root",
     "validate_plan_wiring",
 ]
@@ -94,61 +92,27 @@ class PipelineWiringError(RuntimeError):
 def resolve_project_root(start: Path | None = None) -> Path:
     """Return the repository root containing *start* (default: the cwd).
 
-    Falls back to the resolved *start* directory itself when it is not inside
-    a git work tree, when git is unavailable, or when the call fails for any
-    other reason. The fallback still returns a concrete path: the security
-    property this feeds depends on ``project_root`` being *non-empty*, and a
-    directory that is merely un-versioned is not thereby trustworthy.
+    Walks upward looking for a ``.git`` entry, accepting a file as well as a
+    directory: linked work trees and submodules write ``.git`` as a file
+    containing a ``gitdir:`` pointer, and treating those as "not a repository"
+    would silently pick the wrong root inside exactly the setups this project
+    is developed in.
+
+    Deliberately no subprocess. Shelling out to ``git rev-parse`` would make
+    the security-relevant answer depend on ``git`` being installed and on
+    ``PATH``, and the fallback below would then fire for reasons that have
+    nothing to do with where the user is.
+
+    Falls back to the resolved *start* directory when no ``.git`` is found.
+    The fallback still returns a concrete path: the property this feeds is
+    that ``project_root`` is *non-empty*, and a directory that is merely
+    un-versioned is not thereby trustworthy.
     """
     base = (start or Path.cwd()).resolve()
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(base), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return base
-    if completed.returncode != 0:
-        return base
-    toplevel = completed.stdout.strip()
-    return Path(toplevel).resolve() if toplevel else base
-
-
-def detect_repo_slug(project_root: Path) -> str:
-    """Return ``owner/repo`` for *project_root*'s ``origin`` remote, or ``""``.
-
-    Both SSH (``git@github.com:owner/repo.git``) and HTTPS
-    (``https://github.com/owner/repo``) remote forms are accepted. An empty
-    string means "no GitHub repository could be identified", which callers
-    must treat as a hard unavailability rather than as a default.
-    """
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(project_root), "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    if completed.returncode != 0:
-        return ""
-    url = completed.stdout.strip()
-    if not url:
-        return ""
-    if url.endswith(".git"):
-        url = url[: -len(".git")]
-    # SSH form: git@host:owner/repo -- split on the single ':' after the host.
-    if url.startswith("git@") and ":" in url:
-        url = url.split(":", 1)[1]
-    parts = [segment for segment in url.split("/") if segment]
-    if len(parts) < 2:
-        return ""
-    return f"{parts[-2]}/{parts[-1]}"
+    for candidate in (base, *base.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return base
 
 
 class UnconfiguredGitHubClient:
@@ -225,14 +189,14 @@ def build_default_handlers(
     """
     from bonfire.git.scratch import ScratchWorktreeFactory
     from bonfire.git.workflow import GitWorkflow
-    from bonfire.github.client import GitHubClient
+    from bonfire.github.client import GitHubClient, detect_github_repo
     from bonfire.handlers.bard import BardHandler
     from bonfire.handlers.merge_preflight import MergePreflightHandler
     from bonfire.handlers.sage_correction_bounce import SageCorrectionBounceHandler
     from bonfire.handlers.steward import StewardHandler
     from bonfire.handlers.wizard import WizardHandler
 
-    slug = detect_repo_slug(project_root) if repo_slug is None else repo_slug
+    slug = detect_github_repo(project_root) if repo_slug is None else repo_slug
     github_client: Any = (
         GitHubClient(slug)
         if slug

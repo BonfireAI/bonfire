@@ -32,12 +32,12 @@ import typer
 
 from bonfire.cli.commands import run as run_module
 from bonfire.dispatch import sdk_backend
+from bonfire.engine import composition
 from bonfire.engine.composition import (
     PipelineWiringError,
     build_default_engine,
     build_default_gates,
     build_default_handlers,
-    detect_repo_slug,
     resolve_project_root,
     validate_plan_wiring,
 )
@@ -375,24 +375,44 @@ def test_resolve_project_root_falls_back_to_a_concrete_directory(tmp_path: Path)
     assert resolve_project_root(plain) == plain.resolve()
 
 
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("git@github.com:BonfireAI/bonfire.git", "BonfireAI/bonfire"),
-        ("https://github.com/BonfireAI/bonfire.git", "BonfireAI/bonfire"),
-        ("https://github.com/BonfireAI/bonfire", "BonfireAI/bonfire"),
-    ],
-)
-def test_detect_repo_slug_reads_both_remote_forms(
-    tmp_path: Path, url: str, expected: str, git_repo: object
-) -> None:
+def test_the_composition_root_does_not_define_a_second_slug_detector() -> None:
+    """No parallel copy of a helper this repo already ships.
+
+    ``bonfire.github.client.detect_github_repo`` predates this module and is
+    what ``GitHubClient`` callers elsewhere use. Two answers to "which
+    repository is this?" is one more than the question has.
+    """
+    source = Path(composition.__file__).read_text(encoding="utf-8")
+    assert "detect_github_repo" in source, "the existing detector must be the one used"
+    assert "def detect_repo_slug" not in source, "a second slug detector was reintroduced"
+
+
+def test_the_detected_slug_reaches_the_github_client(tmp_path: Path, git_repo: object) -> None:
+    """Behavioural check that detection is wired, not merely imported."""
     repo = git_repo(tmp_path / "repo")
-    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", url], check=True)
-    assert detect_repo_slug(repo) == expected
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:BonfireAI/bonfire.git"],
+        check=True,
+    )
+    handlers = build_default_handlers(
+        project_root=repo,
+        backend=object(),
+        bus=object(),
+        config=object(),
+        settings=object(),
+    )
+    assert handlers["steward"]._github_client._repo == "BonfireAI/bonfire"
 
 
-def test_detect_repo_slug_is_empty_without_a_remote(tmp_path: Path, git_repo: object) -> None:
-    assert detect_repo_slug(git_repo(tmp_path / "repo")) == ""
+def test_slug_detection_reads_the_origin_remote(tmp_path: Path, git_repo: object) -> None:
+    repo = git_repo(tmp_path / "repo")
+    subprocess.run(
+        ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:BonfireAI/bonfire.git"],
+        check=True,
+    )
+    from bonfire.github.client import detect_github_repo
+
+    assert detect_github_repo(repo) == "BonfireAI/bonfire"
 
 
 @pytest.mark.asyncio

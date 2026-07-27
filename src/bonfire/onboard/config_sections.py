@@ -102,22 +102,7 @@ def _build_header(project_name: str) -> tuple[str, dict[str, str]]:
 def _build_profile(
     profile: dict[str, str],
 ) -> tuple[str, dict[str, str]] | None:
-    """Build [bonfire.profile] section from conversation profile.
-
-    The section is ``profile``, not ``persona``, and the distinction is
-    load-bearing. ``bonfire.persona`` is a declared ``str`` on
-    :class:`~bonfire.models.config.PipelineConfig` holding the persona
-    *name* that ``bonfire persona set`` writes. Emitting the onboarding
-    answers as a ``[bonfire.persona]`` sub-table put a table where the
-    model expects a string, so every config ``bonfire scan`` generated
-    parsed as TOML and then failed to load — and a subsequent
-    ``persona set`` turned the same file into TOML nothing can parse,
-    because a key and a table cannot share one name.
-
-    These are two different things that were sharing one key: the
-    persona name is a choice among installed personas, the profile is
-    what the user answered during onboarding.
-    """
+    """Build [bonfire.profile] (NOT persona: see test_config_round_trip.py)."""
     if not profile:
         return None
     annotations: dict[str, str] = {}

@@ -79,6 +79,21 @@
       "baseline": 357,
       "measured": 373,
       "note": "THE BASELINE IS NOT MOVED BY THIS WORK, and the file is 16 lines over it. Those lines are the <wave> usage guard \u2014 a missing, empty or non-integer argument now exits 7 rather than taking bash's ${1:?...} status of 1, which is the code reserved for a FAIL verdict \u2014 plus its rationale comment. Declared as debt for a maintainer to rule on rather than folded into a raised number. NOTE: the file-budget gate walks .py files only, so this entry is a documented, self-imposed budget rather than a gate-enforced one."
+    },
+    "src/bonfire/engine/composition.py": {
+      "purpose": "the composition root: the one place the real handlers, gates, tool policy and project root are chosen, extracted from the CLI's _default_engine so that it has somewhere to be tested from"
+    },
+    "tests/integration/conftest.py": {
+      "purpose": "shared fixtures for the two composition-root modules: a throwaway git work tree and a transport that records the ClaudeAgentOptions the backend built"
+    },
+    "tests/integration/test_composition_root.py": {
+      "purpose": "calls build_default_engine directly rather than through the injected-factory seam that hid the un-wired engine; covers the four omitted constructor arguments, registry integrity, and the unknown-gate refusal"
+    },
+    "tests/integration/test_project_root_trust.py": {
+      "purpose": "hostile-CLAUDE.md fixture proving a cloned repository's project settings are no longer ingested, with the counterfactual and both documented opt-ins so the assertion cannot go vacuous"
+    },
+    "tests/integration/test_claude_workflow_author_guard.py": {
+      "purpose": "structural guard on the agent workflow's author_association allow-list, derived from the workflow's own on: block so a trigger added without a guard fails here"
     }
   },
   "packages": {

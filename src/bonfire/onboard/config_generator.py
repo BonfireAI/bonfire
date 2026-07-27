@@ -57,7 +57,7 @@ from bonfire.onboard.config_sections import (
     _build_mcp as _build_mcp,
 )
 from bonfire.onboard.config_sections import (
-    _build_persona as _build_persona,
+    _build_profile as _build_profile,
 )
 from bonfire.onboard.config_sections import (
     _build_project as _build_project,
@@ -236,10 +236,10 @@ def generate_config(
     header_text, _ = _build_header(project_name)
     sections.append(header_text)
 
-    # Persona — from conversation profile
-    persona_result = _build_persona(profile)
-    if persona_result:
-        text, anns = persona_result
+    # Profile — the onboarding answers, from the conversation
+    profile_result = _build_profile(profile)
+    if profile_result:
+        text, anns = profile_result
         sections.append(text)
         all_annotations.update(anns)
 

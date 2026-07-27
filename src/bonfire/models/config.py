@@ -47,6 +47,14 @@ class PipelineConfig(BaseModel):
     max_turns: int = 10
     max_budget_usd: float = 5.0
     persona: str = "falcor"
+    # The onboarding answers ``bonfire scan`` collects, written to
+    # ``[bonfire.profile]``. Declared rather than left to pydantic's
+    # ``extra="ignore"`` so the values a user spent the conversation
+    # giving are reachable instead of silently dropped on load. Kept as
+    # a free-form string map because the question set is not a stable
+    # contract yet — pinning the keys here would break every config the
+    # day a question is added.
+    profile: dict[str, str] = {}  # noqa: RUF012 - pydantic deep-copies field defaults
     # Explicit opt-in to ingest the project's ``CLAUDE.md`` /
     # ``.claude/settings.json`` into the dispatched agent's system prompt.
     # File presence alone is NOT enough; this key MUST be ``true``.
@@ -128,6 +136,31 @@ def _migrate_legacy_keys(data: dict[str, Any]) -> dict[str, Any]:
                 sec[new_key] = sec.pop(old_key)
             elif old_key in sec and new_key in sec:
                 del sec[old_key]
+    return _migrate_persona_table(data)
+
+
+def _migrate_persona_table(data: dict[str, Any]) -> dict[str, Any]:
+    """Relocate a legacy ``[bonfire.persona]`` table to ``bonfire.profile``.
+
+    ``bonfire scan`` up to and including 1.0.1 wrote the onboarding
+    answers as a ``[bonfire.persona]`` sub-table, colliding with the
+    ``persona`` name field. Those files are on real users' disks and
+    cannot be loaded at all without this, so the migration is not
+    cosmetic: it is the difference between the fix helping new configs
+    and the fix helping everyone.
+
+    A dict at ``persona`` is unambiguous -- the field has only ever been
+    a string -- so there is no shape this could mistake for a valid
+    config. An explicit ``profile`` wins, matching the rule above.
+    """
+    section = data.get("bonfire")
+    if not isinstance(section, dict):
+        return data
+    legacy = section.get("persona")
+    if not isinstance(legacy, dict):
+        return data
+    section.pop("persona")
+    section.setdefault("profile", legacy)
     return data
 
 

@@ -121,6 +121,12 @@ Claude Code session.
 #     missing; idempotent — re-running does not duplicate the line)
 bonfire init .
 
+# Drive a prompt through a workflow and the pipeline engine. Needs a
+# live agent backend (ANTHROPIC_API_KEY) and spends money. Defaults to
+# the `debug` workflow; see "What's Not There Yet" before reaching for
+# `--workflow standard_build`.
+bonfire run "add a failing test for the parser"
+
 # Inspect cumulative cost and recent sessions.
 bonfire cost
 
@@ -131,8 +137,8 @@ bonfire persona list
 bonfire persona set default
 ```
 
-Available subcommands in v1.0.0: `init`, `scan`, `install-skill`,
-`status`, `resume`, `handoff`, `persona`, `cost`. Run `bonfire --help`
+Available subcommands: `init`, `scan`, `run`, `status`, `resume`,
+`handoff`, `install-skill`, `persona`, `cost`. Run `bonfire --help`
 for the full surface or `bonfire <command> --help` for any single
 command.
 
@@ -238,10 +244,12 @@ narrated by the persona at lifecycle moments (*The Vault remembers*,
 *The Vault gives back*). The Vault is not an agent; it is never
 dispatched and has no role. Today the `VaultBackend` Protocol is
 published and an **in-memory default backend** ships (substring
-matching, no embeddings, no external dependencies — suitable for
-tests and small projects). A LanceDB-backed implementation is
-available behind the `bonfire-ai[knowledge]` extra; the persistent
-knowledge-graph storage layer lands in a later 0.1.x release.
+matching, no embeddings, no external dependencies, suitable for
+tests and small projects). A **SQLite backend** also ships in the base
+install and persists across processes, retrieving by keyword substring
+rather than by vector. A LanceDB-backed implementation is available
+behind the `bonfire-ai[knowledge]` extra. The graph layer over that
+persisted store is still to come.
 
 ## Config Reference
 
@@ -263,6 +271,9 @@ max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
 persona = "falcor"                  # CLI output persona
 trust_project_settings = false      # opt-in: ingest CLAUDE.md / .claude/ (see Security)
+
+[bonfire.profile]                   # written by `bonfire scan`; the onboarding answers
+# companion_mode = "friend"         # free-form string map, absent until you run a scan
 
 [models]                            # bring your own provider key — strings live here
 reasoning = "claude-opus-4-7"       # researcher, reviewer, synthesizer, analyst
@@ -354,9 +365,8 @@ bonfire persona set default
 ```
 
 The persona is configured per project via `bonfire persona set <name>`;
-there is no per-command override flag in v1.0.0. A per-command
-override lands when the narration/output layer grows persona awareness
-in a later 0.1.x release.
+there is no per-command override flag. A per-command override lands
+when the narration/output layer grows persona awareness.
 
 Custom personas live in `~/.bonfire/personas/`. The persona slot is
 user-extensible: name your own assistant, write a phrase bank, drop
@@ -439,67 +449,74 @@ class StageHandler(Protocol):
     ) -> Envelope: ...
 ```
 
-The full persistent Vault knowledge-graph implementation lands in a
-later 0.1.x release. The protocol is stable today; the in-memory
-default backend ships today and a LanceDB-backed implementation is
-available behind the `bonfire-ai[knowledge]` extra.
+The graph layer over the persisted store is still to come. The
+protocol is stable today; the in-memory default backend and a
+persistent SQLite backend both ship in the base install, and a
+LanceDB-backed implementation is available behind the
+`bonfire-ai[knowledge]` extra.
 
 ## What's Not There Yet
 
 Honest list:
 
-- **There is no `bonfire run` command.** The library works —
-  `from bonfire.engine import PipelineEngine` and `await engine.run(plan)`
-  drives a real pipeline against a real backend — but the CLI verb
-  that wires the engine end-to-end is deferred to a 0.1.x release.
-  The shipped subcommands (`init`, `scan`, `install-skill`,
-  `status`, `resume`, `handoff`, `persona`, `cost`) cover onboarding,
-  skill install, persona, and cost; `status` / `resume` / `handoff`
-  print one-line stubs for now.
-- **`bonfire status`, `bonfire resume`, and `bonfire handoff` are
-  one-line stubs in v1.0.0.** The full implementations land in a
-  later 0.1.x release. Use them as placeholders only — they print a
-  marker and exit.
+- **`bonfire run` does not finish every built-in workflow.** The verb
+  is wired end to end and the default `debug` workflow completes.
+  `standard_build`, the nine-stage flagship, does not: its publishing
+  stage reads the list of files to commit from `Envelope.artifacts`,
+  and nothing in `src/` writes to that field, so the stage refuses
+  with `empty_artifacts` on every run. `--workflow` accepts `debug`,
+  `spike`, `dual_scout`, `triple_scout` and `standard_build`;
+  `standard_build` is the one known not to reach the end.
+- **`bonfire resume` reports, it does not re-dispatch.** It reads the
+  last checkpoint, reconstructs the workflow plan, and prints which
+  stages remain. It does not run them. Driving the remaining stages
+  is a library call today:
+  `PipelineEngine.run(plan, completed=...)`.
 - **Legacy onboarding path.** `bonfire scan` from a shell still
   launches the alpha-era Front Door (a local browser auto-opens by
   default; pass `--no-browser` for headless). That path is the
   deprecated alpha onboarding surface and is preserved for users who
-  have not yet installed the Claude Code skill. The opinionated
-  v1.0.0 front door is `/bonfire scan` from inside Claude Code; see
+  have not yet installed the Claude Code skill. The opinionated front
+  door is `/bonfire scan` from inside Claude Code; see
   [`docs/scan-front-door-protocol.md`](docs/scan-front-door-protocol.md)
   for the legacy protocol if you need it.
-- **The bundled prompt-template directory ships a `.gitkeep` and
-  nothing else.** The cadre's prompt-layer identity is
-  contributor-supplied today. Default identity blocks for the
-  LLM-dispatching roles (Scout, Knight, Warrior, Wizard) come in a
-  later 0.1.x release.
-- **The persistent Vault knowledge-graph is not yet shipped.** The
-  `VaultBackend` Protocol is stable and an in-memory default backend
-  ships today (substring matching, no embeddings); the
-  knowledge-graph storage and query implementation lands once the
-  schema is locked.
-- **No downstream surface imports the package today.** Wrappers and
-  vertical surfaces are designed against the engine but not yet
-  wired to it. The release-gate Box validates the artifact contract,
-  not the orchestration capability.
+- **Bundled prompt templates cover four cadre roles, not all nine.**
+  Default identity blocks ship in the wheel for the researcher,
+  implementer, reviewer and tester roles, and load automatically when
+  a project supplies no override. The other roles have no bundled
+  default; their prompt-layer identity is contributor-supplied via
+  `agents/<role>/`.
+- **Embedding-backed retrieval is an optional extra.** A persistent
+  knowledge store ships in the base install (SQLite, standard library
+  only, survives across processes) and retrieves by keyword substring
+  match. Vector search needs `pip install bonfire-ai[knowledge]`,
+  which pulls LanceDB and Ollama. The default backend when nothing is
+  configured is still in-memory, so it is discarded at exit.
+- **No downstream product surface imports the package yet.** Wrappers
+  and vertical surfaces are designed against the engine but not wired
+  to it. The release-gate Box is the exception and is not a product
+  surface: it installs the built wheel into a container, imports it,
+  and runs the real `bonfire run` against a fixture repo.
 
-Later 0.1.x releases ship the verb, the bundled prompt templates, and
-the persistent Vault knowledge-graph. The under-claim is the feature.
+The under-claim is the feature. This list is checked against `main`,
+not against the roadmap.
 
 ## Roadmap
 
 What's coming next, in rough order:
 
-- **`bonfire run`** — the CLI verb that drives the engine end-to-end.
-- **In-chat parity for every CLI verb.** v1.0.0 ships `/bonfire scan`
-  as the primary conversational surface; the other verbs gain
-  in-chat skill mappings in later 0.1.x releases.
-- **Bundled prompt-template identity blocks** for the four
-  LLM-dispatching cadre roles.
-- **Persistent Vault knowledge-graph** — the durable storage and
-  query implementation behind the `VaultBackend` Protocol (today's
-  default is in-memory; LanceDB is available behind the
-  `bonfire-ai[knowledge]` extra).
+- **A `standard_build` workflow that reaches its last stage.** Stages
+  need to record what they produced in `Envelope.artifacts` before the
+  publishing stage can commit anything.
+- **In-chat parity for every CLI verb.** `/bonfire scan` is the
+  primary conversational surface; the other verbs gain in-chat skill
+  mappings later.
+- **Bundled identity blocks for the remaining cadre roles.** Four of
+  nine ship today.
+- **Vector retrieval as a default rather than an extra**, and a
+  knowledge graph over the persisted store. Today the base install
+  persists to SQLite and retrieves by keyword; embeddings live behind
+  the `bonfire-ai[knowledge]` extra.
 - **Multi-forge support** via the Instruction Set Markup (ISM) seam —
   declarative third-party tool integrations replacing today's
   hard-coded `gh`-only forge calls.

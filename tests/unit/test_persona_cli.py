@@ -268,18 +268,25 @@ class TestPersonaDiscoverySurface:
 
 
 class TestPersonaTomlFallbackWarning:
-    """`_get_active_persona` must surface a warning when bonfire.toml fails to parse.
+    """`_get_active_persona` must not answer when it could not read the file.
 
-    Today the function silently catches `tomllib.TOMLDecodeError` and falls
-    back to the default. A user with a corrupted bonfire.toml sees the
-    active marker on the wrong persona with no signal that anything is
-    wrong. The fix: emit a stderr warning before fallback.
+    The original defect: the function silently caught
+    `tomllib.TOMLDecodeError` and returned the default, so a user with a
+    corrupted bonfire.toml saw the active marker on the wrong persona
+    with no signal that anything was wrong. The first fix added a stderr
+    warning but kept the fallback, which left the misleading marker in
+    place next to a line admitting the file was unreadable.
+
+    The contract pinned here is the whole thing: say so on stderr, and
+    return ``None`` rather than a persona name, because "I could not
+    read the config" and "the config says falcor" are different answers
+    and only one of them is true.
     """
 
-    def test_get_active_persona_emits_warning_on_toml_decode_error(
+    def test_get_active_persona_reports_failure_on_toml_decode_error(
         self, tmp_path, monkeypatch, capsys
     ) -> None:
-        """Malformed bonfire.toml must emit a stderr warning before default-fallback."""
+        """Malformed bonfire.toml must be reported, not papered over."""
         from bonfire.cli.commands.persona import _get_active_persona
 
         monkeypatch.chdir(tmp_path)
@@ -289,12 +296,14 @@ class TestPersonaTomlFallbackWarning:
         result = _get_active_persona()
 
         captured = capsys.readouterr()
-        assert "Warning" in captured.err, (
-            f"_get_active_persona must emit a stderr warning when TOML fails to parse; "
+        assert "Error" in captured.err, (
+            f"_get_active_persona must report on stderr when TOML fails to parse; "
             f"got stderr={captured.err!r}"
         )
         assert "bonfire.toml" in captured.err, (
-            f"warning must name the file; got stderr={captured.err!r}"
+            f"message must name the file; got stderr={captured.err!r}"
         )
-        # Default fallback still applies
-        assert result == "falcor"
+        assert result is None, (
+            "an unreadable config must not resolve to a persona name -- returning "
+            f"the default is what put a false '(active)' marker on the list; got {result!r}"
+        )

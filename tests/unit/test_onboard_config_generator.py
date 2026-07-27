@@ -34,7 +34,7 @@ pins the SAME contract for the writer functions in
 * ``_build_git``;
 * ``_build_claude_memory``;
 * ``_build_vault``;
-* ``_build_persona``.
+* ``_build_profile``.
 
 (``_build_tools`` is no longer covered here — per W8.G it returns
 ``None`` unconditionally and the tool inventory now flows to
@@ -69,7 +69,7 @@ from bonfire.onboard.config_generator import (
     _build_git,
     _build_header,
     _build_mcp,
-    _build_persona,
+    _build_profile,
     _build_project,
     _build_vault,
     _format_toml_list,
@@ -173,22 +173,22 @@ class TestBuildHeader:
 
 
 # ---------------------------------------------------------------------------
-# 3. ``_build_persona`` --- ``[bonfire.persona]``
+# 3. ``_build_profile`` --- ``[bonfire.profile]``
 # ---------------------------------------------------------------------------
 
 
-class TestBuildPersona:
+class TestBuildProfile:
     @pytest.mark.parametrize("payload", _HOSTILE_PAYLOADS)
-    def test_persona_value_round_trips(self, payload: str) -> None:
+    def test_profile_value_round_trips(self, payload: str) -> None:
         profile = {"companion_mode": payload}
-        result = _build_persona(profile)
+        result = _build_profile(profile)
         assert result is not None
         fragment, _ = result
-        parsed = _parse_or_fail(fragment, writer_name="_build_persona", payload=payload)
-        persona = parsed.get("bonfire", {}).get("persona", {})
-        assert persona == {"companion_mode": payload}, (
-            f"_build_persona lost or smuggled payload {payload!r}. "
-            f"Parsed persona table: {persona!r}"
+        parsed = _parse_or_fail(fragment, writer_name="_build_profile", payload=payload)
+        emitted = parsed.get("bonfire", {}).get("profile", {})
+        assert emitted == {"companion_mode": payload}, (
+            f"_build_profile lost or smuggled payload {payload!r}. "
+            f"Parsed profile table: {emitted!r}"
         )
 
 
@@ -426,7 +426,7 @@ class TestGenerateConfigEndToEnd:
         # in via the hostile inputs.
         bonfire = parsed["bonfire"]
         expected_subtables = {
-            "persona",
+            "profile",
             "project",
             "git",
             "claude_memory",
@@ -451,7 +451,7 @@ class TestGenerateConfigEndToEnd:
         # flow, which is asserted separately against the sibling file
         # below).
         assert bonfire["name"] == hostile
-        assert bonfire["persona"]["companion_mode"] == hostile
+        assert bonfire["profile"]["companion_mode"] == hostile
         assert bonfire["project"]["primary_language"] == hostile
         assert bonfire["project"]["framework"] == hostile
         assert bonfire["git"]["remote"] == hostile

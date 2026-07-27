@@ -157,14 +157,18 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # `feedback_line_anchored_allowlists_fragile_2026_05_16`,
         # any README hero/section addition above this breadcrumb
         # shifts these anchors and the test fires.
+        # Honest-list re-derivation: shifted 366/367 -> 376/377 when the
+        # "What's Not There Yet" list was rewritten against the tree, a
+        # `bonfire run` example was added to the CLI quickstart, and the
+        # Config Reference gained the [bonfire.profile] section.
         (
             "README.md",
-            366,
+            376,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            367,
+            377,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -182,24 +186,27 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # 536/538/539/556 → 558/560/561/578 when the [1.0.1] section
         # was added at the top of CHANGELOG for the README marketing
         # redesign.
+        # Config round-trip fix: shifted 558/560/561/578 ->
+        # 596/598/599/616 when the [Unreleased] section was added at the
+        # top of CHANGELOG.
         (
             "CHANGELOG.md",
-            558,
+            596,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            560,
+            598,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            561,
+            599,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            578,
+            616,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

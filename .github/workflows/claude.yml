@@ -12,11 +12,44 @@ on:
 
 jobs:
   claude:
+    # Trust gate. Every trigger above runs in the BASE repository context with
+    # access to `secrets`, and the text that mentions @claude becomes the
+    # agent's prompt. Without an author check, any account on the internet
+    # could both spend the maintainer's Claude budget and choose the
+    # instructions the agent executes. The mention is therefore necessary but
+    # not sufficient: the author must also be trusted.
+    #
+    # Each trigger carries the association on a different object, and the one
+    # named here is deliberately the author of the text being used as the
+    # prompt:
+    #   issue_comment / pull_request_review_comment -> comment author
+    #   pull_request_review                         -> review author
+    #   issues                                      -> issue author
+    #
+    # `fromJSON` builds a real array so `contains` is an exact membership test.
+    # Passing a plain string here would make it a substring match, which a
+    # crafted association value could satisfy.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (
+        github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      ) ||
+      (
+        github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      ) ||
+      (
+        github.event_name == 'pull_request_review' &&
+        contains(github.event.review.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)
+      ) ||
+      (
+        github.event_name == 'issues' &&
+        (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read

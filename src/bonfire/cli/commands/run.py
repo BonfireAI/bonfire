@@ -12,10 +12,17 @@ Dependency-injection seam
 -------------------------
 ``_run`` accepts a ``build_engine`` factory that returns a wired
 ``PipelineEngine``. The public Typer command passes the real default
-(:func:`_default_engine`, which wires the Claude Agent SDK backend). Unit
-tests pass a factory returning an engine wired to a fake backend, so the
-driver's plan-selection / rendering / exit-code logic is exercised with
-zero network.
+(:func:`_default_engine`). Unit tests pass a factory returning an engine
+wired to a fake backend, so the driver's plan-selection / rendering /
+exit-code logic is exercised with zero network.
+
+The seam is deliberately thin. Everything it used to decide inline now
+lives in :mod:`bonfire.engine.composition`, whose ``build_default_engine``
+is called directly by ``tests/integration/test_composition_root.py``. That
+matters: the reason this function shipped with no handler registry, no gate
+registry, no tool policy and no project root was that injecting a factory
+around it left nothing exercising it. A seam that makes the driver testable
+must not make the wiring untestable.
 """
 
 from __future__ import annotations
@@ -32,7 +39,27 @@ if TYPE_CHECKING:
     from bonfire.models.plan import WorkflowPlan
 
 #: Default workflow selected when the caller does not pass ``--workflow``.
-_DEFAULT_WORKFLOW = "standard_build"
+#:
+#: This is ``debug``, not ``standard_build``, and the reason is not a
+#: preference. ``standard_build`` cannot currently complete: its ``bard``
+#: stage commits the files the preceding stages wrote, and it reads that file
+#: list from ``Envelope.artifacts`` — a field nothing in ``src/`` ever
+#: populates. The stage therefore refuses with ``empty_artifacts`` on every
+#: run, no matter what the agent did.
+#:
+#: That defect used to be invisible, because the pipeline died four stages
+#: earlier on ``Unknown handler: sage_correction_bounce``. Wiring the handler
+#: registry uncovered it; it does not fix it, and this lane does not own the
+#: dispatch layer where the fix belongs.
+#:
+#: So the choice is between a default that always fails and a default that
+#: works. ``--workflow standard_build`` remains available and now fails with
+#: an accurate message instead of a misleading one, and ``--help`` says so
+#: rather than letting the change pass unannounced.
+_DEFAULT_WORKFLOW = "debug"
+
+#: Named separately so the help text and the tests refer to the same string.
+_BLOCKED_WORKFLOW = "standard_build"
 
 
 class _EngineFactory(Protocol):
@@ -49,23 +76,18 @@ class _EngineFactory(Protocol):
 def _default_engine(plan: WorkflowPlan) -> PipelineEngine:
     """Wire a :class:`PipelineEngine` around the live SDK backend.
 
-    This is the real-network path: it builds the Claude Agent SDK backend,
-    a fresh event bus, and pulls the pipeline config from the loaded
-    settings. Unit tests never call this — they inject their own factory.
-    """
-    from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
-    from bonfire.engine.factory import load_settings_or_default
-    from bonfire.engine.pipeline import PipelineEngine
-    from bonfire.events.bus import EventBus
+    This is the real-network path. The wiring itself lives in
+    :func:`bonfire.engine.composition.build_default_engine` so that it has
+    somewhere to be tested from; this function is the CLI's one-line
+    reference to it.
 
-    settings = load_settings_or_default()
-    bus = EventBus()
-    return PipelineEngine(
-        backend=ClaudeSDKBackend(bus=bus),
-        bus=bus,
-        config=settings.bonfire,
-        settings=settings,
-    )
+    Raises:
+        PipelineWiringError: If *plan* names a handler or gate the engine
+            was not given. Surfaced by :func:`_run` as exit code 2.
+    """
+    from bonfire.engine.composition import build_default_engine
+
+    return build_default_engine(plan)
 
 
 def _select_plan(prompt: str, *, budget: float | None, workflow: str) -> WorkflowPlan:
@@ -117,8 +139,10 @@ def _run(
 
     Raises:
         typer.Exit: Always — code 0 on success, 1 on failure, 2 on an
-            unknown ``--workflow`` name.
+            unknown ``--workflow`` name or a plan the engine cannot honour.
     """
+    from bonfire.engine.composition import PipelineWiringError
+
     try:
         plan = _select_plan(prompt, budget=budget, workflow=workflow)
     except KeyError as exc:
@@ -126,7 +150,17 @@ def _run(
         typer.echo(str(exc).strip("\"'"), err=True)
         raise typer.Exit(2) from None
 
-    engine = build_engine(plan)
+    # Wiring failures share exit code 2 with an unknown workflow name: both
+    # mean "this run was never going to happen", as distinct from code 1,
+    # "the pipeline ran and the work did not pass". Raising before ``run()``
+    # is what keeps an unregistered gate from being silently bypassed and
+    # counted as a pass -- see ``composition.validate_plan_wiring``.
+    try:
+        engine = build_engine(plan)
+    except PipelineWiringError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from None
+
     result = asyncio.run(engine.run(plan))
     _render(result)
 
@@ -143,7 +177,13 @@ def run(
         _DEFAULT_WORKFLOW,
         "--workflow",
         "-w",
-        help="Workflow plan to run. Use a name from the built-in registry.",
+        help=(
+            "Workflow plan to run. Use a name from the built-in registry. "
+            f"NOTE: '{_BLOCKED_WORKFLOW}' does not currently run to completion "
+            "-- its publisher stage reads the file list to commit from "
+            "Envelope.artifacts, which nothing populates yet, so it always "
+            f"stops there. '{_DEFAULT_WORKFLOW}' is the default for that reason."
+        ),
     ),
 ) -> None:
     """Drive a prompt through a workflow plan and the pipeline engine."""

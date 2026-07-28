@@ -495,16 +495,10 @@ class TestGitHubClient:
     async def test_create_pr_includes_body_when_provided(self) -> None:
         from bonfire.github import GitHubClient
 
-        gh_output = json.dumps(
-            {
-                "number": 1,
-                "url": "u",
-                "title": "t",
-                "state": "OPEN",
-                "headRefName": "h",
-                "baseRefName": "main",
-            }
-        )
+        # What `gh pr create` actually prints: the new PR's URL. It has no
+        # --json flag, so the view-shaped JSON this used to stub could never
+        # have come back from the call under test.
+        gh_output = "https://github.com/owner/repo/pull/1\n"
         client = GitHubClient(repo="owner/repo")
         with patch.object(client, "_run_gh", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, gh_output, "")
@@ -517,16 +511,10 @@ class TestGitHubClient:
         """Empty body must NOT emit a ``--body ""`` pair (private-mirror behaviour)."""
         from bonfire.github import GitHubClient
 
-        gh_output = json.dumps(
-            {
-                "number": 1,
-                "url": "u",
-                "title": "t",
-                "state": "OPEN",
-                "headRefName": "h",
-                "baseRefName": "main",
-            }
-        )
+        # What `gh pr create` actually prints: the new PR's URL. It has no
+        # --json flag, so the view-shaped JSON this used to stub could never
+        # have come back from the call under test.
+        gh_output = "https://github.com/owner/repo/pull/1\n"
         client = GitHubClient(repo="owner/repo")
         with patch.object(client, "_run_gh", new_callable=AsyncMock) as mock_run:
             mock_run.return_value = (0, gh_output, "")

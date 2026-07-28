@@ -10,8 +10,9 @@ Contract preserved from the reference implementation:
 
   - Stages only files from ``envelope.artifacts`` (type-filtered); empty
     artifact list -> FAILED envelope before any git call.
-  - Branch slug capped at 40 chars + 12-hex envelope_id suffix;
-    ``GitWorkflow.create_branch`` owns the ``bonfire/`` auto-prefix.
+  - Branch is ``bonfire/fix/<slug>-<8-hex>``: slug capped at 40 chars,
+    ``GitWorkflow.create_branch`` owns the ``bonfire/`` auto-prefix and
+    returns the prefixed name the handler then pushes and PRs against.
   - Post-commit SHA is compared to the base SHA captured at handler entry;
     equality -> FAILED with ``error_type="no_diff_after_commit"``.
   - ``TaskStatus.COMPLETED`` enum identity is the only success marker.
@@ -56,9 +57,16 @@ ROLE: AgentRole = AgentRole.PUBLISHER
 # ---------------------------------------------------------------------------
 
 _SLUG_MAX_LEN: int = 40
-_SLUG_ID_LEN: int = 12
+#: Hex id length. The release gate greps branches against
+#: ``^bonfire/fix/[a-z0-9-]+-[0-9a-f]{8}$``; a longer id reads as "no PR opened".
+_SLUG_ID_LEN: int = 8
 _SLUG_RE: re.Pattern[str] = re.compile(r"[^a-z0-9]+")
 _SLUG_FALLBACK: str = "task"
+
+#: Second branch segment: the kind of change, not the stage name. The gate,
+#: the operator docs and the runner prompt all specify "fix";
+#: ``GitWorkflow.create_branch`` supplies the leading ``bonfire/``.
+_BRANCH_KIND: str = "fix"
 
 _FILE_ARTIFACT_TYPES: frozenset[str] = frozenset(
     {"file_written", "file_modified"},
@@ -173,11 +181,21 @@ class BardHandler:
             base_sha = await self._git_workflow.rev_parse(self._base_branch)
 
             # 4. Build branch name (no leading "bonfire/" -- create_branch adds it).
-            branch_name = f"{stage.name}/{_slugify_task(envelope.task, envelope.envelope_id)}"
+            branch_name = f"{_BRANCH_KIND}/{_slugify_task(envelope.task, envelope.envelope_id)}"
 
-            # 5. Create branch; structured error on collision.
+            # 5. Create branch; structured error on collision. Take the name
+            #    back rather than assuming: create_branch owns the prefix, and
+            #    push/PR head/metadata must all name the ref that exists.
             try:
-                await self._git_workflow.create_branch(branch_name)
+                created = await self._git_workflow.create_branch(branch_name)
+                if not isinstance(created, str) or not created:
+                    # Falling back to the requested name IS the original
+                    # defect: it lacks the prefix, so the ref would not exist.
+                    raise RuntimeError(
+                        "create_branch did not return the branch it created "
+                        f"(got {created!r}); cannot determine the ref to push."
+                    )
+                branch_name = created
             except RuntimeError as branch_exc:
                 if "already exists" in str(branch_exc):
                     return envelope.model_copy(

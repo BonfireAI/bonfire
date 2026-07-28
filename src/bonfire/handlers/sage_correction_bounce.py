@@ -35,11 +35,15 @@ import logging
 import re
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from bonfire.agent.roles import AgentRole
 from bonfire.dispatch.handler_runner import run_handler_dispatch
+from bonfire.handlers.sage_dispatch_options import (
+    SAGE_CORRECTION_ALLOWED_TOOLS,
+    SageCorrectionDispatchOptions,
+)
 from bonfire.models.envelope import (
     META_CLASSIFIER_VERDICT,
     META_CORRECTION_BRANCH,
@@ -72,12 +76,6 @@ ROLE: AgentRole = AgentRole.SYNTHESIZER
 # ---------------------------------------------------------------------------
 # Module-scope constants
 # ---------------------------------------------------------------------------
-
-# Sage correction dispatch is scope-limited to xfail-decorator edits.
-# Tools are immutable (frozen) so a regression that hands back a mutable
-# ``set`` is caught at construction time. why: type-driven contract --
-# wrong tool sets are unrepresentable.
-_SAGE_CORRECTION_ALLOWED_TOOLS: frozenset[str] = frozenset({"Read", "Edit"})
 
 # Maximum correction cycles per pipeline run. v0.1 ships single-cycle
 # correction; multi-cycle is a follow-up.
@@ -130,31 +128,6 @@ _COMMIT_SHA_FALLBACK_RE: re.Pattern[str] = re.compile(
 # ---------------------------------------------------------------------------
 # Frozen value types (innovation: type-driven contracts)
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class SageCorrectionDispatchOptions:
-    """Options carried alongside the Sage-correction backend dispatch.
-
-    Frozen so an accidental ``set(allowed_tools)`` regression cannot pass.
-    The standard :class:`bonfire.protocols.DispatchOptions` carries a
-    ``tools: list[str]``; this thin wrapper exposes the immutable
-    ``allowed_tools: frozenset[str]`` discipline tested by the
-    sage-correction contract suite.
-
-    why: type-driven contract -- the sage-correction axiom is "Sage
-    edits xfail decorators only". A frozenset of two members makes
-    wrong tool sets unrepresentable (you cannot append "Bash" to a
-    frozenset).
-    """
-
-    allowed_tools: frozenset[str] = field(
-        default_factory=lambda: _SAGE_CORRECTION_ALLOWED_TOOLS,
-    )
-    role: str = AgentRole.SYNTHESIZER.value
-    permission_mode: str = "dontAsk"
-    correction_mode: bool = True
-    missing_deps: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -540,11 +513,18 @@ class SageCorrectionBounceHandler:
             )
 
         del prior_results  # not yet consumed in cycle body; reserved for future
+        # An empty ``cwd`` makes the backend trust the target repo's own
+        # CLAUDE.md and .claude/settings.json; naming the root keeps an
+        # unfamiliar checkout untrusted, as the composition root already
+        # does for the dispatched stages.
         dispatch_options = SageCorrectionDispatchOptions(
-            allowed_tools=_SAGE_CORRECTION_ALLOWED_TOOLS,
+            allowed_tools=SAGE_CORRECTION_ALLOWED_TOOLS,
             role=AgentRole.SYNTHESIZER.value,
             permission_mode="dontAsk",
             correction_mode=True,
+            cwd=str(self._repo_path) if self._repo_path is not None else "",
+            max_turns=getattr(self._config, "max_turns", 10),
+            max_budget_usd=getattr(self._config, "max_budget_usd", 0.0),
         )
 
         try:

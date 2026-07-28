@@ -2,9 +2,9 @@
   "files": {
     "src/bonfire/dispatch/security_hooks.py": 1329,
     "src/bonfire/dispatch/security_patterns.py": 521,
-    "src/bonfire/engine/pipeline.py": 990,
+    "src/bonfire/engine/pipeline.py": 989,
     "src/bonfire/handlers/merge_preflight.py": 687,
-    "src/bonfire/handlers/sage_correction_bounce.py": 924,
+    "src/bonfire/handlers/sage_correction_bounce.py": 904,
     "src/bonfire/onboard/config_generator.py": 560,
     "tests/integration/test_budget_enforcement.py": 508,
     "tests/unit/test_architect_handler.py": 630,
@@ -24,7 +24,7 @@
     "tests/unit/test_event_consumers.py": 967,
     "tests/unit/test_events.py": 675,
     "tests/unit/test_git.py": 754,
-    "tests/unit/test_github.py": 858,
+    "tests/unit/test_github.py": 846,
     "tests/unit/test_merge_preflight_handler.py": 1139,
     "tests/unit/test_onboard_scanner_claude_memory.py": 562,
     "tests/unit/test_onboard_scanner_cli_toolchain.py": 504,
@@ -100,6 +100,27 @@
     },
     "tests/unit/test_version_truth.py": {
       "purpose": "pins pyproject's version, what bonfire --version prints, the __version__ import fallback and the newest CHANGELOG heading to one value, restoring on every run the guard that release.yml lost when the tree was reconciled to the published product line"
+    },
+    "src/bonfire/dispatch/artifacts.py": {
+      "purpose": "the producer Envelope.artifacts never had: maps the agent's file-mutating tool calls onto artifact records, at the only layer that sees which files were touched"
+    },
+    "src/bonfire/handlers/sage_dispatch_options.py": {
+      "purpose": "the Sage dispatch options, split out of the handler because what they have to get right is a contract with the SDK backend rather than handler logic; the standalone dataclass they replace carried five fields where the backend reads eight"
+    },
+    "tests/unit/test_dispatch_artifact_capture.py": {
+      "purpose": "pins the tool-use to artifact mapping, including the cross-module half a same-module assertion cannot reach: that the types emitted are the ones the publisher filters on"
+    },
+    "tests/unit/test_engine_artifact_carry.py": {
+      "purpose": "pins that artifacts recorded by one stage reach the stage that publishes them; the engine builds a fresh envelope per stage, so a producer alone left the publisher empty"
+    },
+    "tests/unit/test_sage_dispatch_options_contract.py": {
+      "purpose": "drives the real backend body with the Sage options so an attribute the backend starts reading fails here rather than escalating silently, and pins the cwd trust boundary"
+    },
+    "tests/unit/test_publish_path_gate_contract.py": {
+      "purpose": "pins the publishing path against the release gate's branch pattern with a real git repo and a real bare remote: the created ref, the pushed ref and the PR head must agree"
+    },
+    "tests/integration/test_publisher_receives_artifacts.py": {
+      "purpose": "drives the real composition root with a transport that reports an Edit, closing the half test_composition_root cannot: that a reported write reaches the publisher"
     }
   },
   "packages": {

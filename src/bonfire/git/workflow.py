@@ -95,10 +95,18 @@ class GitWorkflow:
 
     async def create_branch(
         self, name: str, *, base: str | None = None, checkout: bool = True
-    ) -> None:
+    ) -> str:
         """Create a new branch, optionally checking it out (default: yes).
 
-        Auto-prefixes with ``bonfire/`` unless already prefixed.
+        Auto-prefixes with ``bonfire/`` unless already prefixed, and
+        **returns the name it actually created**.
+
+        Returning it is the whole point. The prefix used to be applied by
+        rebinding this local parameter, so the caller kept its unprefixed
+        string: the publisher stage went on to push and open a pull request
+        against a ref that had never existed. A caller cannot honour a
+        naming rule it is never told the outcome of.
+
         Raises ValueError if the name could be interpreted as a git flag.
         """
         _validate_ref_name(name)
@@ -115,6 +123,8 @@ class GitWorkflow:
             if base is not None:
                 cmd.append(base)
             await _run_git(self._repo, *cmd)
+
+        return name
 
     async def checkout(self, name: str) -> None:
         """Switch to an existing branch.

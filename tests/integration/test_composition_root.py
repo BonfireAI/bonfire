@@ -291,7 +291,7 @@ def test_cli_refuses_an_unknown_gate_with_exit_code_2(
 # ---------------------------------------------------------------------------
 
 
-def test_run_completes_on_the_default_workflow(
+def test_run_completes_through_the_published_command_path(
     tmp_path: Path,
     git_repo: object,
     monkeypatch: pytest.MonkeyPatch,
@@ -302,35 +302,41 @@ def test_run_completes_on_the_default_workflow(
 
     No injected factory: ``_run`` builds its engine with ``_default_engine``,
     which is the composition root. Exit code 0 is the claim.
+
+    ``debug`` is named explicitly rather than relying on the default. The
+    default is ``standard_build``, which ends by pushing a branch and opening
+    a pull request -- it cannot exit 0 against a throwaway repository with no
+    remote, and it should not be made to. What this test is for is the wiring
+    between the CLI verb and the composition root, and ``debug`` exercises
+    that without needing publishing infrastructure.
     """
     monkeypatch.chdir(git_repo(tmp_path / "r"))
 
     with pytest.raises(typer.Exit) as excinfo:
-        run_module._run("add a docstring to the module")
+        run_module._run("add a docstring to the module", workflow="debug")
 
     assert excinfo.value.exit_code == 0, capsys.readouterr().err
     assert "Run succeeded" in capsys.readouterr().out
-    assert transport.calls, "the default workflow must actually dispatch"
+    assert transport.calls, "the workflow must actually dispatch"
 
 
-def test_standard_build_now_reaches_the_publisher_stage(
+def test_standard_build_reaches_the_publisher_stage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     transport: RecordingTransport,
     git_repo: object,
 ) -> None:
-    """Pins where ``standard_build`` currently stops, and where it no longer does.
+    """Pins where ``standard_build`` stops, and where it no longer does.
 
     Before the composition root existed this plan died at stage five with
-    ``Unknown handler: sage_correction_bounce``. It now executes four
-    dispatched stages, resolves the synthesizer handler, evaluates that
-    stage's gate, and reaches ``bard``.
+    ``Unknown handler: sage_correction_bounce``. It then reached ``bard``
+    and refused there, because nothing populated ``Envelope.artifacts``.
 
-    ``bard`` then refuses, because nothing in ``src/`` ever populates
-    ``Envelope.artifacts`` -- a separate defect that the handler gap was
-    hiding. This test asserts the new boundary rather than a green it cannot
-    honestly claim; when the artifact gap is closed, it should be rewritten,
-    not deleted.
+    With a transport that reports no file writes, refusing is still the
+    right answer -- there is genuinely nothing to commit. What changed is
+    that the refusal is now a *function of the run* rather than
+    unconditional; :func:`test_a_reported_file_write_reaches_the_publisher`
+    is the other half.
     """
     monkeypatch.chdir(git_repo(tmp_path / "r"))
 
@@ -343,7 +349,7 @@ def test_standard_build_now_reaches_the_publisher_stage(
     )
     assert "Unknown handler" not in result.error, result.error
     assert result.failed_stage == "bard", (
-        f"expected the publisher stage to be the new boundary, got "
+        f"expected the publisher stage to be the boundary, got "
         f"{result.failed_stage!r}: {result.error}"
     )
     assert "empty_artifacts" in result.error or "artifacts" in result.error
@@ -441,55 +447,27 @@ async def test_github_operations_refuse_loudly_when_no_remote_is_configured() ->
 # ---------------------------------------------------------------------------
 
 
-def test_the_default_workflow_is_not_the_one_that_cannot_finish() -> None:
-    """The default must be a plan the verb can actually complete.
+def test_the_default_workflow_is_the_flagship_pipeline() -> None:
+    """The default is back to ``standard_build``.
 
-    Shipping ``standard_build`` as the default meant the headline verb failed
-    for every user on every invocation. This is a deliberate change of
-    behaviour, so it is pinned rather than left to a constant nobody reads.
+    It was temporarily ``debug`` because the publisher stage refused on every
+    run: nothing populated ``Envelope.artifacts``. That producer now exists,
+    so the reason for the stopgap is gone and the headline verb runs the
+    pipeline the documentation describes.
     """
-    assert run_module._DEFAULT_WORKFLOW != run_module._BLOCKED_WORKFLOW
+    assert run_module._DEFAULT_WORKFLOW == "standard_build"
     assert run_module._DEFAULT_WORKFLOW in get_default_registry()
 
 
-def test_help_text_names_the_workflow_that_cannot_finish() -> None:
-    """Changing a default quietly is how a downgrade becomes a lie.
+def test_help_text_names_what_the_default_workflow_requires() -> None:
+    """The default now ends in a push and a pull request.
 
-    The option's help must name ``standard_build`` and say why it is not the
-    default, so the choice is visible at the command line and not only in a
-    commit message.
+    That needs a remote and an authenticated ``gh``. A user without them
+    should learn it from ``--help``, not from a stage failure four dispatches
+    into a billed run.
     """
     parameter = run_module.run.__defaults__[-1]
-    help_text = parameter.help or ""
-    assert run_module._BLOCKED_WORKFLOW in help_text
-    assert "artifacts" in help_text.lower()
-
-
-def test_nothing_populates_envelope_artifacts_yet() -> None:
-    """Tripwire on the fact that justifies the default above.
-
-    ``standard_build``'s publisher stage stages the files named by
-    ``Envelope.artifacts``. No module under ``src/bonfire/`` constructs an
-    ``Artifact`` or assigns that field, so the list is always empty and the
-    stage always refuses.
-
-    When that stops being true this test fails, which is the intended signal:
-    the default workflow decision was made on this fact and should be revisited
-    with it. Delete this test only together with that reconsideration.
-    """
-    src = Path(run_module.__file__).parent.parent.parent
-    assert src.name == "bonfire", f"expected the package root, got {src}"
-
-    producers: list[str] = []
-    for path in sorted(src.rglob("*.py")):
-        if path.name == "envelope.py":
-            continue  # the model's own declaration, not a producer
-        body = path.read_text(encoding="utf-8")
-        if "Artifact(" in body or "artifacts=" in body:
-            producers.append(str(path.relative_to(src)))
-
-    assert producers == [], (
-        "Envelope.artifacts now has a producer: "
-        f"{producers}. standard_build's publisher stage may be reachable; "
-        "revisit _DEFAULT_WORKFLOW in bonfire/cli/commands/run.py."
-    )
+    help_text = (parameter.help or "").lower()
+    assert "gh" in help_text
+    assert "remote" in help_text
+    assert "debug" in help_text

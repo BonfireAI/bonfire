@@ -2,9 +2,9 @@
   "files": {
     "src/bonfire/dispatch/security_hooks.py": 1329,
     "src/bonfire/dispatch/security_patterns.py": 521,
-    "src/bonfire/engine/pipeline.py": 990,
+    "src/bonfire/engine/pipeline.py": 989,
     "src/bonfire/handlers/merge_preflight.py": 687,
-    "src/bonfire/handlers/sage_correction_bounce.py": 924,
+    "src/bonfire/handlers/sage_correction_bounce.py": 904,
     "src/bonfire/onboard/config_generator.py": 560,
     "tests/integration/test_budget_enforcement.py": 508,
     "tests/unit/test_architect_handler.py": 630,
@@ -24,7 +24,7 @@
     "tests/unit/test_event_consumers.py": 967,
     "tests/unit/test_events.py": 675,
     "tests/unit/test_git.py": 754,
-    "tests/unit/test_github.py": 858,
+    "tests/unit/test_github.py": 846,
     "tests/unit/test_merge_preflight_handler.py": 1139,
     "tests/unit/test_onboard_scanner_claude_memory.py": 562,
     "tests/unit/test_onboard_scanner_cli_toolchain.py": 504,
@@ -115,14 +115,45 @@
     },
     "tests/unit/test_verify_suite.py": {
       "purpose": "contract for the pytest-run parser the suite-backed gates grade"
+    },
+    "src/bonfire/dispatch/artifacts.py": {
+      "purpose": "the producer Envelope.artifacts never had: maps the agent's file-mutating tool calls onto artifact records, at the only layer that sees which files were touched"
+    },
+    "src/bonfire/handlers/sage_dispatch_options.py": {
+      "purpose": "the Sage dispatch options, split out of the handler because what they have to get right is a contract with the SDK backend rather than handler logic; the standalone dataclass they replace carried five fields where the backend reads eight"
+    },
+    "tests/unit/test_dispatch_artifact_capture.py": {
+      "purpose": "pins the tool-use to artifact mapping, including the cross-module half a same-module assertion cannot reach: that the types emitted are the ones the publisher filters on"
+    },
+    "tests/unit/test_engine_artifact_carry.py": {
+      "purpose": "pins that artifacts recorded by one stage reach the stage that publishes them; the engine builds a fresh envelope per stage, so a producer alone left the publisher empty"
+    },
+    "tests/unit/test_sage_dispatch_options_contract.py": {
+      "purpose": "drives the real backend body with the Sage options so an attribute the backend starts reading fails here rather than escalating silently, and pins the cwd trust boundary"
+    },
+    "tests/unit/test_publish_path_gate_contract.py": {
+      "purpose": "pins the publishing path against the release gate's branch pattern with a real git repo and a real bare remote: the created ref, the pushed ref and the PR head must agree"
+    },
+    "tests/integration/test_publisher_receives_artifacts.py": {
+      "purpose": "drives the real composition root with a transport that reports an Edit, closing the half test_composition_root cannot: that a reported write reaches the publisher"
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2865,
+    "src/bonfire/dispatch": 2869,
     "src/bonfire/engine": 1903,
     "src/bonfire/handlers": 3194,
     "src/bonfire/onboard": 4416,
     "tests/integration": 1363,
     "tests/unit": 73199
-  }
+  },
+  "package_raises": [
+    {
+      "package": "src/bonfire/dispatch",
+      "from": 2865,
+      "to": 2869,
+      "lines": 4,
+      "reason": "Envelope.artifacts had one reader and no producer, so the publishing stage of standard_build refused on every run. The producer has to live at the dispatch layer because that is the only layer that sees the agent's tool-use blocks: a handler is given result text and nothing else, and diffing the working tree cannot separate the agent's writes from anything else dirty. Wiring it into sdk_backend.py costs exactly four lines and they are irreducible: the import, the content_blocks accumulator, the append inside the block loop, and the artifacts= entry in the model_copy. Every other package this change touched was brought back under its ceiling by structure rather than by number, and three baselines were ratcheted down. This one could not be, so the number moved and the architecture did not. Explicitly rejected: excusing sdk_backend.py with a purpose entry, which would drop 306 lines out of the ratchet to accommodate 4.",
+      "approver": "Anta, 2026-07-27, via the lane conductor on PR #247"
+    }
+  ]
 }

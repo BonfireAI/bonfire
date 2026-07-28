@@ -21,6 +21,7 @@ from contextlib import aclosing
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from bonfire.dispatch.artifacts import artifacts_from_tool_uses
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
@@ -228,6 +229,7 @@ class ClaudeSDKBackend:
         message_stream = query(prompt=envelope.task, options=agent_options)
 
         text_parts: list[str] = []
+        content_blocks: list[Any] = []
         cost_usd: float = 0.0
         duration_seconds: float = 0.0
         session_id: str | None = None
@@ -239,6 +241,7 @@ class ClaudeSDKBackend:
             async for msg in stream:
                 if AssistantMessage is not None and isinstance(msg, AssistantMessage):
                     for block in getattr(msg, "content", []):
+                        content_blocks.append(block)
                         block_text = getattr(block, "text", None)
                         if block_text:
                             text_parts.append(block_text)
@@ -289,6 +292,7 @@ class ClaudeSDKBackend:
         enriched = envelope.with_result(result=final_text, cost_usd=cost_usd)
         return enriched.model_copy(
             update={
+                "artifacts": artifacts_from_tool_uses(content_blocks, root=options.cwd),
                 "metadata": {
                     **enriched.metadata,
                     "duration_seconds": duration_seconds,

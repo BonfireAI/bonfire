@@ -11,6 +11,7 @@ via ``model_copy(update=...)``.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -222,3 +223,26 @@ META_CORRECTION_CYCLES: str = "correction_cycles"
 META_CORRECTION_ESCALATED: str = "correction_escalated"
 META_CORRECTION_SKIPPED_REASON: str = "correction_skipped_reason"
 META_CORRECTION_VERDICT: str = "correction_verdict"
+
+
+def accumulate_artifacts(envelopes: Iterable[Envelope]) -> list[Artifact]:
+    """Collect every artifact recorded so far, one entry per path.
+
+    A pipeline builds a fresh :class:`Envelope` for each stage, so an
+    artifact recorded by one stage is invisible to the next unless it is
+    carried forward. The publisher stage commits exactly the files named on
+    the envelope it receives, so without this it is told the run wrote
+    nothing however much the earlier stages wrote.
+
+    Deduplicated by ``name``, first occurrence winning: two stages editing
+    one file is still one file to stage, and the first record describes what
+    happened to it first (created, then edited). Order follows first touch.
+    """
+    seen: set[str] = set()
+    collected: list[Artifact] = []
+    for envelope in envelopes:
+        for artifact in envelope.artifacts:
+            if artifact.name not in seen:
+                seen.add(artifact.name)
+                collected.append(artifact)
+    return collected

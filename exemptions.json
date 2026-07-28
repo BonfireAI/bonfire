@@ -31,14 +31,14 @@
     },
     {
       "file": "src/bonfire/dispatch/sdk_backend.py",
-      "symbol_or_line": "186",
+      "symbol_or_line": "187",
       "rule": "BLE001",
       "reason": "Third-party Claude Agent SDK boundary: the SDK failure surface is open-set; contract is 'never raises — every failure becomes a FAILED ErrorDetail envelope'.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
     },
     {
       "file": "src/bonfire/dispatch/sdk_backend.py",
-      "symbol_or_line": "195",
+      "symbol_or_line": "196",
       "rule": "C901",
       "reason": "grandfathered at v1.0.1 cf-gate adoption 2026-06-22 (ratchet: BON-1757) — pre-existing under the kit ruff config; tracked for fix-forward",
       "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
@@ -115,7 +115,7 @@
     },
     {
       "file": "src/bonfire/engine/pipeline.py",
-      "symbol_or_line": "590",
+      "symbol_or_line": "589",
       "rule": "BLE001",
       "reason": "Per-stage boundary: converts ANY StageHandler failure into a typed ErrorDetail envelope (StageHandler is an open-set extension Protocol).",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
@@ -143,7 +143,7 @@
     },
     {
       "file": "src/bonfire/github/client.py",
-      "symbol_or_line": "83",
+      "symbol_or_line": "111",
       "rule": "S607",
       "reason": "grandfathered at v1.0.1 cf-gate adoption 2026-06-22 (ratchet: BON-1757) — pre-existing under the kit ruff config; tracked for fix-forward",
       "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
@@ -164,7 +164,7 @@
     },
     {
       "file": "src/bonfire/handlers/bard.py",
-      "symbol_or_line": "264",
+      "symbol_or_line": "282",
       "rule": "BLE001",
       "reason": "Handler boundary that must salvage partial PR-flow progress (branch/sha/staged files) on ANY mid-flow failure; the partial-metadata capture depends on catching all.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
@@ -192,21 +192,21 @@
     },
     {
       "file": "src/bonfire/handlers/sage_correction_bounce.py",
-      "symbol_or_line": "347",
+      "symbol_or_line": "320",
       "rule": "BLE001",
       "reason": "StageHandler boundary: any handler failure becomes a typed ErrorDetail envelope; the co-located 'except CancelledError: raise' arm is preserved.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"
     },
     {
       "file": "src/bonfire/handlers/sage_correction_bounce.py",
-      "symbol_or_line": "515",
+      "symbol_or_line": "488",
       "rule": "C901",
       "reason": "grandfathered at v1.0.1 cf-gate adoption 2026-06-22 (ratchet: BON-1757) — pre-existing under the kit ruff config; tracked for fix-forward",
       "approver": "BubbleGum mount (v1.0.1 gate-adoption), 2026-06-22 — pending Anta's blessing via PR #227"
     },
     {
       "file": "src/bonfire/handlers/sage_correction_bounce.py",
-      "symbol_or_line": "559",
+      "symbol_or_line": "539",
       "rule": "BLE001",
       "reason": "Backend dispatch boundary (open-set SDK failures) becomes a FAILED + escalated outcome; the co-located 'except CancelledError: raise' arm is preserved.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"

@@ -73,6 +73,34 @@ def _parse_pr(data: dict) -> PRInfo:
     )
 
 
+#: ``gh pr create`` prints the new pull request's URL on stdout, sometimes
+#: preceded by progress lines. The trailing number is the PR number.
+_PR_URL_RE: re.Pattern[str] = re.compile(r"https://\S*?/pull/(\d+)")
+
+
+def _pr_from_create_output(stdout: str, *, title: str, head: str, base: str) -> PRInfo:
+    """Build a :class:`PRInfo` from what ``gh pr create`` printed.
+
+    Raises ``RuntimeError`` when no URL is present. Returning a placeholder
+    would let a pipeline report a pull request that was never opened --
+    which is the specific failure the publisher stage's diff check exists
+    to prevent, and it should not be reintroduced one layer down.
+    """
+    match = _PR_URL_RE.search(stdout)
+    if match is None:
+        raise RuntimeError(
+            f"gh pr create returned no pull-request URL; stdout was {stdout.strip()[:200]!r}"
+        )
+    return PRInfo(
+        number=int(match.group(1)),
+        url=match.group(0),
+        title=title,
+        state="open",
+        head_branch=head,
+        base_branch=base,
+    )
+
+
 def detect_github_repo(repo_path: str | Path = ".") -> str:
     """Detect the GitHub ``owner/repo`` slug from the git remote.
 
@@ -135,7 +163,19 @@ class GitHubClient:
         base: str,
         body: str = "",
     ) -> PRInfo:
-        """Create a pull request via ``gh pr create``."""
+        """Create a pull request via ``gh pr create``.
+
+        ``gh pr create`` has no ``--json`` flag -- passing one fails the
+        whole call with ``unknown flag: --json``, after the branch and
+        commit have already landed. What it does emit on success is the new
+        pull request's URL on stdout, so the number is read from there.
+
+        The response is assembled from what was requested plus that URL
+        rather than by a follow-up ``gh pr view``: a second network call
+        can fail on its own and would turn a *created* PR into a failed
+        stage. ``state`` is ``"open"`` because that is what ``gh pr create``
+        just made.
+        """
         args = [
             "pr",
             "create",
@@ -147,14 +187,12 @@ class GitHubClient:
             head,
             "--base",
             base,
-            "--json",
-            "number,url,title,state,headRefName,baseRefName",
         ]
         if body:
             args.extend(["--body", body])
         rc, stdout, stderr = await self._run_gh(args)
         self._check(rc, stderr)
-        return _parse_pr(json.loads(stdout))
+        return _pr_from_create_output(stdout, title=title, head=head, base=base)
 
     async def get_pr(self, number: int) -> PRInfo:
         """Fetch a pull request by number via ``gh pr view``."""

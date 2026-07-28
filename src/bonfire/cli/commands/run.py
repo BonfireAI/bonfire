@@ -40,26 +40,19 @@ if TYPE_CHECKING:
 
 #: Default workflow selected when the caller does not pass ``--workflow``.
 #:
-#: This is ``debug``, not ``standard_build``, and the reason is not a
-#: preference. ``standard_build`` cannot currently complete: its ``bard``
-#: stage commits the files the preceding stages wrote, and it reads that file
-#: list from ``Envelope.artifacts`` — a field nothing in ``src/`` ever
-#: populates. The stage therefore refuses with ``empty_artifacts`` on every
-#: run, no matter what the agent did.
+#: This was temporarily ``debug`` while ``standard_build``'s publisher stage
+#: could not run at all: it commits the files the preceding stages wrote and
+#: reads that list from ``Envelope.artifacts``, which nothing populated, so
+#: it refused with ``empty_artifacts`` on every run regardless of what the
+#: agent did. The dispatch layer now records the agent's file-mutating tool
+#: calls onto the envelope and the engine carries them down the run, so the
+#: stage reaches git.
 #:
-#: That defect used to be invisible, because the pipeline died four stages
-#: earlier on ``Unknown handler: sage_correction_bounce``. Wiring the handler
-#: registry uncovered it; it does not fix it, and this lane does not own the
-#: dispatch layer where the fix belongs.
-#:
-#: So the choice is between a default that always fails and a default that
-#: works. ``--workflow standard_build`` remains available and now fails with
-#: an accurate message instead of a misleading one, and ``--help`` says so
-#: rather than letting the change pass unannounced.
-_DEFAULT_WORKFLOW = "debug"
-
-#: Named separately so the help text and the tests refer to the same string.
-_BLOCKED_WORKFLOW = "standard_build"
+#: The publisher still needs somewhere to publish *to*: a git remote it can
+#: push to and a working ``gh``. Without those it fails at the push with a
+#: message naming the cause, which is an honest environment failure rather
+#: than the unconditional refusal that justified the stopgap.
+_DEFAULT_WORKFLOW = "standard_build"
 
 
 class _EngineFactory(Protocol):
@@ -179,10 +172,10 @@ def run(
         "-w",
         help=(
             "Workflow plan to run. Use a name from the built-in registry. "
-            f"NOTE: '{_BLOCKED_WORKFLOW}' does not currently run to completion "
-            "-- its publisher stage reads the file list to commit from "
-            "Envelope.artifacts, which nothing populates yet, so it always "
-            f"stops there. '{_DEFAULT_WORKFLOW}' is the default for that reason."
+            f"The default '{_DEFAULT_WORKFLOW}' ends by committing, pushing "
+            "and opening a pull request, so it needs a git remote you can "
+            "push to and an authenticated 'gh'. Use '--workflow debug' for a "
+            "scout-and-build pass that touches neither."
         ),
     ),
 ) -> None:

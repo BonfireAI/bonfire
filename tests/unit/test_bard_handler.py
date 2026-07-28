@@ -49,7 +49,7 @@ except ImportError:  # pragma: no cover
     BardHandler = None  # type: ignore[assignment,misc]
 
 try:
-    from bonfire.handlers.bard import _slugify_task  # type: ignore[import-not-found]
+    from bonfire.handlers.bard import _BRANCH_KIND, _SLUG_ID_LEN, _slugify_task
 except ImportError:  # pragma: no cover
     _slugify_task = None  # type: ignore[assignment]
 
@@ -127,7 +127,7 @@ def git_workflow() -> AsyncMock:
     """AsyncMock GitWorkflow stub with rev_parse/create_branch/commit/push."""
     wf = AsyncMock()
     wf.rev_parse = AsyncMock(return_value="a" * 40)
-    wf.create_branch = AsyncMock(return_value=None)
+    wf.create_branch = AsyncMock(side_effect=lambda n, **_: f"bonfire/{n}")
     wf.commit = AsyncMock(return_value="b" * 40)
     wf.push = AsyncMock(return_value=None)
     return wf
@@ -272,7 +272,7 @@ class TestHappyPath:
     ) -> None:
         """All five META_BARD_* keys populated on success."""
         result = await handler.handle(bard_stage, artifacts_envelope, {})
-        assert result.metadata[META_BARD_BRANCH].startswith("bard/")
+        assert result.metadata[META_BARD_BRANCH].startswith(f"bonfire/{_BRANCH_KIND}/")
         assert result.metadata[META_BARD_BASE_SHA] == "a" * 40
         assert result.metadata[META_BARD_COMMIT_SHA] == "b" * 40
         assert json.loads(result.metadata[META_BARD_STAGED_FILES]) == [
@@ -296,8 +296,9 @@ class TestHappyPath:
             call_log.append("rev_parse")
             return "a" * 40
 
-        async def _track_create_branch(_name: str) -> None:
+        async def _track_create_branch(name: str) -> str:
             call_log.append("create_branch")
+            return f"bonfire/{name}"
 
         async def _track_commit(_msg: str, **_kwargs: object) -> str:
             call_log.append("commit")
@@ -543,7 +544,7 @@ class TestBranchNaming:
         await handler.handle(bard_stage, artifacts_envelope, {})
         branch_arg = git_workflow.create_branch.await_args.args[0]
         assert not branch_arg.startswith("bonfire/")
-        assert branch_arg.startswith("bard/")
+        assert branch_arg.startswith(f"{_BRANCH_KIND}/")
 
     @_SLUG_HELPER_XFAIL
     @pytest.mark.asyncio
@@ -554,10 +555,11 @@ class TestBranchNaming:
         artifacts_envelope: Envelope,
         git_workflow: AsyncMock,
     ) -> None:
-        """Exact form ``bard/<slug>-<id12>``."""
+        """Exact form ``fix/<slug>-<id8>``."""
         await handler.handle(bard_stage, artifacts_envelope, {})
         branch_arg = git_workflow.create_branch.await_args.args[0]
-        expected = f"bard/{_slugify_task(artifacts_envelope.task, artifacts_envelope.envelope_id)}"
+        slug = _slugify_task(artifacts_envelope.task, artifacts_envelope.envelope_id)
+        expected = f"{_BRANCH_KIND}/{slug}"
         assert branch_arg == expected
 
 
@@ -570,57 +572,55 @@ class TestSlugifyTask:
     """All tests gated on _slugify_task being present in bard.py."""
 
     @_SLUG_HELPER_XFAIL
-    def test_suffix_is_full_envelope_id(self) -> None:
-        """12-char envelope_id suffix after final '-'."""
+    def test_suffix_is_the_leading_slice_of_the_envelope_id(self) -> None:
+        """Suffix is envelope_id[:_SLUG_ID_LEN] after the final '-'."""
         envelope_id = "abc123456789"
         output = _slugify_task("foo", envelope_id)
-        assert output.endswith(f"-{envelope_id}")
-        _, _, suffix = output.rpartition("-")
-        assert len(suffix) == 12
+        assert output.endswith(f"-{envelope_id[:_SLUG_ID_LEN]}")
 
     @_SLUG_HELPER_XFAIL
     def test_envelope_id_preserves_leading_zero_hex(self) -> None:
         """Envelope_id slice must not reinterpret leading-zero hex."""
         out = _slugify_task("hello", "0000abcd1234")
-        assert out == "hello-0000abcd1234"
+        assert out == "hello-0000abcd"
 
     @_SLUG_HELPER_XFAIL
     def test_special_chars_collapse_to_dashes(self) -> None:
         """Non-[a-z0-9] -> dashes; stripped at ends."""
         out = _slugify_task("!!! hello WORLD !!!", "a" * 12)
-        assert out == "hello-world-aaaaaaaaaaaa"
+        assert out == "hello-world-" + "a" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_control_chars_treated_as_delimiters(self) -> None:
         """Tab, newline, carriage return collapse to dashes."""
         out = _slugify_task("foo\tbar\nbaz\rqux", "d" * 12)
-        assert out == "foo-bar-baz-qux-dddddddddddd"
+        assert out == "foo-bar-baz-qux-" + "d" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_null_byte_does_not_survive(self) -> None:
         """Null byte collapses to dash; no NUL in output."""
         out = _slugify_task("foo\x00bar", "e" * 12)
         assert "\x00" not in out
-        assert out == "foo-bar-eeeeeeeeeeee"
+        assert out == "foo-bar-" + "e" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_mixed_unicode_whitespace_collapses(self) -> None:
         """NBSP and EM-SPACE collapse to dash."""
         task = "foo\u00a0bar\u2003baz"
         out = _slugify_task(task, "1" * 12)
-        assert out == "foo-bar-baz-111111111111"
+        assert out == "foo-bar-baz-" + "1" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_special_chars_only_uses_fallback(self) -> None:
         """Pure non-alphanumeric input collapses to fallback 'task'."""
         out = _slugify_task("!!!@@@###", "c" * 12)
-        assert out == "task-cccccccccccc"
+        assert out == "task-" + "c" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_whitespace_only_task_uses_fallback(self) -> None:
         """Whitespace-only sanitizes to empty -> fallback 'task'."""
         out = _slugify_task("    \t\n  ", "9" * 12)
-        assert out == "task-999999999999"
+        assert out == "task-" + "9" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_is_deterministic(self) -> None:
@@ -640,7 +640,7 @@ class TestSlugifyTask:
         out2 = _slugify_task(task, "a" * 12)
         assert out1 == out2
         assert all(ord(c) < 128 for c in out1)
-        assert out1.endswith("-aaaaaaaaaaaa")
+        assert out1.endswith("-" + "a" * _SLUG_ID_LEN)
 
     @_SLUG_HELPER_XFAIL
     def test_very_long_task_truncates_to_53_chars_max(self) -> None:
@@ -649,7 +649,7 @@ class TestSlugifyTask:
         assert len(out) <= 53
         prefix, _, suffix = out.rpartition("-")
         assert len(prefix) <= 40
-        assert len(suffix) == 12
+        assert len(suffix) == _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     @pytest.mark.parametrize("n", [39, 40, 41, 42])
@@ -663,7 +663,7 @@ class TestSlugifyTask:
             assert prefix == "a" * 39
         if n >= 40:
             assert prefix == "a" * 40
-        assert suffix == "0" * 12
+        assert suffix == "0" * _SLUG_ID_LEN
 
     @_SLUG_HELPER_XFAIL
     def test_truncation_rstrips_trailing_dash(self) -> None:
@@ -678,10 +678,10 @@ class TestSlugifyTask:
     def test_output_matches_character_set_regex(self) -> None:
         """Output matches locked character-set regex."""
         non_empty = _slugify_task("Implement auth module", "abcdef012345")
-        assert re.fullmatch(r"^[a-z0-9](-?[a-z0-9]+)*-[0-9a-f]{12}$", non_empty)
+        assert re.fullmatch(rf"^[a-z0-9](-?[a-z0-9]+)*-[0-9a-f]{{{_SLUG_ID_LEN}}}$", non_empty)
 
         fallback = _slugify_task("!!!", "abcdef012345")
-        assert re.fullmatch(r"^[a-z0-9]+-[0-9a-f]{12}$", fallback)
+        assert re.fullmatch(rf"^[a-z0-9]+-[0-9a-f]{{{_SLUG_ID_LEN}}}$", fallback)
 
     @_SLUG_HELPER_XFAIL
     def test_differs_when_envelope_ids_differ(self) -> None:
@@ -689,8 +689,8 @@ class TestSlugifyTask:
         slug_a = _slugify_task("same task", "0123456789ab")
         slug_b = _slugify_task("same task", "fedcba987654")
         assert slug_a != slug_b
-        assert slug_a.endswith("-0123456789ab")
-        assert slug_b.endswith("-fedcba987654")
+        assert slug_a.endswith(f"-{'0123456789ab'[:_SLUG_ID_LEN]}")
+        assert slug_b.endswith(f"-{'fedcba987654'[:_SLUG_ID_LEN]}")
 
     @_SLUG_HELPER_XFAIL
     def test_identical_inputs_produce_identical_slugs(self) -> None:
@@ -735,12 +735,12 @@ class TestSlugifyTask:
     @pytest.mark.parametrize(
         ("task", "envelope_id", "expected"),
         [
-            ("hello", "a" * 12, "hello-" + "a" * 12),
-            ("a" * 40, "b" * 12, "a" * 40 + "-" + "b" * 12),
-            ("a" * 41, "c" * 12, "a" * 40 + "-" + "c" * 12),
-            ("  foo   bar  ", "d" * 12, "foo-bar-" + "d" * 12),
-            ("!!!", "e" * 12, "task-" + "e" * 12),
-            ("café résumé", "f" * 12, "caf-r-sum-" + "f" * 12),
+            ("hello", "a" * 12, "hello-" + "a" * _SLUG_ID_LEN),
+            ("a" * 40, "b" * 12, "a" * 40 + "-" + "b" * _SLUG_ID_LEN),
+            ("a" * 41, "c" * 12, "a" * 40 + "-" + "c" * _SLUG_ID_LEN),
+            ("  foo   bar  ", "d" * 12, "foo-bar-" + "d" * _SLUG_ID_LEN),
+            ("!!!", "e" * 12, "task-" + "e" * _SLUG_ID_LEN),
+            ("café résumé", "f" * 12, "caf-r-sum-" + "f" * _SLUG_ID_LEN),
         ],
     )
     def test_parametric_table(self, task: str, envelope_id: str, expected: str) -> None:
@@ -765,7 +765,7 @@ class TestPhantomCommitDetection:
         phantom = "x" * 40
         wf = AsyncMock()
         wf.rev_parse = AsyncMock(return_value=phantom)
-        wf.create_branch = AsyncMock(return_value=None)
+        wf.create_branch = AsyncMock(side_effect=lambda name, **_: f"bonfire/{name}")
         wf.commit = AsyncMock(return_value=phantom)
         wf.push = AsyncMock(return_value=None)
 
@@ -788,7 +788,7 @@ class TestPhantomCommitDetection:
         phantom = "x" * 40
         wf = AsyncMock()
         wf.rev_parse = AsyncMock(return_value=phantom)
-        wf.create_branch = AsyncMock(return_value=None)
+        wf.create_branch = AsyncMock(side_effect=lambda name, **_: f"bonfire/{name}")
         wf.commit = AsyncMock(return_value=phantom)
         wf.push = AsyncMock(return_value=None)
 
@@ -816,7 +816,7 @@ class TestPhantomCommitDetection:
         phantom = "x" * 40
         wf = AsyncMock()
         wf.rev_parse = AsyncMock(return_value=phantom)
-        wf.create_branch = AsyncMock(return_value=None)
+        wf.create_branch = AsyncMock(side_effect=lambda name, **_: f"bonfire/{name}")
         wf.commit = AsyncMock(return_value=phantom)
         wf.push = AsyncMock(return_value=None)
 
@@ -1070,11 +1070,11 @@ class TestConfigThreading:
         envelope = _make_envelope("x" * 200)
         await handler.handle(bard_stage, envelope, {})
         branch_arg = git_workflow.create_branch.await_args.args[0]
-        assert branch_arg.startswith("bard/")
-        slug_part = branch_arg[len("bard/") :]
+        assert branch_arg.startswith(f"{_BRANCH_KIND}/")
+        slug_part = branch_arg[len(f"{_BRANCH_KIND}/") :]
         prefix, _, suffix = slug_part.rpartition("-")
         assert len(prefix) <= 40
-        assert len(suffix) == 12
+        assert len(suffix) == _SLUG_ID_LEN
 
     @pytest.mark.asyncio
     async def test_config_not_consumed_on_empty_artifacts_path(
@@ -1116,7 +1116,7 @@ class TestPushKeywordOnly:
         await_args = git_workflow.push.await_args
         assert await_args.args == ()
         assert "branch" in await_args.kwargs
-        assert await_args.kwargs["branch"].startswith("bard/")
+        assert await_args.kwargs["branch"].startswith(f"bonfire/{_BRANCH_KIND}/")
 
 
 # ---------------------------------------------------------------------------

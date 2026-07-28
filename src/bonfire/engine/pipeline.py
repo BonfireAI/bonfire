@@ -34,7 +34,7 @@ from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.model_resolver import resolve_dispatch_model
-from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus
+from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus, accumulate_artifacts
 from bonfire.models.events import (
     BonfireEvent,
     PipelineCompleted,
@@ -543,8 +543,6 @@ class PipelineEngine:
                 task=plan.task_description,
             )
 
-            task_prompt = context
-
             initial_meta: dict[str, Any] = (
                 dict(initial_envelope.metadata) if initial_envelope is not None else {}
             )
@@ -554,10 +552,11 @@ class PipelineEngine:
 
             envelope = Envelope(
                 envelope_id=session_id,
-                task=task_prompt,
+                task=context,
                 context=context,
                 agent_name=spec.agent_name,
                 model=spec.model_override or "",
+                artifacts=accumulate_artifacts(completed.values()),
                 metadata=merged_metadata,
             )
 

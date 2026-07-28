@@ -34,10 +34,12 @@ result for context, attaches the PR number to envelope metadata under
 ### `wizard` (reviewer)
 
 Posts a structured review on the PR via `gh pr review`. Routes to one of
-`approve`, `request_changes`, or `comment`. The `review_approval` gate
-reads the verdict from `prior_results[META_REVIEW_VERDICT]`; on
+`approve`, `request_changes`, or `comment`. The handler records the verdict
+under `META_REVIEW_VERDICT` on the envelope it returns, *before* the GitHub
+call, and the `review_approval` gate reads it from there; on
 `request_changes` the pipeline bounces back to `warrior` (max iterations
-honoured by the warrior stage).
+honoured by the warrior stage). The gate never reads the review body:
+"I do not approve this change" contains the substring `approve`.
 
 ### `merge_preflight` (verifier)
 

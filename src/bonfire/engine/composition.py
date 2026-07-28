@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from bonfire.engine import gates as _gates
+from bonfire.engine.gate_state import PytestSuiteProbe
 
 if TYPE_CHECKING:
     from bonfire.dispatch.tool_policy import ToolPolicy
@@ -145,7 +146,11 @@ class UnconfiguredGitHubClient:
 # ---------------------------------------------------------------------------
 
 
-def build_default_gates(*, budget_usd: float | None = None) -> dict[str, QualityGate]:
+def build_default_gates(
+    *,
+    budget_usd: float | None = None,
+    project_root: Path | None = None,
+) -> dict[str, QualityGate]:
     """Return the built-in gate registry, keyed by the name plans use.
 
     The keys are the strings that appear in ``StageSpec.gates``. They are also
@@ -154,12 +159,19 @@ def build_default_gates(*, budget_usd: float | None = None) -> dict[str, Quality
     trusting this dict — a registry that files ``TestPassGate`` under
     ``"verification"`` would otherwise pass every structural check while
     reporting the wrong gate in every failure message.
+
+    ``project_root`` is the collaborator the three suite-backed gates need:
+    it is where their pytest observation runs. Omitting it does not produce
+    permissive gates — it produces gates that raise
+    ``GateStateUnavailableError`` when evaluated, because a gate with no way
+    to see the tests must fail loudly rather than wave the run through.
     """
+    probe = PytestSuiteProbe(project_root=project_root) if project_root is not None else None
     registry: dict[str, QualityGate] = {
         "completion": _gates.CompletionGate(),
-        "test_pass": _gates.TestPassGate(),
-        "red_phase": _gates.RedPhaseGate(),
-        "verification": _gates.VerificationGate(),
+        "test_pass": _gates.TestPassGate(probe),
+        "red_phase": _gates.RedPhaseGate(probe),
+        "verification": _gates.VerificationGate(probe),
         "review_approval": _gates.ReviewApprovalGate(),
         "merge_preflight_passed": _gates.MergePreflightGate(),
         "sage_correction_resolved": _gates.SageCorrectionResolvedGate(),
@@ -331,7 +343,7 @@ def build_default_engine(
         config=settings.bonfire,
         settings=settings,
     )
-    gate_registry = build_default_gates(budget_usd=plan.budget_usd)
+    gate_registry = build_default_gates(budget_usd=plan.budget_usd, project_root=root)
     validate_plan_wiring(plan, handlers=handlers, gates=gate_registry)
 
     tool_policy: ToolPolicy = DefaultToolPolicy()

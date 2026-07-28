@@ -26,11 +26,11 @@ from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock
 from bonfire.dispatch import sdk_backend
 from bonfire.models.plan import StageSpec, WorkflowPlan, WorkflowType
 
-#: A reply shaped to satisfy the real gates: ``test_pass`` wants "passed" with
-#: no non-zero "N failed", ``verification`` wants "verified", and
-#: ``review_approval`` wants "approve". Canned rather than random so a gate
-#: that starts rejecting it is reporting a change in the gate, not in the fake.
-AGENT_REPLY = "Done. 12 passed, 0 failed. All checks passed and verified. I approve."
+#: A plain stage report. It is deliberately NOT shaped to please any gate:
+#: the suite-backed gates read the work tree, not this string, so a run that
+#: only passes when the fake says the right words is reporting a regression
+#: in the gates rather than a change in the fixture.
+AGENT_REPLY = "Done. The change is in place and I re-ran the suite."
 
 
 class RecordingTransport:
@@ -87,6 +87,9 @@ def git_repo() -> Callable[[Path], Path]:
         path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "-q", str(path)], check=True)
         (path / "README.md").write_text("fixture\n")
+        # A green suite, because the suite-backed gates observe one. A tree
+        # with no tests at all is not green and must not be graded as such.
+        (path / "test_fixture.py").write_text("def test_ok():\n    assert True\n")
         subprocess.run(["git", "-C", str(path), "add", "."], check=True)
         subprocess.run(
             [

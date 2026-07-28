@@ -7,21 +7,34 @@ Six gate classes implementing the QualityGate protocol, plus GateChain for
 sequential evaluation with short-circuit on error severity. Gate-name strings
 are locked per Sage D9.
 
+**Every gate here grades state, never narration.** A gate reads the
+envelope's status, its metadata, the pipeline context, or -- for the three
+suite-backed gates re-exported from :mod:`bonfire.engine.suite_gates` -- a
+live observation of the project's test suite. None matches a substring
+against ``envelope.result``: reading that field rejected correct work
+described in unusual words while accepting "I do not approve this change" as
+an approval -- one mechanism, both directions, so a longer word list would
+have fixed neither. A gate that cannot reach its state raises
+:class:`~bonfire.engine.gate_state.GateStateUnavailableError` instead.
+
 Sage D5: GateChain does NOT wrap individual gate exceptions. A raising gate
 propagates out of ``evaluate_all``. The PipelineEngine.run() outer try/except
-catches it and returns ``PipelineResult(success=False)``.
+catches it and returns ``PipelineResult(success=False)`` -- which is exactly
+the loud path an unevaluatable gate needs.
 """
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
+from bonfire.engine.gate_state import GateStateUnavailableError
+from bonfire.engine.suite_gates import RedPhaseGate, TestPassGate, VerificationGate
 from bonfire.models.envelope import (
     META_CLASSIFIER_VERDICT,
     META_CORRECTION_ESCALATED,
     META_CORRECTION_VERDICT,
     META_PREFLIGHT_TEST_DEBT_NOTED,
+    META_REVIEW_VERDICT,
     Envelope,
     TaskStatus,
 )
@@ -30,8 +43,8 @@ from bonfire.models.plan import GateContext, GateResult
 if TYPE_CHECKING:
     from bonfire.protocols import QualityGate
 
-# Pattern matching a non-zero count followed by "failed" (case-insensitive).
-_NONZERO_FAILED_RE = re.compile(r"[1-9]\d*\s+failed", re.IGNORECASE)
+# The only reviewer verdict that clears the gate; WizardHandler writes it.
+_APPROVED_VERDICT: str = "approve"
 
 # Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.
 _MERGE_PREFLIGHT_GATE_NAME: str = "merge_preflight_passed"
@@ -74,63 +87,50 @@ class CompletionGate:
         )
 
 
-class TestPassGate:
-    """Passes when result contains pass indicators and no failure indicators."""
-
-    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
-        text = envelope.result
-        has_pass = "passed" in text.lower()
-        has_fail = bool(_NONZERO_FAILED_RE.search(text))
-        passed = has_pass and not has_fail
-        return GateResult(
-            gate_name="test_pass",
-            passed=passed,
-            severity="info" if passed else "error",
-            message="Tests passed" if passed else "Tests did not pass",
-        )
-
-
-class RedPhaseGate:
-    """Passes when result contains failure indicators (inverse of TestPassGate)."""
-
-    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
-        text = envelope.result
-        has_nonzero_fail = bool(_NONZERO_FAILED_RE.search(text))
-        has_exit_code = "exit code 1" in text.lower()
-        passed = has_nonzero_fail or has_exit_code
-        return GateResult(
-            gate_name="red_phase",
-            passed=passed,
-            severity="info" if passed else "error",
-            message="Red phase confirmed" if passed else "No failure indicators found",
-        )
-
-
-class VerificationGate:
-    """Passes when result contains 'verified' or 'checks passed'."""
-
-    async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
-        text = envelope.result.lower()
-        passed = "verified" in text or "checks passed" in text
-        return GateResult(
-            gate_name="verification",
-            passed=passed,
-            severity="info" if passed else "error",
-            message="Verification passed" if passed else "Verification not confirmed",
-        )
-
-
 class ReviewApprovalGate:
-    """Passes when result contains 'approve' or 'approved'."""
+    """Passes when the reviewer stage recorded an ``approve`` verdict.
+
+    The state is ``envelope.metadata[META_REVIEW_VERDICT]``, which
+    :class:`~bonfire.handlers.wizard.WizardHandler` writes from the
+    canonical ``<verdict>`` tag *before* it calls GitHub, so a failed post
+    cannot lose it, and whose parser fail-safes to ``request_changes`` --
+    prose can never manufacture an approval here. ``docs/pipeline-stages.md``
+    already specified this contract via ``prior_results``; metadata is the
+    correct source, since ``prior_results`` holds result text keyed by stage
+    name and could never carry a metadata key.
+
+    A COMPLETED reviewer envelope with no verdict recorded is unevaluatable,
+    not a rejection: guessing either way is the defect this replaces.
+    """
 
     async def evaluate(self, envelope: Envelope, context: GateContext) -> GateResult:
-        text = envelope.result.lower()
-        passed = "approve" in text or "approved" in text
+        del context  # gate is envelope-only
+        if envelope.status != TaskStatus.COMPLETED:
+            return GateResult(
+                gate_name="review_approval",
+                passed=False,
+                severity="error",
+                message=f"Review stage did not complete: {envelope.status}",
+            )
+        raw = envelope.metadata.get(META_REVIEW_VERDICT)
+        if not isinstance(raw, str) or not raw.strip():
+            msg = (
+                f"gate 'review_approval': completed envelope carries no "
+                f"{META_REVIEW_VERDICT!r}. The reviewer stage must record its verdict; "
+                "this gate will not infer one from the review text."
+            )
+            raise GateStateUnavailableError(msg)
+        verdict = raw.strip().lower()
+        passed = verdict == _APPROVED_VERDICT
         return GateResult(
             gate_name="review_approval",
             passed=passed,
             severity="info" if passed else "error",
-            message="Review approved" if passed else "Review not approved",
+            message=(
+                f"Review approved (verdict={verdict})"
+                if passed
+                else f"Review not approved (verdict={verdict})"
+            ),
         )
 
 

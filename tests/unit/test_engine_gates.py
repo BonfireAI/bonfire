@@ -23,18 +23,46 @@ import inspect
 import pytest
 from pydantic import ValidationError
 
-from bonfire.models.envelope import Envelope, TaskStatus
+from bonfire.models.envelope import META_REVIEW_VERDICT, Envelope, TaskStatus
 from bonfire.models.plan import GateContext, GateResult
 from bonfire.protocols import QualityGate
+from bonfire.verify.suite import SuiteOutcome, parse_pytest_run
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+_GREEN_OUTPUT = "collected 2 items\n\n==== 2 passed in 0.03s ===="
+_RED_OUTPUT = "collected 2 items\n\n==== 1 failed, 1 passed in 0.03s ===="
+
+
+class _CannedProbe:
+    """A SuiteProbe returning a fixed, already-parsed pytest observation."""
+
+    def __init__(self, returncode: int, output: str) -> None:
+        self._returncode = returncode
+        self._output = output
+
+    async def observe(self) -> SuiteOutcome:
+        return parse_pytest_run(self._returncode, self._output)
+
+
+def _green() -> _CannedProbe:
+    return _CannedProbe(0, _GREEN_OUTPUT)
+
+
+def _red() -> _CannedProbe:
+    return _CannedProbe(1, _RED_OUTPUT)
+
 
 def _completed(result: str = "") -> Envelope:
     """A COMPLETED envelope carrying a result string."""
     return Envelope(task="test").with_result(result)
+
+
+def _reviewed(verdict: str) -> Envelope:
+    """A COMPLETED reviewer envelope carrying a recorded verdict."""
+    return _completed("").with_metadata(**{META_REVIEW_VERDICT: verdict})
 
 
 def _failed() -> Envelope:
@@ -177,44 +205,32 @@ class TestCompletionGate:
 
 
 class TestTestPassGate:
-    """TestPassGate: pass iff result has pass marker AND no N-failed (V1 41-54)."""
+    """TestPassGate: pass iff the observed suite is green. Narration is ignored."""
 
     async def test_gate_name_is_test_pass(self) -> None:
         from bonfire.engine.gates import TestPassGate
 
-        r = await TestPassGate().evaluate(_completed("3 passed"), _ctx())
+        r = await TestPassGate(_green()).evaluate(_completed("3 passed"), _ctx())
         assert r.gate_name == "test_pass"
 
-    async def test_passes_on_all_passed(self) -> None:
+    async def test_passes_when_the_suite_is_green(self) -> None:
         from bonfire.engine.gates import TestPassGate
 
-        result = await TestPassGate().evaluate(_completed("10 passed, 0 failed"), _ctx())
+        result = await TestPassGate(_green()).evaluate(_completed("10 passed, 0 failed"), _ctx())
         assert result.passed is True
 
-    async def test_fails_when_failures_reported(self) -> None:
+    async def test_fails_when_the_suite_is_red(self) -> None:
         from bonfire.engine.gates import TestPassGate
 
-        result = await TestPassGate().evaluate(_completed("3 failed, 2 passed"), _ctx())
+        result = await TestPassGate(_red()).evaluate(_completed("3 failed, 2 passed"), _ctx())
         assert result.passed is False
         assert result.severity == "error"
 
-    async def test_fails_on_empty_result(self) -> None:
+    async def test_passes_on_empty_result_when_the_suite_is_green(self) -> None:
+        """An agent that says nothing at all has still done the work or not."""
         from bonfire.engine.gates import TestPassGate
 
-        result = await TestPassGate().evaluate(_completed(""), _ctx())
-        assert result.passed is False
-
-    async def test_case_insensitive_pass_detection(self) -> None:
-        from bonfire.engine.gates import TestPassGate
-
-        result = await TestPassGate().evaluate(_completed("ALL PASSED"), _ctx())
-        assert result.passed is True
-
-    async def test_zero_failed_is_not_a_failure(self) -> None:
-        """'0 failed' must NOT trigger the failure regex."""
-        from bonfire.engine.gates import TestPassGate
-
-        result = await TestPassGate().evaluate(_completed("5 passed, 0 failed"), _ctx())
+        result = await TestPassGate(_green()).evaluate(_completed(""), _ctx())
         assert result.passed is True
 
 
@@ -229,28 +245,21 @@ class TestRedPhaseGate:
     async def test_gate_name_is_red_phase(self) -> None:
         from bonfire.engine.gates import RedPhaseGate
 
-        r = await RedPhaseGate().evaluate(_completed("2 failed"), _ctx())
+        r = await RedPhaseGate(_red()).evaluate(_completed("2 failed"), _ctx())
         assert r.gate_name == "red_phase"
 
-    async def test_passes_on_failures(self) -> None:
+    async def test_passes_when_a_test_actually_fails(self) -> None:
         from bonfire.engine.gates import RedPhaseGate
 
-        result = await RedPhaseGate().evaluate(_completed("3 failed, exit code 1"), _ctx())
+        result = await RedPhaseGate(_red()).evaluate(_completed(""), _ctx())
         assert result.passed is True
 
-    async def test_fails_when_all_passed(self) -> None:
+    async def test_fails_when_the_suite_is_green(self) -> None:
         from bonfire.engine.gates import RedPhaseGate
 
-        result = await RedPhaseGate().evaluate(_completed("10 passed"), _ctx())
+        result = await RedPhaseGate(_green()).evaluate(_completed("3 failed, exit code 1"), _ctx())
         assert result.passed is False
         assert result.severity == "error"
-
-    async def test_passes_on_exit_code_1_alone(self) -> None:
-        """'exit code 1' alone is enough to confirm RED."""
-        from bonfire.engine.gates import RedPhaseGate
-
-        result = await RedPhaseGate().evaluate(_completed("exit code 1"), _ctx())
-        assert result.passed is True
 
 
 # ===========================================================================
@@ -264,34 +273,20 @@ class TestVerificationGate:
     async def test_gate_name_is_verification(self) -> None:
         from bonfire.engine.gates import VerificationGate
 
-        r = await VerificationGate().evaluate(_completed("verified"), _ctx())
+        r = await VerificationGate(_green()).evaluate(_completed("verified"), _ctx())
         assert r.gate_name == "verification"
 
-    async def test_passes_on_verified(self) -> None:
+    async def test_passes_when_the_independent_observation_is_green(self) -> None:
         from bonfire.engine.gates import VerificationGate
 
-        result = await VerificationGate().evaluate(_completed("all verified"), _ctx())
+        result = await VerificationGate(_green()).evaluate(_completed("all verified"), _ctx())
         assert result.passed is True
 
-    async def test_passes_on_checks_passed(self) -> None:
+    async def test_passes_on_an_empty_narration(self) -> None:
         from bonfire.engine.gates import VerificationGate
 
-        result = await VerificationGate().evaluate(_completed("all checks passed"), _ctx())
+        result = await VerificationGate(_green()).evaluate(_completed(""), _ctx())
         assert result.passed is True
-
-    async def test_is_case_insensitive(self) -> None:
-        from bonfire.engine.gates import VerificationGate
-
-        result = await VerificationGate().evaluate(_completed("VERIFIED"), _ctx())
-        assert result.passed is True
-
-    async def test_fails_on_check_failed(self) -> None:
-        from bonfire.engine.gates import VerificationGate
-
-        result = await VerificationGate().evaluate(
-            _completed("check failed: type mismatch"), _ctx()
-        )
-        assert result.passed is False
 
 
 # ===========================================================================
@@ -300,32 +295,24 @@ class TestVerificationGate:
 
 
 class TestReviewApprovalGate:
-    """ReviewApprovalGate passes on 'approve' or 'approved' (V1 87-98)."""
+    """ReviewApprovalGate passes iff the reviewer stage recorded ``approve``."""
 
     async def test_gate_name_is_review_approval(self) -> None:
         from bonfire.engine.gates import ReviewApprovalGate
 
-        r = await ReviewApprovalGate().evaluate(_completed("approve"), _ctx())
+        r = await ReviewApprovalGate().evaluate(_reviewed("approve"), _ctx())
         assert r.gate_name == "review_approval"
 
-    async def test_passes_on_approve(self) -> None:
+    async def test_passes_on_a_recorded_approval(self) -> None:
         from bonfire.engine.gates import ReviewApprovalGate
 
-        result = await ReviewApprovalGate().evaluate(_completed("APPROVE: looks good"), _ctx())
-        assert result.passed is True
-
-    async def test_passes_on_approved(self) -> None:
-        from bonfire.engine.gates import ReviewApprovalGate
-
-        result = await ReviewApprovalGate().evaluate(_completed("Approved after one round"), _ctx())
+        result = await ReviewApprovalGate().evaluate(_reviewed("approve"), _ctx())
         assert result.passed is True
 
     async def test_fails_on_request_changes(self) -> None:
         from bonfire.engine.gates import ReviewApprovalGate
 
-        result = await ReviewApprovalGate().evaluate(
-            _completed("REQUEST_CHANGES: fix types"), _ctx()
-        )
+        result = await ReviewApprovalGate().evaluate(_reviewed("request_changes"), _ctx())
         assert result.passed is False
 
 
@@ -410,8 +397,8 @@ class TestGateChainBasics:
     async def test_all_pass_returns_all_results(self) -> None:
         from bonfire.engine.gates import CompletionGate, GateChain, TestPassGate
 
-        chain = GateChain([CompletionGate(), TestPassGate()])
-        results = await chain.evaluate_all(_completed("10 passed"), _ctx())
+        chain = GateChain([CompletionGate(), TestPassGate(_green())])
+        results = await chain.evaluate_all(_completed(""), _ctx())
         assert len(results) == 2
         assert all(r.passed for r in results)
 
@@ -423,7 +410,7 @@ class TestGateChainBasics:
     def test_chain_stores_gates_attribute(self) -> None:
         from bonfire.engine.gates import CompletionGate, GateChain, VerificationGate
 
-        g1, g2 = CompletionGate(), VerificationGate()
+        g1, g2 = CompletionGate(), VerificationGate(_green())
         c = GateChain([g1, g2])
         assert g1 in c.gates
         assert g2 in c.gates
@@ -436,7 +423,7 @@ class TestGateChainShortCircuit:
         from bonfire.engine.gates import CompletionGate, GateChain, TestPassGate
 
         # PENDING envelope: CompletionGate fails with error; TestPassGate must not run.
-        chain = GateChain([CompletionGate(), TestPassGate()])
+        chain = GateChain([CompletionGate(), TestPassGate(_green())])
         results = await chain.evaluate_all(_pending(), _ctx())
         assert len(results) == 1
         assert results[0].gate_name == "completion"
@@ -450,8 +437,10 @@ class TestGateChainShortCircuit:
             VerificationGate,
         )
 
-        chain = GateChain([CompletionGate(), VerificationGate(), CostLimitGate(budget_usd=100.0)])
-        results = await chain.evaluate_all(_completed("verified"), _ctx(cost=1.0))
+        chain = GateChain(
+            [CompletionGate(), VerificationGate(_green()), CostLimitGate(budget_usd=100.0)]
+        )
+        results = await chain.evaluate_all(_completed(""), _ctx(cost=1.0))
         assert len(results) == 3
 
 
@@ -468,8 +457,8 @@ class TestGateChainResultShape:
     async def test_results_preserve_order(self) -> None:
         from bonfire.engine.gates import CompletionGate, GateChain, VerificationGate
 
-        chain = GateChain([CompletionGate(), VerificationGate()])
-        results = await chain.evaluate_all(_completed("verified"), _ctx())
+        chain = GateChain([CompletionGate(), VerificationGate(_green())])
+        results = await chain.evaluate_all(_completed(""), _ctx())
         assert [r.gate_name for r in results] == ["completion", "verification"]
 
 
@@ -534,7 +523,8 @@ class TestGateNames:
         import bonfire.engine.gates as g
 
         cls = getattr(g, cls_path)
-        result = await cls().evaluate(_completed("passed verified APPROVE"), _ctx())
+        gate = cls() if cls_path in ("CompletionGate", "ReviewApprovalGate") else cls(_green())
+        result = await gate.evaluate(_reviewed("approve"), _ctx())
         assert result.gate_name == expected_name
 
     async def test_cost_limit_name(self) -> None:
@@ -582,7 +572,11 @@ class TestGateResultShape:
 
 
 class TestGatesNeverRaise:
-    """Every built-in gate returns a GateResult on empty input — never raises."""
+    """A wired gate returns a GateResult on empty input — never raises (C19).
+
+    C19's subject is envelope *content*. An unwired gate is a different
+    case, pinned in ``test_engine_gates_state.py``.
+    """
 
     async def test_completion_gate_never_raises(self) -> None:
         from bonfire.engine.gates import CompletionGate
@@ -593,25 +587,25 @@ class TestGatesNeverRaise:
     async def test_test_pass_gate_never_raises(self) -> None:
         from bonfire.engine.gates import TestPassGate
 
-        r = await TestPassGate().evaluate(_completed(""), _ctx())
+        r = await TestPassGate(_green()).evaluate(_completed(""), _ctx())
         assert isinstance(r, GateResult)
 
     async def test_red_phase_gate_never_raises(self) -> None:
         from bonfire.engine.gates import RedPhaseGate
 
-        r = await RedPhaseGate().evaluate(_completed(""), _ctx())
+        r = await RedPhaseGate(_red()).evaluate(_completed(""), _ctx())
         assert isinstance(r, GateResult)
 
     async def test_verification_gate_never_raises(self) -> None:
         from bonfire.engine.gates import VerificationGate
 
-        r = await VerificationGate().evaluate(_completed(""), _ctx())
+        r = await VerificationGate(_green()).evaluate(_completed(""), _ctx())
         assert isinstance(r, GateResult)
 
     async def test_review_approval_gate_never_raises(self) -> None:
         from bonfire.engine.gates import ReviewApprovalGate
 
-        r = await ReviewApprovalGate().evaluate(_completed(""), _ctx())
+        r = await ReviewApprovalGate().evaluate(_reviewed("approve"), _ctx())
         assert isinstance(r, GateResult)
 
     async def test_cost_limit_gate_never_raises(self) -> None:

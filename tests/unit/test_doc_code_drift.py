@@ -39,7 +39,10 @@ from bonfire.naming import ROLE_DISPLAY
 # Repo root = ``repo/tests/unit/<this file>`` → ``repo/``.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOC_PATH = _REPO_ROOT / "docs" / "architecture.md"
-_GATES_SRC = _REPO_ROOT / "src" / "bonfire" / "engine" / "gates.py"
+# Both gate modules: ``gates.py`` and the suite-backed gates it re-exports.
+# Scanning one would let a gate leave the doc's reach by changing files.
+_ENGINE = _REPO_ROOT / "src" / "bonfire" / "engine"
+_GATE_SRCS = (_ENGINE / "gates.py", _ENGINE / "suite_gates.py")
 _HANDLERS_PKG = _REPO_ROOT / "src" / "bonfire" / "handlers"
 _WORKFLOW_PKG = _REPO_ROOT / "src" / "bonfire" / "workflow"
 
@@ -49,6 +52,11 @@ _WORKFLOW_PKG = _REPO_ROOT / "src" / "bonfire" / "workflow"
 # source rosters. Each helper is small and one-purpose; failures point
 # directly at the surface that drifted.
 # ---------------------------------------------------------------------------
+
+
+def _gate_classes() -> set[str]:
+    """Every ``*Gate`` class the package ships, across both gate modules."""
+    return set().union(*(_classes_in_module(s, "Gate") for s in _GATE_SRCS)) - {"GateChain"}
 
 
 def _classes_in_module(path: Path, suffix: str) -> set[str]:
@@ -176,8 +184,8 @@ def _factory_role_strings() -> set[str]:
 def test_gate_count_matches_doc() -> None:
     """The Gate roster in ``engine/gates.py`` must match architecture.md's table.
 
-    Counts every top-level class ending with ``Gate`` in ``engine/gates.py``
-    excluding the ``GateChain`` composer (matched by exact name), then
+    Counts every top-level class ending with ``Gate`` across the package's
+    gate modules, excluding the ``GateChain`` composer, then
     parses the markdown table whose header begins with ``| Gate |`` in
     architecture.md and asserts the two rosters are identical.
 
@@ -185,10 +193,9 @@ def test_gate_count_matches_doc() -> None:
     (``MergePreflightGate`` and ``SageCorrectionResolvedGate`` were
     missing from the doc).
     """
-    code_classes = _classes_in_module(_GATES_SRC, "Gate")
-    # Strip the composer — it's not a QualityGate implementation, just
-    # the chain runner.
-    code_classes.discard("GateChain")
+    # The composer is stripped by the helper: GateChain is not a
+    # QualityGate implementation, just the chain runner.
+    code_classes = _gate_classes()
 
     doc_text = _DOC_PATH.read_text(encoding="utf-8")
     doc_entries = set(_doc_table_first_column(doc_text, "| Gate "))
@@ -312,7 +319,7 @@ def test_role_display_covers_all_factory_roles() -> None:
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("gate code classes", _classes_in_module(_GATES_SRC, "Gate") - {"GateChain"}),
+        ("gate code classes", _gate_classes()),
         (
             "doc gate table",
             set(_doc_table_first_column(_DOC_PATH.read_text(encoding="utf-8"), "| Gate ")),

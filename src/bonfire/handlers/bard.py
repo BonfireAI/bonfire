@@ -102,6 +102,51 @@ def _slugify_task(task: str, envelope_id: str) -> str:
     return f"{truncated}-{envelope_id[:_SLUG_ID_LEN]}"
 
 
+def _failed(
+    envelope: Envelope,
+    stage: StageSpec,
+    *,
+    metadata: dict[str, Any],
+    error_type: str,
+    message: str,
+) -> Envelope:
+    """Build the FAILED envelope every refusal path in this handler returns.
+
+    *metadata* is layered over ``envelope.metadata``, which is what each
+    inlined ``model_copy`` did by hand.
+    """
+    return envelope.model_copy(
+        update={
+            "metadata": {**envelope.metadata, **metadata},
+            "error": ErrorDetail(
+                error_type=error_type,
+                message=message,
+                stage_name=stage.name,
+            ),
+            "status": TaskStatus.FAILED,
+        },
+    )
+
+
+def _partial_metadata(
+    *,
+    branch_name: str | None,
+    base_sha: str | None,
+    commit_sha: str | None,
+    staged_paths: list[str],
+) -> dict[str, Any]:
+    """Carry forward whatever the run got far enough to learn before it threw."""
+    partial: dict[str, Any] = {}
+    if branch_name is not None:
+        partial[_META_BRANCH] = branch_name
+    if base_sha is not None:
+        partial[_META_BASE_SHA] = base_sha
+    if commit_sha is not None:
+        partial[_META_COMMIT_SHA] = commit_sha
+        partial[_META_STAGED_FILES] = json.dumps(staged_paths)
+    return partial
+
+
 # ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
@@ -138,6 +183,28 @@ class BardHandler:
         # templating) can read it without a constructor churn.
         self._config = config
 
+    async def _create_branch(self, branch_name: str) -> str | None:
+        """Create *branch_name*; ``None`` reports an "already exists" collision.
+
+        Takes the created name back rather than assuming it: ``create_branch``
+        owns the ``bonfire/`` prefix, and push/PR head/metadata must all name
+        the ref that actually exists. Every other ``RuntimeError`` propagates.
+        """
+        try:
+            created = await self._git_workflow.create_branch(branch_name)
+            if not isinstance(created, str) or not created:
+                # Falling back to the requested name IS the original
+                # defect: it lacks the prefix, so the ref would not exist.
+                raise RuntimeError(
+                    "create_branch did not return the branch it created "
+                    f"(got {created!r}); cannot determine the ref to push."
+                )
+        except RuntimeError as branch_exc:
+            if "already exists" in str(branch_exc):
+                return None
+            raise
+        return created
+
     async def handle(
         self,
         stage: StageSpec,
@@ -158,23 +225,16 @@ class BardHandler:
 
             # 2. Empty-artifacts precondition: fail BEFORE any git call.
             if not staged_paths:
-                return envelope.model_copy(
-                    update={
-                        "metadata": {
-                            **envelope.metadata,
-                            _META_STAGING_FAILURE_REASON: "empty_artifacts",
-                        },
-                        "error": ErrorDetail(
-                            error_type="empty_artifacts",
-                            message=(
-                                "BardHandler refused to commit: envelope.artifacts "
-                                "contains no file_written/file_modified entries. "
-                                f"envelope_id={envelope.envelope_id}, stage={stage.name}."
-                            ),
-                            stage_name=stage.name,
-                        ),
-                        "status": TaskStatus.FAILED,
-                    },
+                return _failed(
+                    envelope,
+                    stage,
+                    metadata={_META_STAGING_FAILURE_REASON: "empty_artifacts"},
+                    error_type="empty_artifacts",
+                    message=(
+                        "BardHandler refused to commit: envelope.artifacts "
+                        "contains no file_written/file_modified entries. "
+                        f"envelope_id={envelope.envelope_id}, stage={stage.name}."
+                    ),
                 )
 
             # 3. Capture base SHA at entry -- before any branch-moving operation.
@@ -183,41 +243,23 @@ class BardHandler:
             # 4. Build branch name (no leading "bonfire/" -- create_branch adds it).
             branch_name = f"{_BRANCH_KIND}/{_slugify_task(envelope.task, envelope.envelope_id)}"
 
-            # 5. Create branch; structured error on collision. Take the name
-            #    back rather than assuming: create_branch owns the prefix, and
-            #    push/PR head/metadata must all name the ref that exists.
-            try:
-                created = await self._git_workflow.create_branch(branch_name)
-                if not isinstance(created, str) or not created:
-                    # Falling back to the requested name IS the original
-                    # defect: it lacks the prefix, so the ref would not exist.
-                    raise RuntimeError(
-                        "create_branch did not return the branch it created "
-                        f"(got {created!r}); cannot determine the ref to push."
-                    )
-                branch_name = created
-            except RuntimeError as branch_exc:
-                if "already exists" in str(branch_exc):
-                    return envelope.model_copy(
-                        update={
-                            "metadata": {
-                                **envelope.metadata,
-                                _META_BRANCH: branch_name,
-                                _META_BASE_SHA: base_sha,
-                                _META_STAGING_FAILURE_REASON: "branch_collision",
-                            },
-                            "error": ErrorDetail(
-                                error_type="branch_collision",
-                                message=(
-                                    f"Branch {branch_name!r} already exists; "
-                                    "refusing to rewrite history."
-                                ),
-                                stage_name=stage.name,
-                            ),
-                            "status": TaskStatus.FAILED,
-                        },
-                    )
-                raise
+            # 5. Create branch; structured error on collision.
+            created = await self._create_branch(branch_name)
+            if created is None:
+                return _failed(
+                    envelope,
+                    stage,
+                    metadata={
+                        _META_BRANCH: branch_name,
+                        _META_BASE_SHA: base_sha,
+                        _META_STAGING_FAILURE_REASON: "branch_collision",
+                    },
+                    error_type="branch_collision",
+                    message=(
+                        f"Branch {branch_name!r} already exists; refusing to rewrite history."
+                    ),
+                )
+            branch_name = created
 
             # 6. Stage + commit. Returns full HEAD SHA.
             commit_sha = await self._git_workflow.commit(
@@ -227,28 +269,23 @@ class BardHandler:
 
             # 7. Post-commit assert: did the commit actually introduce a diff?
             if commit_sha == base_sha:
-                return envelope.model_copy(
-                    update={
-                        "metadata": {
-                            **envelope.metadata,
-                            _META_BRANCH: branch_name,
-                            _META_BASE_SHA: base_sha,
-                            _META_COMMIT_SHA: commit_sha,
-                            _META_STAGED_FILES: json.dumps(staged_paths),
-                            _META_STAGING_FAILURE_REASON: "no_diff_after_commit",
-                        },
-                        "error": ErrorDetail(
-                            error_type="no_diff_after_commit",
-                            message=(
-                                f"BardHandler detected phantom commit: HEAD SHA "
-                                f"{commit_sha} equals base ({self._base_branch}) "
-                                f"SHA {base_sha}. No changes were introduced -- "
-                                "refusing to push or open PR."
-                            ),
-                            stage_name=stage.name,
-                        ),
-                        "status": TaskStatus.FAILED,
+                return _failed(
+                    envelope,
+                    stage,
+                    metadata={
+                        _META_BRANCH: branch_name,
+                        _META_BASE_SHA: base_sha,
+                        _META_COMMIT_SHA: commit_sha,
+                        _META_STAGED_FILES: json.dumps(staged_paths),
+                        _META_STAGING_FAILURE_REASON: "no_diff_after_commit",
                     },
+                    error_type="no_diff_after_commit",
+                    message=(
+                        f"BardHandler detected phantom commit: HEAD SHA "
+                        f"{commit_sha} equals base ({self._base_branch}) "
+                        f"SHA {base_sha}. No changes were introduced -- "
+                        "refusing to push or open PR."
+                    ),
                 )
 
             # 8. Push (keyword-only branch arg -- GitWorkflow.push signature).
@@ -280,22 +317,15 @@ class BardHandler:
             )
 
         except Exception as exc:  # noqa: BLE001
-            partial_metadata: dict[str, Any] = {**envelope.metadata}
-            if branch_name is not None:
-                partial_metadata[_META_BRANCH] = branch_name
-            if base_sha is not None:
-                partial_metadata[_META_BASE_SHA] = base_sha
-            if commit_sha is not None:
-                partial_metadata[_META_COMMIT_SHA] = commit_sha
-                partial_metadata[_META_STAGED_FILES] = json.dumps(staged_paths)
-            return envelope.model_copy(
-                update={
-                    "metadata": partial_metadata,
-                    "error": ErrorDetail(
-                        error_type=type(exc).__name__,
-                        message=str(exc),
-                        stage_name=stage.name,
-                    ),
-                    "status": TaskStatus.FAILED,
-                },
+            return _failed(
+                envelope,
+                stage,
+                metadata=_partial_metadata(
+                    branch_name=branch_name,
+                    base_sha=base_sha,
+                    commit_sha=commit_sha,
+                    staged_paths=staged_paths,
+                ),
+                error_type=type(exc).__name__,
+                message=str(exc),
             )

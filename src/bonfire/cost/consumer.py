@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from bonfire._safe_write import safe_append_text
-from bonfire.cost.models import DEFAULT_LEDGER_PATH, DispatchRecord, PipelineRecord
+from bonfire.cost.models import DispatchRecord, PipelineRecord, resolve_ledger_path
 from bonfire.models.events import (
     DispatchCompleted,
     PipelineCompleted,
@@ -34,10 +34,15 @@ class CostLedgerConsumer:
     Writes route through ``bonfire._safe_write.safe_append_text`` so a
     planted symlink at the operator-controlled ledger path is refused
     at ``open(2)`` time (W7.M defense-in-depth parity).
+
+    With no explicit ``ledger_path`` the destination comes from
+    :func:`~bonfire.cost.models.resolve_ledger_path`, the same resolver
+    ``bonfire cost`` reads through — so the file this writes is the file
+    that command reports on.
     """
 
-    def __init__(self, ledger_path: Path = DEFAULT_LEDGER_PATH) -> None:
-        self._ledger_path = Path(ledger_path)
+    def __init__(self, ledger_path: Path | None = None) -> None:
+        self._ledger_path = Path(ledger_path) if ledger_path is not None else resolve_ledger_path()
 
     def register(self, bus: EventBus) -> None:
         """Subscribe to cost-bearing events on the bus."""

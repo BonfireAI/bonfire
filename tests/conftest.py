@@ -72,6 +72,30 @@ def _bonfire_env_isolation(
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(autouse=True)
+def _cost_ledger_isolation(
+    _bonfire_env_isolation: None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Keep the ledger writer out of the operator's own ``~/.bonfire``.
+
+    The composition root subscribes a ``CostLedgerConsumer`` to the bus, and
+    with no override that consumer's destination is the shared home ledger
+    ``bonfire cost`` reports on. Every test that builds the real engine would
+    therefore append rows to the machine's real spending history — measured,
+    not feared: 19 rows landed there on one suite run before this fixture
+    existed.
+
+    Declared after ``_bonfire_env_isolation`` so its ``BONFIRE_*`` scrub
+    cannot delete the redirect it depends on. Tests that set the variable
+    themselves still win (their ``setenv`` runs later), and the one test that
+    asserts the *default* destination deletes it deliberately — which is what
+    keeps this fixture from hiding the behaviour it is protecting.
+    """
+    monkeypatch.setenv("BONFIRE_COST_LEDGER_PATH", str(tmp_path / "ledger" / "costs.jsonl"))
+
+
 @pytest.fixture()
 def _set_bonfire_env_for_test(monkeypatch: pytest.MonkeyPatch) -> None:
     """Helper used by the fixture-validation test below."""

@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A run that spent money left no cost ledger. The composition root built
+  an event bus with no ledger consumer subscribed to it, so every
+  dispatch reported its cost to nobody and `bonfire cost` answered
+  `$0.00` no matter what a run had charged. The consumer is now wired
+  where the engine is built.
+- `BONFIRE_COST_LEDGER_PATH` steered only the read side. `bonfire cost`
+  honoured it while the writer took its path as a constructor default
+  and never consulted the environment, so setting the variable produced
+  a correctly-named file nothing wrote alongside a ledger nothing read.
+  Both ends now resolve through one function. With no override the
+  destination is unchanged: the cross-project
+  `~/.bonfire/cost/cost_ledger.jsonl`.
+- The reviewer stage never recorded its verdict to disk.
+  `.bonfire/review-verdict.json` is named by the release gate and by
+  `docs/box-operator.md`, but the verdict existed only on the returned
+  envelope's metadata and died with the process. The stage now writes it
+  under the project root — including the fail-safe `request_changes` a
+  parse failure produces — before posting to GitHub, so a run without
+  network credentials still leaves the artifact.
 - `bonfire scan` wrote a `bonfire.toml` the runtime could not load. The
   onboarding answers were emitted as a `[bonfire.persona]` sub-table
   while `bonfire.persona` is the persona *name*, a string, so every

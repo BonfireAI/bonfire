@@ -6,23 +6,25 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 import typer
 
 from bonfire.cost.analyzer import CostAnalyzer
+from bonfire.cost.models import resolve_ledger_path
 from bonfire.models.events import _validate_session_id
 
 cost_app = typer.Typer(name="cost", help="View build cost analytics.")
 
 
 def _get_analyzer() -> CostAnalyzer:
-    """Build analyzer from env override or default path."""
-    env_path = os.environ.get("BONFIRE_COST_LEDGER_PATH")
-    if env_path:
-        return CostAnalyzer(ledger_path=Path(env_path))
-    return CostAnalyzer()
+    """Build analyzer from env override or default path.
+
+    Resolution lives in :func:`~bonfire.cost.models.resolve_ledger_path` so
+    the read side cannot drift from the writer's answer: two copies of the
+    same lookup is how the ledger came to be written to one path and read
+    from another.
+    """
+    return CostAnalyzer(ledger_path=resolve_ledger_path())
 
 
 @cost_app.callback(invoke_without_command=True)

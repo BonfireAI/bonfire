@@ -193,6 +193,10 @@ def build_default_handlers(
 ) -> dict[str, StageHandler]:
     """Return the built-in handler registry, keyed by ``StageSpec.handler_name``.
 
+    ``project_root`` is also where the reviewer records its verdict, so the
+    run leaves ``.bonfire/review-verdict.json`` beside the repository it
+    reviewed rather than only in the envelope it returns.
+
     Covers every ``handler_name`` any built-in workflow names.
     ``ArchitectHandler`` is deliberately absent: no built-in plan references
     it, and constructing it would require a knowledge-vault backend from the
@@ -229,6 +233,7 @@ def build_default_handlers(
             config=config,
             event_bus=bus,
             settings=settings,
+            project_root=project_root,
         ),
         "merge_preflight": MergePreflightHandler(
             github_client=github_client,
@@ -325,6 +330,7 @@ def build_default_engine(
     Raises:
         PipelineWiringError: If *plan* names an unregistered handler or gate.
     """
+    from bonfire.cost.consumer import CostLedgerConsumer
     from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
     from bonfire.dispatch.tool_policy import DefaultToolPolicy
     from bonfire.engine.factory import load_settings_or_default
@@ -334,6 +340,10 @@ def build_default_engine(
     root = resolve_project_root() if project_root is None else project_root.resolve()
     settings = load_settings_or_default()
     bus = EventBus()
+    # The bus with nothing on it was a wallet hole: every dispatch emitted its
+    # cost, no consumer was subscribed, so a run that spent real money left no
+    # ledger and ``bonfire cost`` answered $0.00 forever.
+    CostLedgerConsumer().register(bus)
     backend = ClaudeSDKBackend(bus=bus)
 
     handlers = build_default_handlers(

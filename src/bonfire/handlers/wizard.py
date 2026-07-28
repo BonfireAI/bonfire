@@ -17,6 +17,8 @@ Dispatch discipline:
   - Review agent runs read-only (tools=Read/Grep/Glob, no mutation surface).
   - Verdict metadata is written to the returned envelope BEFORE the GitHub
     call so a GH failure never swallows the verdict.
+  - The same verdict is recorded to ``.bonfire/review-verdict.json`` under the
+    project root, also before the GitHub call, for the same reason.
   - Fail-safe review body is handler-authored, not agent-authored.
 
 The module exposes ``ROLE: AgentRole = AgentRole.REVIEWER`` for generic-
@@ -28,10 +30,13 @@ cadre vocabulary onto another repo's PR surface.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from bonfire._safe_write import safe_write_text
 from bonfire.agent.roles import AgentRole
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
@@ -87,6 +92,12 @@ _SEVERITY_TAG_RE: re.Pattern[str] = re.compile(
 # which makes the xfail'd tests flip GREEN automatically.
 _META_VERDICT_SOURCE: str = "review_verdict_source"
 _META_PARSE_FAILURE_REASON: str = "review_parse_failure_reason"
+
+#: Where a run leaves the reviewer's verdict, relative to the project root.
+#: ``docs/release-gates.md`` and the release-gate box both grade this path,
+#: while the verdict lived only on the envelope's metadata, in memory. A
+#: reader with no producer is a check that cannot pass and does not say so.
+REVIEW_VERDICT_RELPATH: Path = Path(".bonfire") / "review-verdict.json"
 
 # Review-body H1 heading -- plain "Code Review" so bonfire does not
 # stamp its cadre vocabulary onto a downstream repo's PR surface.
@@ -237,6 +248,18 @@ def _render_fail_safe_body(
     return body.replace("___BONFIRE_RAW_OUTPUT_PLACEHOLDER___", safe_raw)
 
 
+def _write_review_verdict(project_root: Path, document: dict[str, Any]) -> None:
+    """Record *document* at ``<project_root>/.bonfire/review-verdict.json``.
+
+    ``allow_existing=True`` because a re-dispatched review stage legitimately
+    overwrites its own artifact; :func:`safe_write_text` still refuses a
+    symlink planted at this operator-controlled path.
+    """
+    path = project_root / REVIEW_VERDICT_RELPATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    safe_write_text(path, json.dumps(document, indent=2) + "\n", allow_existing=True)
+
+
 # ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
@@ -248,6 +271,11 @@ class WizardHandler:
     Dispatches a review agent, parses the verdict, and posts a structured
     review to GitHub. Verdict metadata is written before the GitHub call
     so a GH failure never swallows the decision.
+
+    ``project_root`` is where the verdict artifact lands. Optional so a bare
+    reviewer keeps working; that the real composition root supplies it is
+    asserted in ``tests/integration/test_run_artifacts.py`` against the real
+    ``build_default_engine`` -- a producer nobody wires is the same gap again.
     """
 
     def __init__(
@@ -258,12 +286,14 @@ class WizardHandler:
         config: PipelineConfig,
         event_bus: EventBus | None = None,
         settings: BonfireSettings | None = None,
+        project_root: Path | None = None,
     ) -> None:
         self._github_client = github_client
         self._backend = backend
         self._config = config
         self._bus = event_bus
         self._settings = settings if settings is not None else factory.load_settings_or_default()
+        self._project_root = project_root
 
     async def _emit(self, event: Any) -> None:
         """Emit an event on the bus when the bus exists. No-op otherwise."""
@@ -398,6 +428,34 @@ class WizardHandler:
                     "cost_usd": envelope.cost_usd + review_cost,
                 },
             )
+
+            # On disk before the GitHub call, for the reason the metadata
+            # goes first: the box has no network, so a verdict written after
+            # ``post_review`` is absent on exactly the runs that grade it.
+            # Fail-safe fallbacks are recorded too -- a producer that always
+            # wrote "approve" would be worse than no producer at all.
+            if self._project_root is not None:
+                try:
+                    _write_review_verdict(
+                        self._project_root,
+                        {
+                            "verdict": verdict,
+                            "severity": severity,
+                            "verdict_source": verdict_source,
+                            "parse_failure_reason": parse_failure_reason,
+                            "pr_number": pr_number,
+                            "model": review_envelope.model,
+                            "cost_usd": review_cost,
+                        },
+                    )
+                except OSError as write_exc:
+                    return enriched_envelope.with_error(
+                        ErrorDetail(
+                            error_type=type(write_exc).__name__,
+                            message=f"could not record the review verdict: {write_exc}",
+                            stage_name=stage.name,
+                        ),
+                    )
 
             # Post to GitHub. Failures here are caught inline so we can
             # preserve verdict metadata on the returned envelope.

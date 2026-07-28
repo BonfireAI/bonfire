@@ -136,12 +136,15 @@
     },
     "tests/integration/test_publisher_receives_artifacts.py": {
       "purpose": "drives the real composition root with a transport that reports an Edit, closing the half test_composition_root cannot: that a reported write reaches the publisher"
+    },
+    "tests/integration/test_run_artifacts.py": {
+      "purpose": "drives the real build_default_engine and asserts the two run artifacts the release gate reads actually land: the cost ledger and the review verdict. Parametrised over three reviewer replies so a producer that hardcoded its verdict would fail rather than pass"
     }
   },
   "packages": {
     "src/bonfire/dispatch": 2869,
     "src/bonfire/engine": 1903,
-    "src/bonfire/handlers": 3194,
+    "src/bonfire/handlers": 3250,
     "src/bonfire/onboard": 4416,
     "tests/integration": 1363,
     "tests/unit": 73199
@@ -154,6 +157,14 @@
       "lines": 4,
       "reason": "Envelope.artifacts had one reader and no producer, so the publishing stage of standard_build refused on every run. The producer has to live at the dispatch layer because that is the only layer that sees the agent's tool-use blocks: a handler is given result text and nothing else, and diffing the working tree cannot separate the agent's writes from anything else dirty. Wiring it into sdk_backend.py costs exactly four lines and they are irreducible: the import, the content_blocks accumulator, the append inside the block loop, and the artifacts= entry in the model_copy. Every other package this change touched was brought back under its ceiling by structure rather than by number, and three baselines were ratcheted down. This one could not be, so the number moved and the architecture did not. Explicitly rejected: excusing sdk_backend.py with a purpose entry, which would drop 306 lines out of the ratchet to accommodate 4.",
       "approver": "Anta, 2026-07-27, via the lane conductor on PR #247"
+    },
+    {
+      "package": "src/bonfire/handlers",
+      "from": 3194,
+      "to": 3250,
+      "lines": 56,
+      "reason": "The reviewer's verdict had a reader and no writer: the release gate and docs/box-operator.md both grade .bonfire/review-verdict.json, and nothing in src/bonfire ever produced it -- the verdict lived on the returned envelope's metadata and died with the process. The producer has to live in wizard.py because that is the only place the verdict exists as a decision rather than as text: the parser distinguishes an agent-emitted verdict from the fail-safe one it substitutes, and an artifact that lost that distinction would report a decision nobody made. The 56 lines are the import trio, the path constant, a ten-line write helper, the project_root collaborator, and the call site with its document and its failed-write branch. Explicitly rejected: giving wizard.py a purpose entry, which would drop 443 lines out of the ratchet to accommodate 56 -- the same trade the dispatch raise below rejected. Also rejected: writing the artifact from an event consumer in the unbudgeted events package, which would have cost zero package budget and needed a new event type carrying the verdict, so the artifact would appear only when the stage completed -- and the box's reviewer stage cannot complete, because it has no gh and post_review raises there. Budget is not a reason to move a producer off the path that produces. NOTE: wizard.py now measures 499 against the 500-line new-file cap, so the next change to it has to split the module rather than compress it.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]
 }

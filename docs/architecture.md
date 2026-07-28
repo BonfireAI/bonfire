@@ -288,19 +288,27 @@ order and short-circuits on the first error-severity failure.
 | Gate | Passes when… |
 |---|---|
 | `CompletionGate` | The envelope's `TaskStatus` is `COMPLETED`. |
-| `TestPassGate` | The result text contains "passed" and no non-zero failure indicator. |
-| `RedPhaseGate` | The result text contains a non-zero failure indicator (the inverse of `TestPassGate`, used for TDD RED phases). |
-| `VerificationGate` | The result text contains "verified" or "checks passed". |
-| `ReviewApprovalGate` | The result text contains "approve" or "approved". |
+| `TestPassGate` | A pytest run in the project root exits clean, reports no failures or errors, and executed at least one test. The gate runs the suite itself; the stage's result text is not read. |
+| `RedPhaseGate` | A pytest run exits `TESTS_FAILED` with at least one failure or error (used for TDD RED phases). A usage error, an internal error, or an empty collection is *not* a red phase. |
+| `VerificationGate` | An independent pytest run, taken after the verifying stage, finds the tree green. Same world-fact as `TestPassGate`, observed separately; see `engine/suite_gates.py` for what would distinguish them and does not exist yet. |
+| `ReviewApprovalGate` | The reviewer stage recorded `approve` in `envelope.metadata[META_REVIEW_VERDICT]`. The review body is not read; the reviewer's own parser fail-safes to `request_changes`. |
 | `CostLimitGate` | The pipeline's accumulated cost is within the configured budget. |
 | `MergePreflightGate` | The `MergePreflightHandler` envelope reports `COMPLETED` (clean → `info`; with `META_PREFLIGHT_TEST_DEBT_NOTED` set → `warning`, allow-with-annotation per Sage Q6). Any non-COMPLETED status (cross-wave interaction, pure-warrior bug, pytest collection error, merge conflict) blocks the merge with `error` severity. Gate name is locked at `"merge_preflight_passed"`. |
 | `SageCorrectionResolvedGate` | The `SageCorrectionBounceHandler` envelope reports a non-ambiguous resolution. Clean resolutions (`corrected`, `not_needed_*`, skip path) pass with `info`; `warrior_bug` verdicts and Wizard-escalated bounces pass with `warning` (the bounce is visible but does not block); `ambiguous` classifier verdicts block with `error` (forces Wizard inspection). Gate name is locked at `"sage_correction_resolved"`. |
+
+Every gate grades state — envelope status, envelope metadata, pipeline
+context, or a live observation of the test suite. None matches substrings
+against the agent's narration. A gate that cannot reach the state it grades
+raises `GateStateUnavailableError` instead of returning a verdict: passing
+would be a silent bypass, and failing would blame a stage for something
+never checked.
 
 `GateChain.evaluate_all` does **not** wrap individual gate exceptions —
 a raising gate propagates to `PipelineEngine.run()`, which catches it
 in its outer `try/except` and reports `PipelineResult(success=False)`.
 This is locked by Sage decision D5 on the gate package; do not change
-it without a fresh decision.
+it without a fresh decision, and it is the loud path an unevaluatable
+gate depends on.
 
 ## Security model
 

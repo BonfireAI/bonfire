@@ -74,7 +74,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 
 | Package | One-line purpose |
 |---|---|
-| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, gate evaluation, bounce, and budget watchdog), `StageExecutor` (a separately testable stage runner, re-exported but not driven by `PipelineEngine` today — the engine has its own inline stage loop), `ContextBuilder`, the eight built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. |
+| `bonfire.engine` | Pipeline execution: `PipelineEngine` (owns the topological walk, per-stage execution, gate evaluation, bounce, and budget watchdog), `ContextBuilder`, the composition root in `bonfire.engine.composition`, the eight built-in quality gates, and the `CheckpointManager` trio for opt-in save / restore. There is one stage-execution path: the engine's own `_execute_stage`. |
 | `bonfire.dispatch` | Agent execution backends (Claude SDK, Pydantic AI), the `execute_with_retry` runner, `TierGate`, and the pre-exec security hook. |
 | `bonfire.models` | Cross-package data contracts — frozen Pydantic shapes for envelopes, plans, events, and configuration. Dependency-free. |
 | `bonfire.events` | Typed pub/sub spine — `EventBus` plus the `BonfireEvent` base contract; consumers live one level deeper. |
@@ -106,7 +106,7 @@ Bonfire's source lives under `src/bonfire/`. Packages group by role:
 | Package | One-line purpose |
 |---|---|
 | `bonfire.cli` | Typer composition root — `app` is the entry point exposed by `[project.scripts]`. |
-| `bonfire.cli.commands` | Per-command Typer modules (`init`, `scan`, `status`, `resume`, `handoff`, `persona`, `cost`). |
+| `bonfire.cli.commands` | Per-command Typer modules (`init`, `scan`, `run`, `status`, `resume`, `handoff`, `install_skill`, `persona`, `cost`). |
 | `bonfire.workflow` | Pre-built workflow plans (`standard_build`, `debug`, `dual_scout`, `triple_scout`, `spike`) — pure data factories that depend only on `bonfire.models`. |
 
 ### Reserved
@@ -122,26 +122,39 @@ documented in `ADR-001`.
 
 ## Pipeline flow
 
-> **v0.1 disclaimer.** The CLI verb `bonfire run` described in this section
-> is **post-v0.1 design surface, not a shipped v0.1 command.** v0.1 ships
-> the engine as a library — `from bonfire.engine import PipelineEngine`
-> and `await engine.run(plan)` drives a real pipeline against a real
-> backend — plus the CLI subcommands `init`, `scan`, `status`, `resume`,
-> `handoff`, `persona`, and `cost`. The end-to-end `bonfire run` verb
-> that wires the engine through the CLI is deferred to a later 0.1.x
-> release (see [`README.md` § What's Not There Yet](../README.md)). The
-> pipeline flow described below is the shape the engine executes today
-> when driven from the library; it is also the shape `bonfire run` will
-> drive when the verb lands.
+> **Two entry points, both shipped.** `bonfire run` is a real command:
+> `bonfire.cli.app` registers it and `bonfire.cli.commands.run` implements
+> it, resolving the named plan through `bonfire.workflow.registry` and
+> wiring the engine through `bonfire.engine.composition.build_default_engine`.
+> It exits 0 on success, 1 when the pipeline ran and did not pass, and 2
+> when the run was never going to happen (an unknown `--workflow` name, or a
+> plan naming a handler or gate the engine was not given).
+>
+> The library path is unchanged and is not a fallback: `from bonfire.engine
+> import PipelineEngine` and `await engine.run(plan)` drive the same pipeline
+> against the same backend. The flow described below is what both paths
+> execute.
+>
+> The rest of the CLI surface is `init`, `scan`, `status`, `resume`,
+> `handoff`, `install-skill`, plus the `persona` and `cost` subcommand
+> groups. One of them is narrower than its name suggests, and that is worth
+> knowing before you read the resume machinery: `bonfire resume` reconstructs
+> the workflow plan from the latest checkpoint and reports the stages that
+> remain, but it does not dispatch them. Driving the remainder is still a
+> library call, `PipelineEngine.run(plan, completed=...)`.
 
 A single pipeline run follows the same path top-to-bottom every time:
 
-1. **Entry point.** Today: a library caller imports `bonfire.engine`,
-   resolves a `WorkflowPlan` from `bonfire.workflow` (e.g.
-   `standard_build()`), constructs a `PipelineEngine`, and `await`s
-   `engine.run(plan)`. Tomorrow (post-v0.1): the `bonfire run`-style
-   CLI verb in `bonfire.cli.app` will resolve the same workflow plan
-   through the same composition root.
+1. **Entry point.** Either the CLI or a library caller. `bonfire run
+   "<prompt>" --workflow <name>` looks the factory up in
+   `bonfire.workflow.registry.get_default_registry()`, stamps the prompt
+   and any `--budget` onto the returned plan, builds the engine with
+   `bonfire.engine.composition.build_default_engine`, and `await`s
+   `engine.run(plan)`. A library caller does the same thing by hand:
+   import `bonfire.engine`, resolve a `WorkflowPlan` from
+   `bonfire.workflow` (e.g. `standard_build()`), construct a
+   `PipelineEngine`, and `await engine.run(plan)`. The composition root is
+   the shared piece; everything below this line is identical on both paths.
 2. **Workflow plan.** A `WorkflowPlan` (see `bonfire.models.plan`) is a
    frozen, DAG-validated description of stages: each stage has a role,
    an optional handler name, a list of gate names, and dependency
@@ -159,12 +172,13 @@ A single pipeline run follows the same path top-to-bottom every time:
    via `ContextBuilder`, constructs the input envelope, and dispatches
    it either to the named handler from the registry or, when no
    handler is configured, to the agent backend through
-   `bonfire.dispatch.runner.execute_with_retry`. The standalone
-   `StageExecutor` class in `bonfire.engine.executor` implements the
-   same stage-runner contract and is re-exported from `bonfire.engine`
-   for downstream patching and for direct use by callers that want a
-   stage runner without the surrounding DAG / gate machinery; the
-   shipped `PipelineEngine` does not delegate to it today.
+   `bonfire.dispatch.runner.execute_with_retry`. This is the only
+   stage-execution path. A standalone `StageExecutor` class once sat
+   beside it in `bonfire.engine.executor`, unreachable from the shipped
+   engine; it was deleted after an audit found it had drifted from the
+   live path (missing the initial-envelope metadata merge, and wiring the
+   vault advisor only through the dead branch). Nothing imports it, and
+   `bonfire.engine.executor` no longer exists.
 5. **Handler.** A handler is either a plain agent dispatch (the
    default for the researcher / tester / implementer / synthesizer
    roles — Scout / Knight / Warrior / Sage in the gamified vocabulary)
@@ -214,9 +228,18 @@ around `PipelineEngine.run()` — typically: run the engine, take the
 returned `PipelineResult`, and call `CheckpointManager.save(...)`. The
 resume path on `PipelineEngine.run()` accepts a `completed=` mapping
 of already-done stages, which is what a caller would build from a
-loaded `CheckpointData`. The CLI does not yet wire this up; the
-machinery is shipped as an extension surface, not as a default
-behavior.
+loaded `CheckpointData`.
+
+The CLI wires the **read** side of this and not the write side, and the
+asymmetry is worth stating plainly because the command names do not reveal
+it. `bonfire status`, `bonfire resume` and `bonfire handoff` all read
+checkpoints through `bonfire.session.store.SessionStore`, which is a thin
+read layer over `CheckpointManager` rooted at `BONFIRE_CHECKPOINT_DIR` or
+`~/.bonfire/checkpoints`. Nothing on the `bonfire run` path writes one:
+`SessionStore.save` exists and has no caller in `src/bonfire/`, and the
+engine has no checkpoint write site. So a checkpoint those three commands
+can read is one a library caller persisted deliberately. Checkpointing is
+an extension surface, not a default behavior.
 
 ## Event bus and consumers
 

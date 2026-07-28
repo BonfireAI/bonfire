@@ -223,19 +223,19 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # is documentation of the carve-out, not a live filter. Kept so
         # any future broadening of the regex would surface this line
         # explicitly rather than silently flag it.
-        # Anchor shifted 146 → 237 when the release-gate hardening pass
-        # grew ``docs/release-gates.md`` above this diagram (artifact-
-        # under-test contract, build-cache policy, the RED failure-reason
-        # table, and the expanded re-publish residual worklist). The line
-        # TEXT is unchanged — ``bon-<n>`` is a branch-name pattern, not a
-        # tracker ID, so the no-internal-refs law does not reach it and
+        # Anchor shifted 146 → 239 → 246 as ``docs/release-gates.md`` grew
+        # above this diagram (artifact-under-test contract, build-cache
+        # policy, the RED failure-reason table, the expanded re-publish
+        # residual worklist, and the network-vs-artifact reason split). The
+        # line TEXT is unchanged — ``bon-<n>`` is a branch-name pattern, not
+        # a tracker ID, so the no-internal-refs law does not reach it and
         # rewriting the diagram would only invalidate this entry. Per
         # memory ``feedback_line_anchored_allowlists_fragile_2026_05_16``,
         # any insertion above this diagram shifts the anchor and the test
         # fires — that is the mechanism working, not a false alarm.
         (
             "docs/release-gates.md",
-            239,
+            246,
             "└── antawari/bon-<n>-* feature branches → PR into v0.1",
         ),
     }

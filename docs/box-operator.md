@@ -105,6 +105,7 @@ tested before a cent is spent.
 | `BONFIRE_RUN_BUDGET_USD` | `5.00` | `--budget` passed to `bonfire run` inside the box. |
 | `BONFIRE_RUN_TIMEOUT_SEC` | `1800` | Wall-clock cap on `bonfire run`. |
 | `BONFIRE_WORKFLOW` | `standard_build` | `--workflow` passed to `bonfire run`. |
+| `BOX_PIP_CACHE` | `warm` | `warm` bind-mounts `.e2e-runs/pip-cache/` into the box as pip's download cache, so the roughly 86 MB of dependency wheels is fetched once instead of on every run. `off` sets `PIP_NO_CACHE_DIR` and forces a cold download. Independent of `BOX_BUILD_CACHE`, which governs Docker layers. The cache never holds the artifact under test: that wheel is installed by explicit path from the read-only mount and is never resolved from an index. |
 
 ## Read the verdict
 
@@ -120,7 +121,8 @@ Everything lands under `.e2e-runs/e2e-<timestamp>/` (mode 0700):
 | `bonfire-command.txt` | the exact `bonfire run` invocation |
 | `bonfire-run.stdout` / `bonfire-run.stderr` / `bonfire-run.exit` | what Bonfire printed and how it exited |
 | `bonfire-artifact-inventory.txt` | every file Bonfire wrote, under the fixture **and** under `~/.bonfire` |
-| `pip-install.log` / `pip-freeze.txt` | the install of the artifact under test |
+| `pip-install.log` / `pip-freeze.txt` | the install of the artifact under test, all three steps appended in order |
+| `pip-step-<step>.log` | one file per install step, holding only that step's own output. This is what the runner reads to decide whether a failed install was the artifact or the box's network, and it is what you should read first on any `artifact_install_failed` or `box_network_unreachable` |
 | `bonfire-version.txt` / `bonfire-import.txt` | console-script and import smoke results |
 | `bonfire-direct-url.json` / `.err` | pip's PEP 610 record for the installed `bonfire-ai` — the proof it came from the mount |
 | `bonfire-dependency-check.txt` / `.err` | each of the artifact's base requirements with the version that satisfied it, and a trailing `checked N base requirement(s)` line — the proof the venv still meets the wheel's floors, and the control rod proving the check was not run against an empty set |
@@ -135,9 +137,26 @@ non-zero, Bonfire failed and the verdict is FAIL no matter what any assertion
 says — the last line of Bonfire's stderr rides along in `failure_reasons` as
 `bonfire_stderr:…`. The whole `bonfire_execution` block is **absent** when the
 runner aborted before it ever executed `bonfire run`: exit 4, the exit-8
-`artifact_*` family, exit 9, and any trap that fires before Phase 6. There,
+`artifact_*` family, the exit-11 `box_network_unreachable` family, exit 9,
+and any trap that fires before Phase 6. There,
 read `failure_reasons` instead — it names the reason and the phase that
-stopped the run. `artifact_under_test` is absent only when the driver never
+stopped the run.
+
+**Read `artifact_*` and `box_network_unreachable` as claims about different
+layers, because they are.** An `artifact_*` reason says the box reached the
+artifact and the artifact failed. `box_network_unreachable:<step>` says the
+box could not reach its package index, so the wheel was never installed,
+never imported and never executed: nothing in that verdict is evidence about
+the artifact, and the correct next step is to fix the link and re-run, not to
+open a bug against the wheel. The runner decides between them from the failing
+step's own `pip-step-<step>.log`, and a failure only earns the network reading
+when that log carries an unambiguous transport exception and carries no error
+that pip could only have raised after reaching the wheel. Anything ambiguous
+or unrecognised stays `artifact_install_failed`, so the quiet reading is never
+the default. Both are a FAIL, both abort the run, and neither is softer than
+the other.
+
+`artifact_under_test` is absent only when the driver never
 wrote a manifest; whenever a manifest exists it is carried into the verdict
 whole, digest included, on every path. Read it as what the driver **built**,
 not as what the box proved installed — on `artifact_hash_mismatch` the digest
@@ -189,6 +208,7 @@ before every one of these, so a verdict always exists:
 | 8 | the `artifact_*` family — manifest/mount/hash, `artifact_install_failed:<step>`, import, CLI entrypoint, version mismatch, provenance, dependency floor |
 | 9 | `fixture_expected_assertions_missing`, `fixture_ticket_text_missing` |
 | 10 | `observer_mutated_target` |
+| 11 | `box_network_unreachable:<step>`: a pip step could not reach the package index. The artifact was NOT tested, and this reason makes no claim about the wheel |
 | *the fixture gate's own status* — any non-zero, not a fixed number | `gate_script_crashed` |
 | any other non-zero exit | `trap:nonzero_exit` — the EXIT trap named it |
 
@@ -250,7 +270,8 @@ started" from "the runner died in that early window".
 | Wheel build fails on the host | No build backend available | `pip install build` into the repo venv, or pass a prebuilt `BONFIRE_WHEEL` |
 | Exit 3 — `no verdict emitted` | No `verdict.json` on disk: the container never started (bind-mount, image, daemon, OOM), or the runner died in its pre-trap window | Read the Docker log first — it says which. Then `docker run` with `-it` and re-execute the entrypoint to debug; pass `-e WAVE=<whole number>`, since a non-integer `WAVE` aborts the runner at exit 7 before its trap exists |
 | FAIL, `artifact_hash_mismatch` | The mounted wheel is not the one the driver built | Re-run; if it persists, something is rewriting `.e2e-runs/<run>/artifact/` |
-| FAIL, `artifact_install_failed:artifact-and-deps` | Packaging drift — **the wheel itself** (or one of its requirements) does not install in a clean box. This step installs the artifact, not just its dependency set | Read `pip-install.log`. This is a real release blocker, not a box bug |
+| FAIL, `artifact_install_failed:artifact-and-deps` | Packaging drift — **the wheel itself** (or one of its requirements) does not install in a clean box. This step installs the artifact, not just its dependency set. The runner reached the wheel before it failed; a run that never reached the index is reported as `box_network_unreachable` instead | Read `pip-step-artifact-and-deps.log`, then `pip-install.log`. This is a real release blocker, not a box bug |
+| FAIL, `box_network_unreachable:<step>` (runner exit 11) | The box could not reach its package index. pip already retried 8 times at a 60-second per-read timeout and still could not fetch. **The artifact was never installed, imported or executed, so this verdict says nothing about the wheel** | Read `pip-step-<step>.log` for the transport exception. Fix the host link and re-run; a warm `.e2e-runs/pip-cache/` means the retry does not re-download what already landed. Do not file this against Bonfire, and do not cite the run as evidence about the artifact either way |
 | FAIL, `artifact_install_failed:fixture-deps` / `:artifact-under-test` | The fixture's dev extras failed to resolve, or the forced re-install of the wheel failed | Read `pip-install.log`; `fixture-deps` usually points at the fixture, not at Bonfire |
 | FAIL, `artifact_dependency_floor_violated` | The venv no longer satisfies the artifact's own `Requires-Dist` — typically the fixture pinned an older `bonfire-ai`, which dragged a shared dep below the wheel's floor, and step 3's `--no-deps` re-landed the artifact without repairing it | Read `bonfire-dependency-check.err` for the offending requirement, then `pip-install.log` for which step moved it. **The environment is poisoned, not the artifact** — do not go debugging Bonfire |
 | FAIL, `artifact_dependency_floor_violated` with `declares no base Requires-Dist` in the `.err` | Same reason code, opposite layer: the wheel carries **no** base dependencies, so the floor proof had nothing to check. A `dependencies = [...]` block dropped from `pyproject.toml` looks exactly like this | Read `bonfire-dependency-check.txt` (`checked 0 base requirement(s)`) and the wheel's `METADATA`. **This one IS the artifact** — packaging drift, a real release blocker |

@@ -238,16 +238,113 @@ snapshot_target() {
     } > "$dest"
 }
 
-# Run one pip step, logging to a single install log; abort with a named
-# failure reason when it breaks. A packaging break IS a gate failure.
+# Network resilience for the three pip steps. pip's defaults are a 15-second
+# per-read timeout and 5 retries, which the 2026-07-27 release-gate attempt
+# defeated twice at a measured 13 KiB/s, dying on `ReadTimeoutError` in phase
+# 5 of 15 before `bonfire run` was reached.
+#
+# These flags do NOT make a failed install survivable. install_step still
+# aborts and writes a FAIL verdict on any non-zero pip exit; they only decide
+# how long pip waits before deciding it has failed.
+#
+# 8 retries and not more, measured rather than guessed: pip backs off at a
+# 0.25 factor, so giving up costs roughly 64s at 8 and roughly 255s at 10.
+# The last two attempts alone are three minutes, and a link dead for a minute
+# will not likely recover in the next three. Confirmed against the box image
+# with `--network none`: 8 aborts in 1m09s, 10 in 4m12s.
+#
+# The driver owns the other half: e2e-box.sh points PIP_CACHE_DIR at a
+# bind-mounted host directory so the ~86 MB of dependency wheels is fetched
+# once rather than per run. The artifact is never served from that cache; it
+# is installed by explicit path from the read-only mount.
+PIP_NET_ARGS=(--timeout 60 --retries 8)
+
+# Which layer failed: the box's own network, or the artifact under test?
+#
+# BOTH ARE A FAIL. This function decides nothing about red or green;
+# install_step aborts on a non-zero pip exit either way. It decides only
+# what the verdict is allowed to CLAIM.
+#
+# That claim is load-bearing. docs/box-operator.md and docs/release-gates.md
+# teach the operator to read the `artifact_*` family as "the box worked and
+# the artifact did not". On 2026-07-27 that reason was emitted twice for a
+# run whose network collapsed and which never installed, imported or
+# executed the wheel at all. The same wheel installs into a clean venv in
+# 1.4 seconds on a healthy link. A verdict naming the artifact when the
+# artifact was never reached is a false accusation against a released wheel,
+# and it points the next operator at the wrong repository.
+#
+# The order below is deliberate and it fails toward the loud reading:
+#
+#   1. A marker only a REACHED artifact can produce wins outright, even when
+#      transport noise is also present in the same log. A corrupt wheel, an
+#      unsupported platform tag, a build-backend crash: pip hits all of
+#      these on the local file from the mount, before any index matters, so
+#      a dead network cannot manufacture them.
+#   2. Otherwise, an unambiguous transport exception means the box could not
+#      reach the index. The artifact was not tested, and the verdict says so.
+#   3. Anything unrecognised is `artifact`, which is the reason this runner
+#      has always emitted. Silence is never read as an excuse.
+#
+# Both pattern sets are transcribed from pip output captured against a
+# deliberately unreachable index and against deliberately broken wheels,
+# under pip 24.0 (the box image's Ubuntu 24.04 pip) and pip 26.1.
+#
+# Honest limit, stated rather than wished away: when the index is
+# unreachable, a wheel whose DEPENDENCY cannot be resolved is
+# indistinguishable from one whose dependency simply could not be looked up,
+# and this function calls it `network`. That is the honest answer, not a
+# softened one. The box has no evidence either way, and claiming the
+# artifact failed would be asserting a fact it could not observe.
+classify_pip_failure() {
+    local log="$1"
+    # Reached-the-artifact failures. pip raises these off the local wheel or
+    # its build backend; none of them can be produced by an unreachable index.
+    local artifact_markers='ERROR: Wheel .* is invalid|Invalid wheel filename|is not a supported wheel on this platform|subprocess-exited-with-error|metadata-generation-failed|Failed building wheel|ERROR: Invalid requirement|ResolutionImpossible|has invalid metadata|Cannot unpack file'
+    # Transport failures. urllib3 exception class names plus the socket-level
+    # messages pip prints verbatim.
+    local transport_markers='ReadTimeoutError|ConnectTimeoutError|NewConnectionError|MaxRetryError|ProtocolError|IncompleteRead|ChunkedEncodingError|SSLError|Read timed out|Failed to establish a new connection|Temporary failure in name resolution|Name or service not known|Network is unreachable|Connection refused|Connection reset by peer|Connection aborted|Could not fetch URL'
+    # Not error-suppressed: an unreadable log makes both greps fail, grep says
+    # so on stderr where the Docker log keeps it, and the answer falls through
+    # to `artifact`, which is the blocking reading.
+    if grep -qE "$artifact_markers" "$log"; then
+        echo "artifact"
+    elif grep -qE "$transport_markers" "$log"; then
+        echo "network"
+    else
+        echo "artifact"
+    fi
+}
+
+# Run one pip step, logging to the shared install log AND to a per-step
+# slice; abort with a named failure reason when it breaks. A packaging break
+# IS a gate failure.
+#
+# The per-step slice is what makes the failure attributable. All three steps
+# append to one pip-install.log, so a whole-file read cannot tell a retry
+# warning that step 1 recovered from apart from the exception that killed
+# step 3. classify_pip_failure reads ONLY the failing step's own output.
 install_step() {
     local label="$1"
     shift
-    if ! "$@" >> "$OUT_DIR/pip-install.log" 2>&1; then
-        echo "FAIL: pip step '$label' failed — see pip-install.log" >&2
-        emit_failure_verdict "artifact_install_failed:$label" 8
-        exit 8
+    local step_log="$OUT_DIR/pip-step-$label.log"
+    # `set -o pipefail` is in force, so this condition carries pip's status
+    # rather than tee's.
+    if "$@" 2>&1 | tee -a "$OUT_DIR/pip-install.log" > "$step_log"; then
+        return 0
     fi
+    local cause
+    cause="$(classify_pip_failure "$step_log")"
+    if [[ "$cause" == "network" ]]; then
+        echo "FAIL: pip step '$label' could not reach the package index." >&2
+        echo "  The artifact under test was NOT installed and NOT tested by this run." >&2
+        echo "  See pip-step-$label.log; this is the box's network, not the wheel." >&2
+        emit_failure_verdict "box_network_unreachable:$label" 11
+        exit 11
+    fi
+    echo "FAIL: pip step '$label' failed — see pip-install.log" >&2
+    emit_failure_verdict "artifact_install_failed:$label" 8
+    exit 8
 }
 
 # Trap: any non-zero exit (including SIGTERM/SIGINT) routes through here.
@@ -357,11 +454,12 @@ export PATH="$VENV_DIR/bin:$PATH"
 # Step 3 is what makes "the artifact wins" a fact rather than a hope; the
 # provenance assertion below is what proves it happened.
 install_step "artifact-and-deps" "$VENV_DIR/bin/python" -P -m pip install \
-    --disable-pip-version-check --no-input "$WHEEL_PATH"
+    --disable-pip-version-check --no-input "${PIP_NET_ARGS[@]}" "$WHEEL_PATH"
 install_step "fixture-deps" "$VENV_DIR/bin/python" -P -m pip install \
-    --disable-pip-version-check --no-input -e "${TARGET_DIR}[dev]"
+    --disable-pip-version-check --no-input "${PIP_NET_ARGS[@]}" -e "${TARGET_DIR}[dev]"
 install_step "artifact-under-test" "$VENV_DIR/bin/python" -P -m pip install \
-    --disable-pip-version-check --no-input --force-reinstall --no-deps "$WHEEL_PATH"
+    --disable-pip-version-check --no-input "${PIP_NET_ARGS[@]}" \
+    --force-reinstall --no-deps "$WHEEL_PATH"
 "$VENV_DIR/bin/python" -P -m pip freeze > "$OUT_DIR/pip-freeze.txt" 2>&1 || true
 
 # `python -P` (safe path) here for the same reason it is everywhere else in this

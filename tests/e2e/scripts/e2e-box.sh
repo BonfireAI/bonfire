@@ -40,6 +40,10 @@
 #                              (fast, reuses layers). A release-gate
 #                              certification run MUST use `off` — see
 #                              docs/release-gates.md § "Build cache policy".
+#   BOX_PIP_CACHE=warm|off     In-box pip download cache. Default `warm`
+#                              (a host directory shared by every run, so the
+#                              dependency wheels are fetched once). `off`
+#                              forces a cold download on every run.
 #   BONFIRE_WHEEL=<path>       Skip the build; test this exact wheel instead.
 #   FIXTURE_URL=<git url>      Fixture remote (defaults to HTTPS).
 #   FIXTURE_SRC_DIR=<path>     Pre-cloned fixture checkout to copy from.
@@ -84,6 +88,33 @@ case "$BUILD_CACHE" in
         exit 7
         ;;
 esac
+
+# In-box pip download cache, persisted on the host across runs.
+#
+# The three in-box pip steps pull roughly 86 MB of dependency wheels, and a
+# container is `--rm`, so without a mounted cache every run re-downloads all
+# of it. On the degraded link measured on 2026-07-27 (13 KiB/s) that alone is
+# the difference between a gate that runs and a gate that never starts.
+#
+# This cannot launder a bad artifact. The wheel under test is installed by
+# explicit path from the read-only /workspace/artifact mount and is never
+# resolved from an index, so it is never a cache entry; step 3 re-lands it
+# with --force-reinstall regardless. What the cache holds is the DEPENDENCY
+# set, and every dependency is still verified against the artifact's own
+# Requires-Dist by the dependency-floor proof inside the box.
+#
+# `off` is kept for the operator who wants a cold-download run, and it is
+# separate from BOX_BUILD_CACHE on purpose: that knob governs Docker layers,
+# this one governs PyPI downloads, and a certification run may want either.
+PIP_CACHE_MODE="${BOX_PIP_CACHE:-warm}"
+case "$PIP_CACHE_MODE" in
+    warm | off) ;;
+    *)
+        echo "FAIL: BOX_PIP_CACHE must be 'warm' or 'off' (got: $PIP_CACHE_MODE)" >&2
+        exit 7
+        ;;
+esac
+PIP_CACHE_DIR_HOST="$REPO_ROOT/.e2e-runs/pip-cache"
 
 mkdir -p "$ARTIFACT_DIR"
 # Lock OUT_DIR to the operator only — it holds the per-run OAuth credentials
@@ -311,6 +342,23 @@ with open(out_path, "w", encoding="utf-8") as fh:
     json.dump(record, fh, indent=2)
 PY
 
+# Cache wiring, resolved here so the docker invocation below stays readable.
+# `warm` mounts the shared host cache and points pip at it; `off` disables
+# pip's cache entirely rather than merely leaving it unmounted, so an
+# operator asking for cold gets cold and not a container-local cache that
+# quietly warms within a single run.
+PIP_CACHE_ARGS=()
+if [ "$PIP_CACHE_MODE" = "warm" ]; then
+    mkdir -p "$PIP_CACHE_DIR_HOST"
+    PIP_CACHE_ARGS=(
+        -v "$PIP_CACHE_DIR_HOST:/home/box/.cache/pip"
+        -e PIP_CACHE_DIR=/home/box/.cache/pip
+    )
+    echo "==> Pip cache: warm ($PIP_CACHE_DIR_HOST)"
+else
+    PIP_CACHE_ARGS=(-e PIP_NO_CACHE_DIR=1)
+    echo "==> Pip cache: off (every dependency re-downloaded)"
+fi
 echo "==> Running box — run_id=$RUN_ID wave=$WAVE fixture=$FIXTURE_REF auth=$AUTH_MODE"
 # The artifact mount is read-only: the container installs from it and never
 # writes to it. Integrity is not left to the mount flag — the runner
@@ -319,6 +367,7 @@ echo "==> Running box — run_id=$RUN_ID wave=$WAVE fixture=$FIXTURE_REF auth=$A
 set +e
 docker run --rm \
     "${AUTH_ARGS[@]}" \
+    "${PIP_CACHE_ARGS[@]}" \
     -e RUN_ID="$RUN_ID" \
     -e WAVE="$WAVE" \
     -e FIXTURE_REF="$FIXTURE_REF" \

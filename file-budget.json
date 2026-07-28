@@ -100,6 +100,21 @@
     },
     "tests/unit/test_version_truth.py": {
       "purpose": "pins pyproject's version, what bonfire --version prints, the __version__ import fallback and the newest CHANGELOG heading to one value, restoring on every run the guard that release.yml lost when the tree was reconciled to the published product line"
+    },
+    "src/bonfire/engine/gate_state.py": {
+      "purpose": "where the suite-backed gates get their state: the SuiteProbe seam, the pytest subprocess probe, and the error a gate raises when it cannot observe"
+    },
+    "src/bonfire/engine/suite_gates.py": {
+      "purpose": "the three gates that grade a live pytest observation instead of the agent's narration"
+    },
+    "tests/integration/test_gates_grade_state.py": {
+      "purpose": "control rods for the state-grading gates: a real repo, a real pytest run, and the old prose predicates written out so the rods measure a difference"
+    },
+    "tests/unit/test_engine_gates_state.py": {
+      "purpose": "the gates-grade-state contract in both directions plus the unevaluatable case"
+    },
+    "tests/unit/test_verify_suite.py": {
+      "purpose": "contract for the pytest-run parser the suite-backed gates grade"
     }
   },
   "packages": {

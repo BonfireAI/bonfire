@@ -21,6 +21,8 @@ Public surface:
 - :class:`FailingTest`         -- frozen dataclass, single warrior failure.
 - :func:`classify_warrior_failure` -- the pure-function classifier.
 - :func:`parse_sage_decision_log`  -- the pure-function decision-log parser.
+- :class:`SuiteOutcome`        -- frozen dataclass, one pytest run's result.
+- :func:`parse_pytest_run`     -- the pure-function pytest-output parser.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from bonfire.verify.classifier import (
     classify_warrior_failure,
     parse_sage_decision_log,
 )
+from bonfire.verify.suite import SuiteOutcome, parse_pytest_run
 
 __all__ = [
     "BounceClassification",
@@ -41,6 +44,8 @@ __all__ = [
     "DeferRecord",
     "FailingTest",
     "ParsedDecisionLog",
+    "SuiteOutcome",
     "classify_warrior_failure",
+    "parse_pytest_run",
     "parse_sage_decision_log",
 ]

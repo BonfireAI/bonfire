@@ -42,7 +42,7 @@ from bonfire.engine.composition import (
     validate_plan_wiring,
 )
 from bonfire.engine.pipeline import PipelineEngine
-from bonfire.models.envelope import Envelope, TaskStatus
+from bonfire.models.envelope import Envelope
 from bonfire.models.plan import GateContext, StageSpec, WorkflowPlan, WorkflowType
 from bonfire.workflow.registry import get_default_registry
 from bonfire.workflow.standard import debug, standard_build
@@ -105,15 +105,19 @@ def test_tool_policy_grants_a_non_empty_toolset_to_a_build_role(
 
 
 @pytest.mark.asyncio
-async def test_each_gate_reports_the_name_it_is_registered_under() -> None:
+async def test_each_gate_reports_the_name_it_is_registered_under(tmp_path: Path) -> None:
     """A registry key that disagrees with its gate's own name is a lie.
 
     Filing ``TestPassGate`` under ``"verification"`` would satisfy every
     structural check in this file while stamping the wrong gate name onto
     every failure message a user reads.
+
+    Wired with a root and a review verdict: state-grading gates refuse
+    to answer without one, which is the point of them.
     """
-    registry = build_default_gates(budget_usd=1.0)
-    envelope = Envelope(envelope_id="probe", task="probe", status=TaskStatus.COMPLETED)
+    registry = build_default_gates(budget_usd=1.0, project_root=tmp_path)
+    envelope = Envelope(envelope_id="probe", task="probe").with_result("")
+    envelope = envelope.with_metadata(review_verdict="approve")
     context = GateContext(pipeline_cost_usd=0.0, prior_results={})
 
     checked = 0

@@ -139,6 +139,19 @@
     content: ' \2713';
     color: var(--green);
   }
+  /* A scanner that crashed. Deliberately NOT the completion tick: a
+     dead scan and an empty one both arrived as item_count=0 before. */
+  .scan-panel.failed {
+    border-color: var(--amber, #ffb000);
+    transition: border-color 0.5s ease;
+  }
+  .scan-panel.failed h2 {
+    color: var(--amber, #ffb000);
+  }
+  .scan-panel.failed h2::after {
+    content: ' \26A0';
+    color: var(--amber, #ffb000);
+  }
   @keyframes panel-pulse {
     0%, 100% { box-shadow: none; }
     50% { box-shadow: 0 0 8px rgba(0, 255, 65, 0.15); }
@@ -375,8 +388,8 @@
     switch (msg.type) {
       case 'scan_start': statusEl.textContent = 'scanning ' + msg.panels.length + ' systems...'; break;
       case 'scan_update': addScanItem(msg.panel, msg.label, msg.value, msg.detail || ''); break;
-      case 'scan_complete': markPanelComplete(msg.panel, msg.item_count); break;
-      case 'all_scans_complete': statusEl.textContent = msg.total_items + ' findings catalogued'; break;
+      case 'scan_complete': markPanelComplete(msg.panel, msg.item_count, msg.failed, msg.error); break;
+      case 'all_scans_complete': statusEl.textContent = summariseScans(msg.total_items, msg.failed_panels); break;
       case 'conversation_start': activateChat(); break;
       case 'falcor_message':
         if (msg.subtype === 'narration') { setNarration(msg.text); }
@@ -400,13 +413,27 @@
     el.appendChild(item);
   }
 
-  function markPanelComplete(panel, count) {
+  // A scanner that DIED must not render as one that found nothing.
+  // Both used to arrive as item_count=0; 'failed' is what separates them.
+  function markPanelComplete(panel, count, failed, error) {
     if (KNOWN_PANELS.indexOf(panel) === -1) return;
     var panelEl = document.querySelector('[data-panel="' + panel + '"]');
     if (!panelEl) return;
-    panelEl.classList.add('complete');
+    panelEl.classList.add(failed ? 'failed' : 'complete');
     var h2 = panelEl.querySelector('h2');
-    if (h2) h2.textContent += ' [' + count + ']';
+    if (!h2) return;
+    if (failed) {
+      h2.textContent += ' [scan failed]';
+      if (error) panelEl.setAttribute('title', error);
+    } else {
+      h2.textContent += ' [' + count + ']';
+    }
+  }
+
+  function summariseScans(total, failedPanels) {
+    var summary = total + ' findings catalogued';
+    if (failedPanels) summary += ' — ' + failedPanels + ' scan(s) failed';
+    return summary;
   }
 
   function setNarration(text) { enqueueType(narrationEl, text, 35); }

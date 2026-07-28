@@ -77,10 +77,11 @@ async def run_scan(
     await emit(ScanStart(panels=panel_names))
 
     tasks = [_run_one(panel, module, project_path, emit) for panel, module in scanners]
-    results: list[int] = await asyncio.gather(*tasks)
+    results: list[tuple[int, bool]] = await asyncio.gather(*tasks)
 
-    total = sum(results)
-    await emit(AllScansComplete(total_items=total))
+    total = sum(count for count, _ in results)
+    failed_panels = sum(1 for _, failed in results if failed)
+    await emit(AllScansComplete(total_items=total, failed_panels=failed_panels))
     return total
 
 
@@ -94,18 +95,29 @@ async def _run_one(
     module: ModuleType,
     project_path: Path,
     emit: Callable[[FrontDoorMessage], Awaitable[None]],
-) -> int:
-    """Execute a single scanner, catch failures, emit ScanComplete."""
+) -> tuple[int, bool]:
+    """Execute a single scanner, emit ScanComplete, report ``(count, failed)``.
+
+    A crashed scanner used to be indistinguishable from a clean scan
+    that found nothing: both emitted ``item_count=0`` and the browser
+    said "we scanned and found nothing" over a scanner that had died.
+    The exception is still swallowed — one broken scanner must not
+    abort the other five — but it is now REPORTED rather than erased.
+    """
 
     async def _narrow_emit(event: ScanUpdate) -> None:
         """Forward ScanUpdate from the scanner to the orchestrator emit."""
         await emit(event)
 
+    failed = False
+    error: str | None = None
     try:
         count = await module.scan(project_path, _narrow_emit)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _log.exception("Scanner %s failed", panel)
         count = 0
+        failed = True
+        error = f"{type(exc).__name__}: {exc}"
 
-    await emit(ScanComplete(panel=panel, item_count=count))
-    return count
+    await emit(ScanComplete(panel=panel, item_count=count, failed=failed, error=error))
+    return count, failed

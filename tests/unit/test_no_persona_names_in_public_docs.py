@@ -158,17 +158,17 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # any README hero/section addition above this breadcrumb
         # shifts these anchors and the test fires.
         # Honest-list re-derivation: shifted 366/367 -> 376/377 when the
-        # "What's Not There Yet" list was rewritten against the tree, a
-        # `bonfire run` example was added to the CLI quickstart, and the
-        # Config Reference gained the [bonfire.profile] section.
+        # "What's Not There Yet" list was rewritten against the tree.
+        # Doc-truth pass: shifted 376/377 -> 377/378 when the stale
+        # `standard_build` bullet was corrected against the tree.
         (
             "README.md",
-            376,
+            377,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            377,
+            378,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -189,27 +189,27 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Config round-trip fix: shifted 558/560/561/578 ->
         # 596/598/599/616 when the [Unreleased] section was added at the
         # top of CHANGELOG.
-        # Run-artifact producers: shifted 596/598/599/616 ->
-        # 615/617/618/635 when three Fixed entries were added under
-        # [Unreleased]. Anchors only; the expected text is unchanged.
+        # Doc-truth pass: shifted 615/617/618/635 -> 662/664/665/682 when
+        # the CHANGELOG entries owed by three merged PRs were written
+        # under [Unreleased]. Anchors only; expected text is unchanged.
         (
             "CHANGELOG.md",
-            615,
+            662,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            617,
+            664,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            618,
+            665,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            635,
+            682,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

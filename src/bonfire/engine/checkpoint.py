@@ -20,7 +20,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -33,6 +33,73 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from bonfire.engine.pipeline import PipelineResult
     from bonfire.models.plan import WorkflowPlan
+
+
+# ---------------------------------------------------------------------------
+# CheckpointSink -- the seam the engine writes through
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class CheckpointSink(Protocol):
+    """Where :class:`~bonfire.engine.pipeline.PipelineEngine` sends its progress.
+
+    ``bonfire.session.store.SessionStore`` satisfies this structurally and is
+    what the composition root injects. The engine names a Protocol rather than
+    that class because ``bonfire.session`` imports ``bonfire.engine``, so
+    naming the class would point the dependency back into a cycle.
+
+    The engine passes the facts it owns rather than a ``PipelineResult``: a
+    run still in progress has no result, and asking the engine to build one
+    would mean stamping a ``success`` value onto a question not yet answered.
+    Deciding what an in-progress record looks like belongs to the layer that
+    persists it, not to the layer that is still working.
+    """
+
+    def save_progress(
+        self,
+        session_id: str,
+        stages: dict[str, Envelope],
+        total_cost_usd: float,
+        plan: WorkflowPlan,
+    ) -> Path: ...
+
+
+def write_progress(
+    sink: CheckpointSink | None,
+    session_id: str,
+    stages: dict[str, Envelope],
+    total_cost_usd: float,
+    plan: WorkflowPlan,
+) -> None:
+    """Send a mid-run snapshot to *sink*, absorbing a failure to write it.
+
+    Lives here rather than on the engine so that "how a checkpoint is written"
+    stays in the checkpoint module, and so ``pipeline.py`` -- already the
+    largest file in the package -- gains a call and not a mechanism.
+
+    A checkpoint that cannot be written must not fail an otherwise healthy
+    run: the work is unaffected by whether a copy of the record reached disk,
+    and ``PipelineEngine.run`` converts anything raised here into a failed
+    result, which would report that the run failed when only its record did.
+    It must not be silent either, or an operator meeting an empty ``bonfire
+    status`` has no way to learn why.
+
+    Only ``OSError`` and ``ValueError`` are absorbed -- the shapes a disk,
+    a permission or an oversized payload produces. A sink that does not
+    implement this Protocol raises ``AttributeError`` and is left to
+    propagate: that is a wiring mistake, and hiding it would reintroduce
+    exactly the silence this producer exists to end.
+    """
+    if sink is None:
+        return
+    try:
+        # Copy: ``stages`` is the engine's live accumulator, mutated in place
+        # as later stages finish. A snapshot must not keep growing after it
+        # was taken.
+        sink.save_progress(session_id, dict(stages), total_cost_usd, plan)
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not checkpoint session %s: %s", session_id, exc)
 
 
 # ---------------------------------------------------------------------------

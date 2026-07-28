@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
+from bonfire.engine.checkpoint import write_progress
 from bonfire.engine.context import ContextBuilder
 from bonfire.engine.gates import UnknownGateError
 from bonfire.engine.model_resolver import resolve_dispatch_model
@@ -53,6 +54,7 @@ from bonfire.protocols import DispatchOptions
 
 if TYPE_CHECKING:
     from bonfire.dispatch.tool_policy import ToolPolicy
+    from bonfire.engine.checkpoint import CheckpointSink
     from bonfire.events.bus import EventBus
     from bonfire.models.config import BonfireSettings, PipelineConfig
     from bonfire.protocols import AgentBackend, QualityGate, StageHandler
@@ -108,6 +110,7 @@ class PipelineEngine:
         project_root: Any | None = None,
         tool_policy: ToolPolicy | None = None,
         settings: BonfireSettings | None = None,
+        checkpoint_sink: CheckpointSink | None = None,
     ) -> None:
         self._backend = backend
         self._bus = bus
@@ -118,6 +121,7 @@ class PipelineEngine:
         self._project_root = project_root
         self._tool_policy = tool_policy
         self._settings = settings if settings is not None else factory.load_settings_or_default()
+        self._checkpoint_sink = checkpoint_sink
 
     # -- Public API ----------------------------------------------------------
 
@@ -277,6 +281,12 @@ class PipelineEngine:
                     )
                     if halt is not None:
                         return halt
+
+                # Every stage here passed its gates, so the record can advance.
+                # Before the budget check below, not after: this group was paid
+                # for whether or not the next line halts, and a halt discarding
+                # the record would bill it again on the next attempt.
+                write_progress(self._checkpoint_sink, session_id, stages_done, total_cost, plan)
 
                 # Budget check after each group
                 if total_cost > plan.budget_usd:

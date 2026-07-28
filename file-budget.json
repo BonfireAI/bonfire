@@ -2,7 +2,7 @@
   "files": {
     "src/bonfire/dispatch/security_hooks.py": 1329,
     "src/bonfire/dispatch/security_patterns.py": 521,
-    "src/bonfire/engine/pipeline.py": 989,
+    "src/bonfire/engine/pipeline.py": 994,
     "src/bonfire/handlers/merge_preflight.py": 687,
     "src/bonfire/handlers/sage_correction_bounce.py": 904,
     "src/bonfire/onboard/config_generator.py": 560,
@@ -143,10 +143,10 @@
   },
   "packages": {
     "src/bonfire/dispatch": 2869,
-    "src/bonfire/engine": 1903,
+    "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4416,
-    "tests/integration": 1363,
+    "tests/integration": 1702,
     "tests/unit": 73410
   },
   "package_raises": [
@@ -180,6 +180,30 @@
       "to": 3280,
       "lines": 30,
       "reason": "src/bonfire/handlers measured EXACTLY 3250 on bare origin/main -- the ceiling and the measurement were the same number, so the package had zero headroom and no behaviour-preserving complexity refactor could land in it at all. BardHandler.handle measured 19 against a limit of 10 and was never in complexipy-snapshot.json: drift, not grandfathered debt, and it landed because CI does not run the complexity gate (the pinned quality workflow lists its steps by hand and complexipy is not among them). What the 30 lines buy: three extractions that take handle from 19 to 7, each measured so the branches are removed rather than relocated -- _create_branch 6 (the branch-creation try/except and its 'already exists' probe), _partial_metadata 3 (the salvage map on the throw path), _failed 0 (the FAILED envelope four refusal paths each built by hand). The suite is the control and its counts are identical on both sides: 5746 passed, 3 skipped, 37 xfailed, 20 xpassed. The lines are what an extraction costs and nothing else -- a signature, a docstring, and a call site, three times over. Explicitly rejected, in order of how tempting each was: (1) adding the function to complexipy-snapshot.json, which is the exact move the remediation programme exists to end and would have cost zero budget; (2) the seven-line minimum variant, which reaches handle 9 by compressing the salvage map into a table-and-filter -- it was measured for complexity and for lines and never run against the suite, and an unproven refactor is not cheaper, it is unmeasured; (3) deleting comments or blank lines to buy the lines back, which is gaming, and pointless besides because the gauge measures max(physical, statements) so compression cannot manufacture headroom; (4) splitting the helpers into a new file carrying a purpose entry, which is the tool's own designed escape hatch and would have made the package total FALL rather than rise -- rejected because it drops a live file out of the ratchet permanently to accommodate one change, the same trade the three raises above all rejected; (5) moving the helpers outside src/bonfire/handlers into an unbudgeted package, which costs zero budget and is dodging the ratchet, and puts a publisher-specific envelope builder somewhere no one maintaining the publisher would look; (6) hunting dead code in the package to fund the lines -- five candidates checked, every one live. NOTE for the next reader, and it is the finding that explains why this debt never moves: every handler file holding an un-grandfathered violation also carries a suppression that exemptions.json pinned by LINE NUMBER (bard 282, wizard 492, steward 166, sage_correction_bounce 320/488/539, preflight_pytest 321, architect 72/214). Any refactor of any of those functions shifts a pinned line and turns cf-exemptions red, so the register that records accepted debt structurally forbids the refactoring that would retire it. This lane re-anchored only its own row, to a symbol; the other eight are still line-pinned. wizard.py was left untouched on purpose: at 499 against the 500-line new-file cap, in a package that had zero headroom, with its own suppression pinned at line 492, it is blocked three ways before the first edit.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/engine/pipeline.py",
+      "from": 989,
+      "to": 994,
+      "lines": 5,
+      "reason": "The engine had no checkpoint write site, so bonfire status / resume / handoff read an artifact bonfire run never produced. Five lines is what the write site costs pipeline.py after the mechanism was moved out of it twice: the PipelineResult construction and the durability reasoning went to SessionStore.save_progress (session/ is unbudgeted and is the layer that owns what a stored record means), and the sink-is-None check plus the error handling went to a write_progress function in engine/checkpoint.py (the module that owns how a checkpoint is written). What is left in pipeline.py is irreducible: one import, one TYPE_CHECKING import, one constructor keyword, one assignment, one call, and a four-line comment stating why the call sits before the budget check rather than after it -- the group is paid for whether or not the next line halts, so a halt that discarded the record would bill it again on resume. Explicitly rejected: deleting that comment to land on exactly 989, which is buying a number with the reasoning for the single most subtle ordering decision in the change. Also rejected: inlining the call site's guard and try/except into _run_inner, which needs no new lines in pipeline.py at all but adds two branches to a function frozen in the complexity snapshot at 23. Also rejected: giving pipeline.py a purpose entry, which would drop 994 lines out of the ratchet to accommodate 5.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/engine",
+      "from": 1903,
+      "to": 1981,
+      "lines": 78,
+      "reason": "The same producer, measured at the package. 5 of the 78 are the write site in pipeline.py; the other 73 are in engine/checkpoint.py, which gains the CheckpointSink Protocol the engine writes through and the write_progress function that drives it. The Protocol has to exist because bonfire.session imports bonfire.engine, so naming SessionStore in the engine's signature would point the dependency back into a cycle; import-linter reports 1 contract kept with the Protocol in place. Both belong in checkpoint.py rather than anywhere cheaper: that module already owns the atomic tmp+replace write and the symlink refusals, and the new code is the rule for when that machinery runs. Explicitly rejected: putting the Protocol in bonfire/protocols.py, which is unbudgeted and would have cost zero -- but CLAUDE.md's release gate names 'the four runtime_checkable extension protocols' as a v0.1 trust-triangle item, and quietly making it five edits a documented count from a lane that does not own that doc. Also rejected: writing the checkpoint from an event consumer in the unbudgeted events package -- StageCompleted carries stage_name, agent_name, duration and cost and no Envelope, so a consumer cannot populate CheckpointData.completed at all. That one is not a budget trade; it does not work.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/integration",
+      "from": 1363,
+      "to": 1702,
+      "lines": 339,
+      "reason": "tests/integration measured EXACTLY its ceiling on origin/main (1363/1363), so the package had zero headroom and no pull request could add an integration test at all. What the 339 lines buy: tests/integration/test_run_checkpoints.py, eight tests that run the engine returned by build_default_engine. They have to live in tests/integration and they have to go through the composition root: this defect family -- Envelope.artifacts, review-verdict.json, costs.jsonl and now the checkpoint -- is invisible to unit tests by construction, because every unit test of the run path injects its own engine factory, so the wiring nothing exercises is the wiring nothing can catch. A test that assembles the object graph by hand re-implements the wiring under test and passes whether or not the product is wired. Both halves are rodded: removing the engine's write site turns 5 of the 8 red, and removing checkpoint_sink= from build_default_engine turns the same 4 red plus the wiring assertion, while the two tests that must not depend on the write stay green. Explicitly rejected: putting these in tests/unit, which would have been the same line count against a ceiling a second live lane needs this round -- and would have meant hand-building the engine, which is the measurement error this file exists to avoid. Also rejected: a purpose entry for the new file, which registers it out of the ratchet entirely rather than paying for it.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

@@ -123,8 +123,9 @@ bonfire init .
 
 # Drive a prompt through a workflow and the pipeline engine. Needs a
 # live agent backend (ANTHROPIC_API_KEY) and spends money. Defaults to
-# the `debug` workflow; see "What's Not There Yet" before reaching for
-# `--workflow standard_build`.
+# the nine-stage `standard_build` workflow, whose last stage pushes and
+# opens a PR; see "What's Not There Yet" for what that stage needs.
+# Pass `--workflow debug` for the two-stage path.
 bonfire run "add a failing test for the parser"
 
 # Inspect cumulative cost and recent sessions.
@@ -459,14 +460,17 @@ LanceDB-backed implementation is available behind the
 
 Honest list:
 
-- **`bonfire run` does not finish every built-in workflow.** The verb
-  is wired end to end and the default `debug` workflow completes.
-  `standard_build`, the nine-stage flagship, does not: its publishing
-  stage reads the list of files to commit from `Envelope.artifacts`,
-  and nothing in `src/` writes to that field, so the stage refuses
-  with `empty_artifacts` on every run. `--workflow` accepts `debug`,
-  `spike`, `dual_scout`, `triple_scout` and `standard_build`;
-  `standard_build` is the one known not to reach the end.
+- **`standard_build` needs a publishable git remote to finish.** The
+  verb is wired end to end, and `standard_build`, the nine-stage
+  flagship, is the default workflow. Its publishing stage reads the
+  list of files to commit from `Envelope.artifacts`; the dispatch layer
+  now records the agent's file-mutating tool calls onto that field and
+  the engine carries them down the run, so the stage reaches git
+  instead of refusing with `empty_artifacts` on every run. What it
+  still needs is somewhere to publish to: a git remote it can push to
+  and a working `gh`. Without those it fails at the push, naming the
+  cause. `--workflow` accepts `debug`, `spike`, `dual_scout`,
+  `triple_scout` and `standard_build`.
 - **`bonfire resume` reports, it does not re-dispatch.** It reads the
   last checkpoint, reconstructs the workflow plan, and prints which
   stages remain. It does not run them. Driving the remaining stages
@@ -505,9 +509,11 @@ not against the roadmap.
 
 What's coming next, in rough order:
 
-- **A `standard_build` workflow that reaches its last stage.** Stages
-  need to record what they produced in `Envelope.artifacts` before the
-  publishing stage can commit anything.
+- **A `standard_build` run graded end to end in the release-gate box.**
+  The publishing stage now receives the files the agent wrote. What is
+  still unproven is a full nine-stage run against a fixture repo with a
+  real remote, which is the E2E signal `docs/release-gates.md` requires
+  before a `v0.1.0` tag.
 - **In-chat parity for every CLI verb.** `/bonfire scan` is the
   primary conversational surface; the other verbs gain in-chat skill
   mappings later.

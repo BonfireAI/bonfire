@@ -164,7 +164,7 @@
     },
     {
       "file": "src/bonfire/handlers/bard.py",
-      "symbol_or_line": "282",
+      "symbol_or_line": "BardHandler.handle",
       "rule": "BLE001",
       "reason": "Handler boundary that must salvage partial PR-flow progress (branch/sha/staged files) on ANY mid-flow failure; the partial-metadata capture depends on catching all.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"

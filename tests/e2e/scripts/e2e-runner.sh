@@ -591,12 +591,12 @@ TICKET_TEXT="$(cat "$OUT_DIR/ticket-text.txt")"
 # Persistence steering, stated as it actually behaves today rather than as the
 # box would like it to behave:
 #
-#   BONFIRE_COST_LEDGER_PATH is honoured by the READ side only — `bonfire cost`
-#   builds its analyzer from it. The writer (CostLedgerConsumer) takes its
-#   ledger path as a constructor default and never consults the environment, so
-#   this export does NOT redirect where the ledger lands. It is set anyway
-#   because it is the documented knob and because it makes the box's intent
-#   inspectable; it is not the reason the artifact appears (or does not).
+#   BONFIRE_COST_LEDGER_PATH is now honoured at BOTH ends. Both the writer
+#   (CostLedgerConsumer) and the reader (`bonfire cost`) resolve their path
+#   through cost.models.resolve_ledger_path, so this export is load-bearing:
+#   it is why the ledger lands under the target instead of under the box
+#   user's ~/.bonfire. It used to steer the read side only, which is how the
+#   box came to grade a file nothing wrote.
 #
 #   There is deliberately no session-directory export, and the honest reason is
 #   narrower than "there is no such knob". The knob EXISTS in the config schema:

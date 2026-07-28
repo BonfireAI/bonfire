@@ -220,7 +220,7 @@
     },
     {
       "file": "src/bonfire/handlers/wizard.py",
-      "symbol_or_line": "434",
+      "symbol_or_line": "492",
       "rule": "BLE001",
       "reason": "StageHandler boundary: any handler failure becomes a typed ErrorDetail envelope.",
       "approver": "BubbleGum/Elegance-Law architectural blessing (BON-1757); Anta gates via PR merge"

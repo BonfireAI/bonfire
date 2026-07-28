@@ -269,8 +269,8 @@ started" from "the runner died in that early window".
 | FAIL, `broken_test_now_passes` | Bonfire's fix didn't actually pass the test | Inspect `evidence/pytest-broken.log` and `bonfire-run.stdout` |
 | FAIL, `test_files_untouched` | Something modified `tests/` | Read the diff. Bonfire's own agents modifying tests is a product defect |
 | FAIL, `pr_opened` | Branch name doesn't match `^bonfire/fix/[a-z0-9-]+-[0-9a-f]{8}$` | Inspect `branches.txt`; the publisher stage is what names branches |
-| FAIL, `cost_log_present` | `.bonfire/costs.jsonl` missing or malformed | Check `bonfire-artifact-inventory.txt` — Bonfire may have written the ledger to `~/.bonfire` instead of the project |
-| FAIL, `review_verdict_emitted` | `.bonfire/review-verdict.json` missing or malformed | Same: inventory first, then the review stage |
+| FAIL, `cost_log_present` | `.bonfire/costs.jsonl` missing or malformed | The writer honours `BONFIRE_COST_LEDGER_PATH`, so an empty target root means the run never charged or the export was lost — check `bonfire-artifact-inventory.txt` for a ledger under `~/.bonfire` before suspecting the run |
+| FAIL, `review_verdict_emitted` | `.bonfire/review-verdict.json` missing or malformed | The reviewer stage writes it before posting to GitHub, so absence means that stage was never reached — read `bonfire-run.stdout` for where the run stopped |
 | FAIL, `tampering_detected` | `gate/`, `tests/`, or `expected-assertions.yaml` changed | Cheat caught. File an issue with the model variant info |
 | A PASS you don't trust | Run used the layer cache | Check `box-run.json::image.build_cache`. Re-run with `BOX_BUILD_CACHE=off` before citing it in a release decision |
 | Docker daemon not running | systemd | `sudo systemctl start docker` |

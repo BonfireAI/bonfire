@@ -80,11 +80,18 @@ ARG BOX_GID=1000
 # Max bind-mount their host's ~/.claude/.credentials.json into this directory.
 # /workspace/artifact is the read-only mount target for the wheel under test;
 # pre-creating it keeps ownership with `box` instead of root.
+# /home/box/.cache/pip is the pip download-cache mount target (the driver's
+# BOX_PIP_CACHE=warm path). Pre-creating it matters for the PARENT: Docker
+# creates a missing bind-mount target as root, which would leave a root-owned
+# /home/box/.cache in the box user's home for every later process that wants
+# an XDG cache. The mount itself carries the host directory's ownership, and
+# the driver builds this image with BOX_UID=$(id -u).
 RUN userdel -r ubuntu 2>/dev/null || true \
     && groupadd -g $BOX_GID box 2>/dev/null || true \
     && useradd -m -u $BOX_UID -g $BOX_GID box \
-    && mkdir -p /workspace/out /workspace/target /workspace/artifact /home/box/.claude \
-    && chown -R box:box /workspace /home/box/.claude
+    && mkdir -p /workspace/out /workspace/target /workspace/artifact \
+        /home/box/.claude /home/box/.cache/pip \
+    && chown -R box:box /workspace /home/box/.claude /home/box/.cache
 
 USER box
 

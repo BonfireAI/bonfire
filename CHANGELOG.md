@@ -8,6 +8,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A pipeline stage naming a gate the engine does not hold in its
+  registry is no longer bypassed and counted as a pass. The run emitted
+  a `quality.bypassed` event and continued, so a typo in a stage's gate
+  list read back as quality checked and clean. The engine now raises
+  `UnknownGateError`, naming the stage, the missing gate and the gates
+  that are registered. This is a behaviour change: a plan naming an
+  unregistered gate used to succeed and now fails. `PipelineEngine.run`
+  still does not raise; the failure arrives as `success=False` with a
+  `pipeline.failed` event.
+- `bonfire init` now refuses hostile path shapes with a typed,
+  actionable message instead of a Python traceback: a read-only target
+  directory or `.gitignore`, a directory where `bonfire.toml` or
+  `.gitignore` belongs, and a regular file or dangling symlink where
+  `.bonfire/` or `agents/` belongs. A directory named `bonfire.toml`
+  was previously reported as `Already present: bonfire.toml` with exit
+  code 0. The shape checks run before anything is written, so a refused
+  init leaves the target directory as it found it.
+- The release-gate box now tells a package-index failure apart from a
+  failure of the artifact under test. A pip step that cannot reach the
+  index reports `box_network_unreachable:<step>` and records that the
+  wheel was never installed or executed, rather than
+  `artifact_install_failed:<step>`, which the operator docs teach as an
+  accusation against the artifact. A marker only a reached artifact can
+  produce still wins over transport noise in the same log, and an
+  unrecognised failure still reads as the artifact, so silence is never
+  taken as an excuse. Install steps gained a 60 second timeout and 8
+  retries, each step writes its own `pip-step-<step>.log`, and the
+  driver bind-mounts a persistent pip download cache
+  (`BOX_PIP_CACHE`, default `warm`).
 - A run that spent money left no cost ledger. The composition root built
   an event bus with no ledger consumer subscribed to it, so every
   dispatch reported its cost to nobody and `bonfire cost` answered
@@ -52,11 +81,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `resume` and `handoff` are implementations rather than stubs; four
   bundled identity blocks ship; a persistent SQLite knowledge backend
   ships in the base install. The list now names what is actually
-  missing, including that the `standard_build` workflow does not reach
-  its last stage.
+  missing.
+- README: `standard_build` is no longer described as refusing with
+  `empty_artifacts` on every run, and the shell quickstart no longer
+  says `bonfire run` defaults to the `debug` workflow. The dispatch
+  layer records the agent's file-mutating tool calls onto
+  `Envelope.artifacts`, the engine carries them down the run, and
+  `bonfire run` defaults to `standard_build`. What the publishing stage
+  still needs is a git remote it can push to and a working `gh`.
+- `docs/architecture.md` no longer describes `bonfire run` as an
+  unshipped post-v0.1 design surface, no longer names the deleted
+  `StageExecutor` as current, and states the checkpoint read/write
+  asymmetry.
 
 ### Added
 
+- The composition root now subscribes a session event logger and a
+  budget-warning cost tracker to the event bus. Every event a run emits
+  is persisted under the project-local session directory
+  (`.bonfire/sessions` by default) instead of being delivered to the
+  cost ledger and then discarded, and a run that passes 80% of its
+  budget emits a warning. The engine's own budget control is a hard
+  halt at 100% checked between stage groups, which cannot warn in time
+  to act on.
 - A version-truth guard: `pyproject.toml`, what `bonfire --version`
   prints, the `__version__` import fallback and the newest CHANGELOG
   release heading must all agree, checked on every run of the suite.

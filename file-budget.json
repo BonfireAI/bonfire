@@ -2,7 +2,7 @@
   "files": {
     "src/bonfire/dispatch/security_hooks.py": 1329,
     "src/bonfire/dispatch/security_patterns.py": 521,
-    "src/bonfire/engine/pipeline.py": 989,
+    "src/bonfire/engine/pipeline.py": 994,
     "src/bonfire/handlers/merge_preflight.py": 687,
     "src/bonfire/handlers/sage_correction_bounce.py": 904,
     "src/bonfire/onboard/config_generator.py": 560,
@@ -143,10 +143,10 @@
   },
   "packages": {
     "src/bonfire/dispatch": 2869,
-    "src/bonfire/engine": 1903,
+    "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3250,
     "src/bonfire/onboard": 4460,
-    "tests/integration": 1363,
+    "tests/integration": 1702,
     "tests/unit": 73777
   },
   "package_raises": [
@@ -172,6 +172,30 @@
       "to": 73410,
       "lines": 211,
       "reason": "tests/unit measured EXACTLY 73199 on bare origin/main -- the ceiling and the measurement were the same number, so the package had zero headroom and no pull request could add a unit test at all. What the 211 lines buy: tests/unit/test_init_first_run_refusals.py, eight tests over the first command a stranger runs. bonfire init met four hostile-but-ordinary path shapes with a raw Python traceback or, in one case, with a success claim -- a directory named bonfire.toml satisfied Path.exists(), the write was skipped, and the success block printed 'Already present: bonfire.toml (project config)' with exit code 0 over a project no Bonfire command can read. Seven of the eight tests fail on origin/main's behaviour with the fix removed, each for its own stated reason (PermissionError from the first write, PermissionError from the gitignore append, exit 0 with the success banner, IsADirectoryError from inside the safe-read helper, and FileExistsError three times out of mkdir(exist_ok=True) for a regular file, a second regular file, and a dangling symlink). The eighth passes on both sides on purpose: it is the control rod against a guard that learns to refuse everything, and without it the other seven would be satisfied by a command that refuses unconditionally. Four distinct defects, seven distinct failure modes, one negative control -- that is the smallest honest count, not a padded one. Explicitly rejected, in order of how tempting each was: (1) shipping fewer tests to fit -- the control rods ARE the deliverable, and four defects verified by two tests is a weaker claim than the one the pull request makes; (2) parking the file in an unbudgeted tree (tests/smoke, tests/dispatch), which costs zero budget and is dodging the ratchet rather than restructuring, and buries a regression contract where nobody maintaining init would look for it; (3) tests/integration, which is frozen at 1363 with zero headroom of its own and is the wrong home anyway for single-command CLI tests; (4) shrinking another test file to make room, which would have raced two other lanes live in this tree for budget and is worse than asking; (5) a purpose entry for the new file, which is an exemption in everything but name and would drop the file out of the ratchet permanently to accommodate one change -- the same trade the dispatch and handlers raises below both rejected, and exemptions.json is at 52/52 besides. NOTE for the next reader: a ratchet that reaches its own measurement has stopped preventing bloat and started taxing test coverage. Every future unit test in this repo now needs a raise. That is a design question about the tests/unit ceiling, not something a lane can settle.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/engine/pipeline.py",
+      "from": 989,
+      "to": 994,
+      "lines": 5,
+      "reason": "The engine had no checkpoint write site, so bonfire status / resume / handoff read an artifact bonfire run never produced. Five lines is what the write site costs pipeline.py after the mechanism was moved out of it twice: the PipelineResult construction and the durability reasoning went to SessionStore.save_progress (session/ is unbudgeted and is the layer that owns what a stored record means), and the sink-is-None check plus the error handling went to a write_progress function in engine/checkpoint.py (the module that owns how a checkpoint is written). What is left in pipeline.py is irreducible: one import, one TYPE_CHECKING import, one constructor keyword, one assignment, one call, and a four-line comment stating why the call sits before the budget check rather than after it -- the group is paid for whether or not the next line halts, so a halt that discarded the record would bill it again on resume. Explicitly rejected: deleting that comment to land on exactly 989, which is buying a number with the reasoning for the single most subtle ordering decision in the change. Also rejected: inlining the call site's guard and try/except into _run_inner, which needs no new lines in pipeline.py at all but adds two branches to a function frozen in the complexity snapshot at 23. Also rejected: giving pipeline.py a purpose entry, which would drop 994 lines out of the ratchet to accommodate 5.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/engine",
+      "from": 1903,
+      "to": 1981,
+      "lines": 78,
+      "reason": "The same producer, measured at the package. 5 of the 78 are the write site in pipeline.py; the other 73 are in engine/checkpoint.py, which gains the CheckpointSink Protocol the engine writes through and the write_progress function that drives it. The Protocol has to exist because bonfire.session imports bonfire.engine, so naming SessionStore in the engine's signature would point the dependency back into a cycle; import-linter reports 1 contract kept with the Protocol in place. Both belong in checkpoint.py rather than anywhere cheaper: that module already owns the atomic tmp+replace write and the symlink refusals, and the new code is the rule for when that machinery runs. Explicitly rejected: putting the Protocol in bonfire/protocols.py, which is unbudgeted and would have cost zero -- but CLAUDE.md's release gate names 'the four runtime_checkable extension protocols' as a v0.1 trust-triangle item, and quietly making it five edits a documented count from a lane that does not own that doc. Also rejected: writing the checkpoint from an event consumer in the unbudgeted events package -- StageCompleted carries stage_name, agent_name, duration and cost and no Envelope, so a consumer cannot populate CheckpointData.completed at all. That one is not a budget trade; it does not work.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/integration",
+      "from": 1363,
+      "to": 1702,
+      "lines": 339,
+      "reason": "tests/integration measured EXACTLY its ceiling on origin/main (1363/1363), so the package had zero headroom and no pull request could add an integration test at all. What the 339 lines buy: tests/integration/test_run_checkpoints.py, eight tests that run the engine returned by build_default_engine. They have to live in tests/integration and they have to go through the composition root: this defect family -- Envelope.artifacts, review-verdict.json, costs.jsonl and now the checkpoint -- is invisible to unit tests by construction, because every unit test of the run path injects its own engine factory, so the wiring nothing exercises is the wiring nothing can catch. A test that assembles the object graph by hand re-implements the wiring under test and passes whether or not the product is wired. Both halves are rodded: removing the engine's write site turns 5 of the 8 red, and removing checkpoint_sink= from build_default_engine turns the same 4 red plus the wiring assertion, while the two tests that must not depend on the write stay green. Explicitly rejected: putting these in tests/unit, which would have been the same line count against a ceiling a second live lane needs this round -- and would have meant hand-building the engine, which is the measurement error this file exists to avoid. Also rejected: a purpose entry for the new file, which registers it out of the ratchet entirely rather than paying for it.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     },
     {

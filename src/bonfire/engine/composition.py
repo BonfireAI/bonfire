@@ -361,6 +361,7 @@ def build_default_engine(
     from bonfire.events.bus import EventBus
     from bonfire.events.consumers import CostTracker, SessionLoggerConsumer
     from bonfire.session.persistence import SessionPersistence
+    from bonfire.session.store import SessionStore
 
     root = resolve_project_root() if project_root is None else project_root.resolve()
     settings = load_settings_or_default()
@@ -400,4 +401,14 @@ def build_default_engine(
         project_root=root,
         tool_policy=tool_policy,
         settings=settings,
+        # The read side of this store was already wired to three shipped
+        # verbs: ``bonfire status``, ``bonfire resume`` and ``bonfire
+        # handoff`` all ask ``SessionStore`` what the last run left behind.
+        # Nothing answered. ``SessionStore.save`` had no caller anywhere in
+        # ``src/bonfire`` and the engine had no write site, so every one of
+        # the three reported an empty store after a run that really happened.
+        # The same object is passed here so the write and the three reads
+        # resolve one directory by one rule (``BONFIRE_CHECKPOINT_DIR``, then
+        # ``~/.bonfire/checkpoints``) rather than agreeing by coincidence.
+        checkpoint_sink=SessionStore(),
     )

@@ -90,6 +90,28 @@ class MessageTooLargeError(BrowserDisconnectedError):
     """
 
 
+def _frame_rejection(exc: ValidationError) -> ServerError:
+    """Name the ACTUAL reason a client frame was refused.
+
+    Every ``ValidationError`` on a ``user_message`` frame used to be
+    reported as ``message_too_long``. A frame with no ``text`` field at
+    all, and a frame whose ``text`` was a number, both told the user to
+    shorten a message that was never long — sending them to fix
+    something that is not broken. Only a genuine length violation
+    (pydantic ``string_too_long``) keeps that code; anything else is
+    reported as what it is.
+    """
+    if any(err["type"] == "string_too_long" for err in exc.errors()):
+        return ServerError(
+            code="message_too_long",
+            message="Message too long; please keep under 8 KiB.",
+        )
+    detail = "; ".join(
+        f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
+    )
+    return ServerError(code="invalid_message", message=f"Message rejected — {detail}")
+
+
 async def dispatch_user_message(
     data: dict[str, Any],
     *,
@@ -105,7 +127,9 @@ async def dispatch_user_message(
     - Non-``user_message`` frames are ignored.
     - Overlong payloads (>``MAX_USER_MESSAGE_LEN``) trigger a
       ``server_error`` frame with code ``message_too_long`` and never reach
-      the conversation analyzer.
+      the conversation analyzer. Frames rejected for any OTHER reason get
+      code ``invalid_message`` naming the real cause — see
+      :func:`_frame_rejection`.
     - ``ConversationCompleteError`` after the third answer is broadcast as
       a polite ``server_error`` and is NOT propagated.
     - Once the conversation is complete, ``conversation_done`` is signalled
@@ -120,13 +144,8 @@ async def dispatch_user_message(
 
     try:
         msg = UserMessage.model_validate(data)
-    except ValidationError:
-        await broadcast(
-            ServerError(
-                code="message_too_long",
-                message="Message too long; please keep under 8 KiB.",
-            )
-        )
+    except ValidationError as exc:
+        await broadcast(_frame_rejection(exc))
         return
 
     try:

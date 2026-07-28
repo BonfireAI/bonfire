@@ -90,18 +90,31 @@ ScanCallback = Callable[[ScanUpdate], Awaitable[None]]
 
 
 class ScanComplete(FrontDoorMessage):
-    """One scan panel has finished."""
+    """One scan panel has stopped — successfully or otherwise.
+
+    ``failed``/``error`` separate a scanner that CRASHED from one that
+    ran clean and found nothing; both used to report only
+    ``item_count=0``. Both default to the success shape, so a frame
+    from an older producer still parses as a clean scan.
+    """
 
     type: Literal["scan_complete"] = "scan_complete"
     panel: str
     item_count: int
+    failed: bool = False
+    error: str | None = None
 
 
 class AllScansComplete(FrontDoorMessage):
-    """All scan panels have finished."""
+    """All scan panels have stopped.
+
+    ``failed_panels``: an all-crashed run used to summarise as
+    ``total_items=0``, identical to a clean scan of an empty project.
+    """
 
     type: Literal["all_scans_complete"] = "all_scans_complete"
     total_items: int
+    failed_panels: int = 0
 
 
 class ConversationStart(FrontDoorMessage):

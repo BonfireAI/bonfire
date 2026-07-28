@@ -68,6 +68,7 @@ class CostLedgerConsumer:
             total_cost_usd=event.total_cost_usd,
             duration_seconds=event.duration_seconds,
             stages_completed=event.stages_completed,
+            outcome="completed",
         )
         self._append(record)
 
@@ -81,6 +82,15 @@ class CostLedgerConsumer:
         — every failed session no longer looks instant with zero
         stages done, and downstream analyzers can compute meaningful
         success-rate / mean-time-to-halt over the ledger.
+
+        Carrying those two fields alone made the halt row a perfect
+        forgery of a success row: a run that died in the builder and a
+        run that finished one stage both wrote ``stages_completed=1``
+        and nothing else differed but ``timestamp``. ``outcome`` is the
+        field that separates them, and ``failed_stage`` /
+        ``error_message`` say WHICH failure it was — copied from the
+        event rather than inferred, so the ledger's reason is the
+        reason that actually occurred.
         """
         record = PipelineRecord(
             timestamp=event.timestamp,
@@ -88,6 +98,9 @@ class CostLedgerConsumer:
             total_cost_usd=event.total_cost_usd,
             duration_seconds=event.duration_seconds,
             stages_completed=event.stages_completed,
+            outcome="failed",
+            failed_stage=event.failed_stage,
+            error_message=event.error_message,
         )
         self._append(record)
 

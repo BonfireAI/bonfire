@@ -56,7 +56,27 @@ class DispatchRecord(BaseModel):
 
 
 class PipelineRecord(BaseModel):
-    """One pipeline completion with total cost."""
+    """One pipeline run with total cost, and how that run ENDED.
+
+    ``outcome`` exists because a halt and a completion used to write
+    byte-identical rows apart from ``timestamp``. A run that died in
+    the builder and a run that finished one stage both landed as
+    ``stages_completed=1``, so ``bonfire cost`` — the operator's record
+    of what they were charged and why — could report spend but could
+    not say whether the money bought a finished run or a crash.
+
+    ``failed_stage`` and ``error_message`` carry the reason across from
+    ``PipelineFailed`` rather than being re-derived, so the ledger
+    states the cause that actually occurred instead of an inferred one.
+
+    Migration: the default is ``"unknown"``, NOT ``"completed"``. Rows
+    written before this field existed genuinely do not record how the
+    run ended, and defaulting them to success would fabricate exactly
+    the history this defect corrupted. ``CostAnalyzer`` does not list
+    ``outcome`` in ``_PIPELINE_REQUIRED_FIELDS``, so those rows keep
+    validating and keep aggregating unchanged; they simply decline to
+    claim an outcome nobody recorded.
+    """
 
     type: Literal["pipeline"] = "pipeline"
     timestamp: float
@@ -64,6 +84,9 @@ class PipelineRecord(BaseModel):
     total_cost_usd: float
     duration_seconds: float
     stages_completed: int
+    outcome: Literal["completed", "failed", "unknown"] = "unknown"
+    failed_stage: str | None = None
+    error_message: str | None = None
 
 
 class SessionCost(BaseModel):

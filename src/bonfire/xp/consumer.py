@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from bonfire.xp.calculator import XPCalculator
     from bonfire.xp.tracker import XPTracker
 
+#: ``PipelineFailed.failed_handler`` sentinel for outer-exception halts,
+#: which cannot name a bounce target. Distinct from ``None``, which the
+#: schema uses for "no bounce happened".
+_OUTER_HALT_SENTINEL = "__outer__"
+
 
 class XPConsumer:
     """Subscribes to PipelineCompleted and drives the XP system.
@@ -52,6 +57,31 @@ class XPConsumer:
         """
         await self.on_pipeline_completed(event, success=True, stages_failed=0)
 
+    @classmethod
+    def _halt_reason(cls, event: PipelineFailed) -> str:
+        """Render the halt's REAL cause for the emitted penalty event.
+
+        ``PipelineFailed`` already names what broke (``failed_stage``,
+        ``error_message``) and, on bounce-target halts, which handler
+        actually died (``failed_handler``). The penalty event used to
+        discard all three and announce a counted-up substitute —
+        "Pipeline failed with 1 stage failures" — where the 1 was a
+        constant, not an observation. A reader was told a number that
+        was never measured instead of the cause that was.
+
+        Two halt paths (budget-exceeded, outer-exception) legitimately
+        carry no stage name, so this states no stage rather than
+        inventing one; ``__outer__`` is a schema sentinel, not a real
+        bounce target, and is never rendered as one.
+        """
+        detail = event.error_message.strip() if event.error_message else ""
+        stage = event.failed_stage
+        handler = event.failed_handler
+        if handler and handler not in (_OUTER_HALT_SENTINEL, stage):
+            stage = f"{stage or 'unknown stage'} (bounce target {handler})"
+        where = f" at {stage}" if stage else ""
+        return f"Pipeline halted{where}: {detail}" if detail else f"Pipeline halted{where}"
+
     async def _handle_pipeline_failed(self, event: PipelineFailed) -> None:
         """Bus handler for pipeline failures — applies XP penalty or respawn.
 
@@ -64,6 +94,13 @@ class XPConsumer:
 
         We still build a ``PipelineCompleted``-shaped wrapper so the
         existing ``on_pipeline_completed`` logic stays the single path.
+
+        ``stages_failed=1`` is deliberately NOT derived from the event:
+        every ``PipelineFailed`` emit site in ``engine/pipeline.py``
+        halts on the first failing stage, so exactly one stage failed
+        and 1 is the measured truth rather than a placeholder. What WAS
+        a placeholder is the reason, which is why ``halt_reason``
+        carries the event's own account of the failure through.
         """
         compat = PipelineCompleted(
             session_id=event.session_id,
@@ -72,7 +109,12 @@ class XPConsumer:
             duration_seconds=event.duration_seconds,
             stages_completed=event.stages_completed,
         )
-        await self.on_pipeline_completed(compat, success=False, stages_failed=1)
+        await self.on_pipeline_completed(
+            compat,
+            success=False,
+            stages_failed=1,
+            halt_reason=self._halt_reason(event),
+        )
 
     async def on_pipeline_completed(
         self,
@@ -80,6 +122,7 @@ class XPConsumer:
         *,
         success: bool,
         stages_failed: int,
+        halt_reason: str | None = None,
     ) -> None:
         """Process a pipeline completion event.
 
@@ -87,6 +130,11 @@ class XPConsumer:
             event: The PipelineCompleted event from the bus.
             success: Whether the pipeline succeeded.
             stages_failed: Number of stages that failed.
+            halt_reason: The failure's own account of what went wrong,
+                used verbatim as the emitted penalty's reason. Callers
+                that have a real cause pass it; when it is absent the
+                penalty falls back to the stage-failure count, which
+                describes how many stages failed but not why.
         """
         # Snapshot XP before recording
         old_xp = self._tracker.total_xp()
@@ -118,7 +166,7 @@ class XPConsumer:
                 ),
             )
         elif not success:
-            reason = f"Pipeline failed with {stages_failed} stage failures"
+            reason = halt_reason or f"Pipeline failed with {stages_failed} stage failures"
             await self._bus.emit(
                 XPPenalty(
                     session_id=event.session_id,

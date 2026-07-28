@@ -145,9 +145,9 @@
     "src/bonfire/dispatch": 2869,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3250,
-    "src/bonfire/onboard": 4416,
+    "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 73410
+    "tests/unit": 73777
   },
   "package_raises": [
     {
@@ -196,6 +196,22 @@
       "to": 1702,
       "lines": 339,
       "reason": "tests/integration measured EXACTLY its ceiling on origin/main (1363/1363), so the package had zero headroom and no pull request could add an integration test at all. What the 339 lines buy: tests/integration/test_run_checkpoints.py, eight tests that run the engine returned by build_default_engine. They have to live in tests/integration and they have to go through the composition root: this defect family -- Envelope.artifacts, review-verdict.json, costs.jsonl and now the checkpoint -- is invisible to unit tests by construction, because every unit test of the run path injects its own engine factory, so the wiring nothing exercises is the wiring nothing can catch. A test that assembles the object graph by hand re-implements the wiring under test and passes whether or not the product is wired. Both halves are rodded: removing the engine's write site turns 5 of the 8 red, and removing checkpoint_sink= from build_default_engine turns the same 4 red plus the wiring assertion, while the two tests that must not depend on the write stay green. Explicitly rejected: putting these in tests/unit, which would have been the same line count against a ceiling a second live lane needs this round -- and would have meant hand-building the engine, which is the measurement error this file exists to avoid. Also rejected: a purpose entry for the new file, which registers it out of the ratchet entirely rather than paying for it.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 73410,
+      "to": 73777,
+      "lines": 367,
+      "reason": "tests/unit measured 73409 against a ceiling of 73410 -- one line of headroom, the second consecutive lane to arrive at a ratchet sitting on its own measurement (the raise immediately below moved it 73199 -> 73410 and landed it right back on the number). What the 367 lines buy: tests/unit/test_failure_is_not_a_completion.py, twenty tests over four places where a failure recorded itself as a completion or gave a reason that was not the reason that occurred. The money-facing one is the cost ledger: a halted run and a run that finished one stage wrote rows differing ONLY in timestamp, so 'bonfire cost' -- the operator's record of what they were charged and why -- could report the spend but not whether it bought a finished run or a crash. The others are the XP penalty's reason, a crashed scanner reported to the browser as a clean scan of nothing, and every client-frame validation error reported as message_too_long. Each defect gets a regression test that fails on origin/main's behaviour AND a negative control asserting a genuine success still records as a success, so none of it can be satisfied by code that reports everything as broken; two further tests pin the on-disk migration (pre-field rows still load, and still aggregate through CostAnalyzer, without being fabricated into successes). Explicitly rejected: (1) shipping fewer tests -- the control rods ARE the deliverable and the negative controls are what stop the fix from being 'call everything a failure'; (2) parking the file in an unbudgeted tree, which costs zero budget and is dodging the ratchet rather than restructuring, and was rejected on the same grounds by the raise below; (3) a purpose entry, an exemption in all but name that would drop the file out of the ratchet permanently; (4) shrinking another test file to make room, which races two lanes live in this tree right now; (5) padding the ask to leave headroom for the next lane -- the number is the measurement, and a lane granting itself slack is how a ratchet dies. The file was tightened before the ask was sized (a shared sink helper and a shared legacy-row constant replaced duplicated setup, and two pairs of tests became parametrized), which took the measurement from 389 to 368.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/onboard",
+      "from": 4416,
+      "to": 4460,
+      "lines": 44,
+      "reason": "src/bonfire/onboard measured EXACTLY 4416 against a ceiling of 4416 -- zero headroom, verified by a one-line probe file producing 'package src/bonfire/onboard is 4417 lines'. The 44 lines fix two records in this package that reported a failure as a success. In orchestrator.py a scanner that CRASHED emitted ScanComplete(item_count=0), identical to a scanner that ran clean and found nothing, so the browser said 'we scanned and found nothing' over a scan that had died; _run_one now returns (count, failed) and reports the real exception, and run_scan totals failed panels so an all-crashed run does not summarise as total_items=0. In flow.py every ValidationError on a client frame was reported as message_too_long -- including a frame with no text field at all and a frame whose text was a number -- sending the user to shorten a message that was never long; _frame_rejection now keeps message_too_long only for a genuine pydantic string_too_long and names the actual cause otherwise. protocol.py carries the three new fields, all defaulted to the success shape so an older producer's frame still parses. Explicitly rejected: (1) reporting the crash only to the log, which is where it already went and is not visible to the browser that is the actual consumer; (2) compressing docstrings elsewhere in the package to buy the lines back, which trades documentation for budget and measures as nothing anyway since the unit is max(physical, statements); (3) moving the fix out of onboard into an unbudgeted package, which would take the producer off the path that produces. The protocol.py docstrings WERE trimmed once for size before this number was taken.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

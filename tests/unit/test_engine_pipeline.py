@@ -34,7 +34,7 @@ Contract locked (pipeline):
     Gate evaluation
       5. Passing gate continues; failing error-gate halts.
       6. Warning-severity failure does NOT halt.
-      7. Unknown gate emits QualityBypassed and pipeline continues.
+      7. Unknown gate fails the run; it is never counted as a pass.
       8. Multi-gate: first error short-circuits the chain.
       9. on_gate_failure target executes and original re-runs (single bounce).
      10. Double-gate-failure halts — no infinite loops.
@@ -91,7 +91,6 @@ from bonfire.models.events import (
     PipelineCompleted,
     PipelineFailed,
     PipelineStarted,
-    QualityBypassed,
     StageCompleted,
     StageFailed,
     StageSkipped,
@@ -834,19 +833,19 @@ class TestGateEvaluation:
         result = await engine.run(plan)
         assert result.success is True
 
-    async def test_unknown_gate_emits_bypassed_and_continues(self) -> None:
-        collector = _EventCollector()
-        bus = EventBus()
-        bus.subscribe_all(collector)
-        engine = _make_engine(bus=bus, gate_registry={})
+    async def test_unknown_gate_fails_the_run_instead_of_passing_it(self) -> None:
+        """This asserted the opposite: bypassed, and the stage reported passing."""
+        engine = _make_engine(gate_registry={"other": _MockGate(passed=True)})
         plan = WorkflowPlan(
             name="g",
             workflow_type=WorkflowType.STANDARD,
             stages=[StageSpec(name="s1", agent_name="s1", gates=["nonexistent"])],
         )
         result = await engine.run(plan)
-        assert result.success is True
-        assert len(collector.of_type(QualityBypassed)) >= 1
+        assert result.success is False, "a gate that was never evaluated is not a pass"
+        assert "nonexistent" in (result.error or ""), "the failure must name the gate"
+        assert "s1" in (result.error or ""), "and the stage that named it"
+        assert "other" in (result.error or ""), "and what IS registered"
 
     async def test_multi_gate_first_error_short_circuits(self) -> None:
         pass_gate = _MockGate(passed=True)

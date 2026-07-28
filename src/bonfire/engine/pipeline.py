@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from bonfire.dispatch.runner import execute_with_retry
 from bonfire.engine import factory
 from bonfire.engine.context import ContextBuilder
+from bonfire.engine.gates import UnknownGateError
 from bonfire.engine.model_resolver import resolve_dispatch_model
 from bonfire.models.envelope import Envelope, ErrorDetail, TaskStatus, accumulate_artifacts
 from bonfire.models.events import (
@@ -40,7 +41,6 @@ from bonfire.models.events import (
     PipelineCompleted,
     PipelineFailed,
     PipelineStarted,
-    QualityBypassed,
     QualityFailed,
     QualityPassed,
     StageCompleted,
@@ -684,17 +684,12 @@ class PipelineEngine:
         for gate_name in spec.gates:
             gate = self._gates.get(gate_name)
             if gate is None:
-                # Unknown gate -- bypass and continue
-                await self._emit(
-                    QualityBypassed(
-                        session_id=session_id,
-                        sequence=0,
-                        gate_name=gate_name,
-                        stage_name=spec.name,
-                        reason=f"Gate '{gate_name}' not found in registry",
-                    )
+                known = ", ".join(sorted(self._gates)) or "(none)"
+                raise UnknownGateError(
+                    f"Stage '{spec.name}' names gate '{gate_name}', absent from the gate "
+                    f"registry (registered: {known}). An unregistered gate is never "
+                    f"evaluated, so continuing would report quality never checked."
                 )
-                continue
 
             result = await gate.evaluate(envelope, context)
 

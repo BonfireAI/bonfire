@@ -241,6 +241,99 @@ async def test_bonfire_cost_reports_the_money_that_run_spent(
     assert "Built by Bonfire for $0.00" not in output, output
 
 
+# ---------------------------------------------------------------------------
+# The session event log
+# ---------------------------------------------------------------------------
+
+
+def _session_log(root: Path, session_id: str) -> Path:
+    """Where ``SessionPersistence`` puts a session's events under *root*."""
+    return root / ".bonfire" / "sessions" / f"{session_id}.jsonl"
+
+
+async def test_a_run_leaves_a_session_event_log(
+    target_repo: Path, ledger_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bus carried a whole run and nothing wrote it down.
+
+    ``SessionLoggerConsumer`` existed, was tested in isolation, and had zero
+    callers in ``src`` — ``wire_consumers`` was never invoked either. So every
+    event the engine emitted was delivered to the ledger consumer (which keeps
+    only money) and then discarded. Building the graph by hand would prove
+    nothing here: the defect *was* the graph.
+    """
+    monkeypatch.setattr(sdk_backend, "query", CostingTransport("done"))
+    plan = _dispatch_plan()
+
+    result = await build_default_engine(plan, project_root=target_repo).run(plan)
+
+    assert result.success, result.error
+    path = _session_log(target_repo, result.session_id)
+    assert path.is_file(), (
+        f"no session log at {path}: the run emitted a full event stream and "
+        "left no record of it, so 'what did this run do' has no answer"
+    )
+    types = [row["event_type"] for row in _read_jsonl(path)]
+    assert "pipeline.started" in types, types
+    assert "pipeline.completed" in types, types
+    assert "dispatch.completed" in types, types
+
+
+async def test_the_budget_warning_is_produced_and_recorded(
+    target_repo: Path, ledger_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``CostTracker`` wired, proved through its effect rather than its type.
+
+    The engine's own budget control is a hard halt at 100%, checked between
+    stage groups; it has no early-warning branch at all. So a ``cost.budget_
+    warning`` row can only exist if the tracker is subscribed to the bus the
+    composition root built — and it can only be *read back* if the session
+    logger is too. One assertion, both wirings.
+
+    The run stays under budget deliberately: this must be the warning, not the
+    halt, or the assertion would pass on the engine's pre-existing behaviour.
+    """
+    monkeypatch.setattr(sdk_backend, "query", CostingTransport("done"))
+    # 0.3742 of a 0.40 budget is 93.5% — over the 80% warning line, under the
+    # 100% halt line.
+    plan = _dispatch_plan().model_copy(update={"budget_usd": 0.40})
+
+    result = await build_default_engine(plan, project_root=target_repo).run(plan)
+
+    assert result.success, "the run is under budget; it must not have halted"
+    rows = _read_jsonl(_session_log(target_repo, result.session_id))
+    warnings = [r for r in rows if r["event_type"] == "cost.budget_warning"]
+    assert warnings, (
+        "no budget warning: a run that spent 93% of its budget said nothing "
+        f"until it would have been too late. Events seen: "
+        f"{sorted({r['event_type'] for r in rows})}"
+    )
+    assert warnings[0]["current_usd"] == DISPATCH_COST_USD
+    assert [r for r in rows if r["event_type"] == "cost.budget_exceeded"] == []
+
+
+async def test_the_engine_the_root_builds_refuses_an_unregistered_gate(
+    target_repo: Path, ledger_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The construction-time check cannot be the only one.
+
+    ``build_default_engine`` validates the plan handed to *it*, but ``run``
+    takes a plan of its own, so a valid build followed by a different run slips
+    past that check entirely. The engine used to answer such a plan by emitting
+    ``QualityBypassed`` and reporting the stage as having passed.
+    """
+    monkeypatch.setattr(sdk_backend, "query", CostingTransport("done"))
+    engine = build_default_engine(_dispatch_plan(), project_root=target_repo)
+    rogue = _dispatch_plan().model_copy(
+        update={"stages": [StageSpec(name="scout", agent_name="scout", gates=["ghost"])]}
+    )
+
+    result = await engine.run(rogue)
+
+    assert result.success is False, "a gate that was never evaluated is not a pass"
+    assert "ghost" in (result.error or ""), result.error
+
+
 async def test_the_ledger_default_stays_the_cross_project_one(
     target_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

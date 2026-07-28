@@ -195,9 +195,9 @@ def _plan_naming(*, gate: str | None = None, handler: str | None = None) -> Work
 def test_unknown_gate_is_refused_and_the_message_names_it() -> None:
     """The rod. An unregistered gate must be loud, not a pass.
 
-    Left to the engine, this plan runs to completion: ``_evaluate_gates``
-    looks the name up, misses, emits ``QualityBypassed`` and continues, and
-    the stage is reported as having passed its quality checks.
+    ``_evaluate_gates`` now raises on the same condition, so this is the
+    earlier of two refusals rather than the only one: it fires before the
+    first dispatch, where the engine's fires at the stage that names the gate.
     """
     with pytest.raises(PipelineWiringError) as excinfo:
         validate_plan_wiring(
@@ -287,7 +287,12 @@ def test_cli_refuses_an_unknown_gate_with_exit_code_2(
     assert excinfo.value.exit_code == 2, "a plan that cannot be honoured is not a run"
     captured = capsys.readouterr()
     assert "gate_that_does_not_exist" in captured.err
-    assert "counted as a pass" in captured.err, "the message must say why refusing beats bypassing"
+    # The engine now also refuses an unregistered gate, so the reason to check
+    # here is no longer "otherwise it passes silently" but "otherwise you pay
+    # for every stage before the one that names it". The message must say so.
+    assert "paid for" in captured.err, (
+        "the message must say why refusing up front beats failing mid-run"
+    )
 
 
 # ---------------------------------------------------------------------------

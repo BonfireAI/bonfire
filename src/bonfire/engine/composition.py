@@ -22,9 +22,8 @@ those defaults land on whoever forgets them in production:
 
 ``gate_registry``
     Defaults to ``{}``. A gate named by a stage but absent from the registry
-    is *bypassed and treated as passed* — the engine emits ``QualityBypassed``
-    and continues. An empty registry therefore does not disable quality
-    control loudly; it disables it silently, and every stage reports success.
+    raises ``UnknownGateError`` when the stage is reached, so an empty registry
+    disables quality control loudly rather than reporting every stage as passed.
 
 ``tool_policy``
     Defaults to ``None``, which the engine turns into an empty tool list for
@@ -39,6 +38,32 @@ those defaults land on whoever forgets them in production:
     root moves that decision onto the explicit ``bonfire.toml`` opt-in the
     backend already implements, so an unfamiliar repository is untrusted by
     default rather than trusted by omission.
+
+Which consumers are subscribed, and which are deliberately not
+-------------------------------------------------------------
+``CostLedgerConsumer``, ``SessionLoggerConsumer`` and ``CostTracker`` are wired:
+each needs only the bus, the settings and the plan, and each leaves an effect a
+caller can observe (a ledger row, a JSONL event log, a budget-warning event).
+
+Three consumers exist and are deliberately NOT wired here:
+
+``DisplayConsumer``
+    Writes to a callback, which is a presentation choice this layer does not
+    own. Its ``PipelineCompleted`` / ``PipelineFailed`` / ``QualityFailed``
+    messages restate the summary ``cli/commands/run.py`` already prints, so
+    subscribing it by default double-prints the end of every run.
+
+``KnowledgeIngestConsumer``
+    Needs a ``VaultBackend``. The default from ``get_vault_backend()`` is
+    ``InMemoryVaultBackend``, which is discarded at process exit -- ingest with
+    no observable effect. The backends that do persist are opt-in
+    (``sqlite``), or pull an optional dependency and a local Ollama server
+    (``lancedb``), which is not something a stranger's first run should trigger.
+
+``XPConsumer``
+    Needs a tracker and a calculator this root does not build, and nothing in
+    the CLI reads XP state back, so wiring it would produce no observable
+    effect either.
 
 Nothing here is clever. The point is that it exists, that it is one function,
 and that ``tests/integration/test_composition_root.py`` calls *this* code
@@ -77,11 +102,10 @@ class PipelineWiringError(RuntimeError):
     Raised *before* the engine runs, so the operator is told which name is
     missing instead of paying for the stages that precede the discovery.
 
-    This exists because the engine's own reaction to a missing name is not
-    good enough to rely on. An unknown handler fails the stage, which is at
-    least visible; an unknown *gate* is bypassed and counted as a pass, which
-    is not visible at all. Checking the plan against the registries up front
-    turns both into the same loud, named failure.
+    The engine now refuses both a missing handler and a missing gate, so this
+    is no longer the only thing standing between a typo and a green run. It is
+    still the cheapest: the engine's refusal arrives at the stage that names
+    the missing wiring, and every stage before it has already been billed.
     """
 
 
@@ -271,10 +295,9 @@ def validate_plan_wiring(
     missing names at once — fixing them one run at a time would mean paying
     for the earlier stages again on each attempt.
 
-    The gate half is the load-bearing half. A missing handler eventually
-    surfaces as a failed stage; a missing gate never surfaces at all, because
-    the engine bypasses it and the stage is reported as having passed its
-    quality checks. Refusing to start is the only way that becomes visible.
+    The engine also refuses an unregistered gate, but only once the stage
+    naming it is reached — by which point the earlier stages have been paid
+    for. Checking here turns that into a startup error costing nothing.
     """
     missing_handlers: list[tuple[str, str]] = []
     missing_gates: list[tuple[str, str]] = []
@@ -300,8 +323,8 @@ def validate_plan_wiring(
             f"registered: {', '.join(sorted(gates)) or '(none)'}"
         )
     lines.append(
-        "Refusing to run: an unregistered gate is bypassed by the engine and "
-        "counted as a pass, so the run would report quality it never checked."
+        "Refusing to run: naming wiring the engine lacks fails the run at the "
+        "stage that names it, after the earlier stages have already been paid for."
     )
     raise PipelineWiringError("\n".join(lines))
 
@@ -336,6 +359,8 @@ def build_default_engine(
     from bonfire.engine.factory import load_settings_or_default
     from bonfire.engine.pipeline import PipelineEngine
     from bonfire.events.bus import EventBus
+    from bonfire.events.consumers import CostTracker, SessionLoggerConsumer
+    from bonfire.session.persistence import SessionPersistence
 
     root = resolve_project_root() if project_root is None else project_root.resolve()
     settings = load_settings_or_default()
@@ -344,6 +369,15 @@ def build_default_engine(
     # cost, no consumer was subscribed, so a run that spent real money left no
     # ledger and ``bonfire cost`` answered $0.00 forever.
     CostLedgerConsumer().register(bus)
+    # The session log is the only durable record of what the bus carried. It is
+    # a global subscriber, so it is also what makes every *other* consumer's
+    # events inspectable after the fact -- including the budget warning below.
+    session_events = SessionPersistence(root / settings.memory.session_dir)
+    SessionLoggerConsumer(persistence=session_events).register(bus)
+    # The engine's own budget stop is a hard halt at 100%, checked only between
+    # stage groups. The tracker watches every dispatch and emits the 80% warning
+    # that the halt cannot give, in time for the operator to still act on it.
+    CostTracker(budget_usd=plan.budget_usd, bus=bus).register(bus)
     backend = ClaudeSDKBackend(bus=bus)
 
     handlers = build_default_handlers(

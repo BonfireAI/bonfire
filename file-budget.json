@@ -139,11 +139,21 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2865,
+    "src/bonfire/dispatch": 2869,
     "src/bonfire/engine": 1903,
     "src/bonfire/handlers": 3194,
     "src/bonfire/onboard": 4416,
     "tests/integration": 1363,
     "tests/unit": 73199
-  }
+  },
+  "package_raises": [
+    {
+      "package": "src/bonfire/dispatch",
+      "from": 2865,
+      "to": 2869,
+      "lines": 4,
+      "reason": "Envelope.artifacts had one reader and no producer, so the publishing stage of standard_build refused on every run. The producer has to live at the dispatch layer because that is the only layer that sees the agent's tool-use blocks: a handler is given result text and nothing else, and diffing the working tree cannot separate the agent's writes from anything else dirty. Wiring it into sdk_backend.py costs exactly four lines and they are irreducible: the import, the content_blocks accumulator, the append inside the block loop, and the artifacts= entry in the model_copy. Every other package this change touched was brought back under its ceiling by structure rather than by number, and three baselines were ratcheted down. This one could not be, so the number moved and the architecture did not. Explicitly rejected: excusing sdk_backend.py with a purpose entry, which would drop 306 lines out of the ratchet to accommodate 4.",
+      "approver": "Anta, 2026-07-27, via the lane conductor on PR #247"
+    }
+  ]
 }

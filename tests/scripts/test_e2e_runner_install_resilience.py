@@ -57,7 +57,8 @@ LOG_NETWORK_DNS = (
     "after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection."
     "HTTPSConnection object at 0x7afe5bdda0f0>: Failed to establish a new connection: "
     "[Errno -3] Temporary failure in name resolution')': /simple/requests/\n"
-    "ERROR: Could not find a version that satisfies the requirement requests (from versions: none)\n"
+    "ERROR: Could not find a version that satisfies the requirement requests "
+    "(from versions: none)\n"
     "ERROR: No matching distribution found for requests\n"
 )
 
@@ -306,13 +307,21 @@ def test_per_step_slice_isolates_the_failing_step(tmp_path: Path) -> None:
     let a retry warning step 1 survived decide what killed step 2. The slice
     is what keeps attribution honest.
     """
+    # Canned output goes through files rather than inline quoting: the pip
+    # text carries both quote characters, and the shipped bash must be graded
+    # against what pip really prints.
+    recovered = tmp_path / "step1.log"
+    recovered.write_text(
+        "WARNING: Retrying (Retry(total=1)) after connection broken by "
+        "ReadTimeoutError('...')\nSuccessfully installed bonfire-ai-1.0.1\n",
+        encoding="utf-8",
+    )
+    broken = tmp_path / "step2.log"
+    broken.write_text(LOG_ARTIFACT_CORRUPT_WHEEL, encoding="utf-8")
     body = "\n".join(
         [
-            'install_step "artifact-and-deps" bash -c '
-            '\'echo "WARNING: Retrying after connection broken by ReadTimeoutError"; '
-            'echo "Successfully installed bonfire-ai-1.0.1"\'',
-            'install_step "fixture-deps" bash -c '
-            "'echo \"ERROR: Wheel '\"'\"'fixture'\"'\"' located at /x.whl is invalid.\" >&2; exit 1'",
+            f'install_step "artifact-and-deps" bash -c \'cat "$0"\' {recovered}',
+            f'install_step "fixture-deps" bash -c \'cat "$0" >&2; exit 1\' {broken}',
         ]
     )
     result = _run(body, tmp_path)

@@ -17,10 +17,11 @@ an approval -- one mechanism, both directions, so a longer word list would
 have fixed neither. A gate that cannot reach its state raises
 :class:`~bonfire.engine.gate_state.GateStateUnavailableError` instead.
 
-Sage D5: GateChain does NOT wrap individual gate exceptions. A raising gate
-propagates out of ``evaluate_all``. The PipelineEngine.run() outer try/except
-catches it and returns ``PipelineResult(success=False)`` -- which is exactly
-the loud path an unevaluatable gate needs.
+Sage D5: GateChain does NOT wrap individual gate exceptions. A raising gate --
+including :class:`UnknownGateError` for a gate a stage names but the registry
+does not hold -- propagates out to PipelineEngine.run()'s outer try/except,
+which returns ``PipelineResult(success=False)``: the loud path an unevaluatable
+gate needs, and the reason a missing gate is never silently counted as a pass.
 """
 
 from __future__ import annotations
@@ -72,6 +73,10 @@ __all__ = [
     "TestPassGate",
     "VerificationGate",
 ]
+
+
+class UnknownGateError(LookupError):
+    """A stage names a gate the registry lacks. Never evaluated, so never a pass."""
 
 
 class CompletionGate:

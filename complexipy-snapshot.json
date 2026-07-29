@@ -108,6 +108,16 @@
     ]
   },
   {
+    "path": "src/bonfire/handlers/wizard.py",
+    "file_name": "wizard.py",
+    "functions": [
+      {
+        "name": "WizardHandler::handle",
+        "complexity": 17
+      }
+    ]
+  },
+  {
     "path": "src/bonfire/knowledge/chunker.py",
     "file_name": "chunker.py",
     "functions": [

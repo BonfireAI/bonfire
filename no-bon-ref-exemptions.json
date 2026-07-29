@@ -1,0 +1,477 @@
+{
+  "frozen_count": 118,
+  "entries": [
+    {
+      "path": "exemptions.json",
+      "reason": "52 internal-tracker references embedded in the 'reason' prose of grandfathered suppression entries, not in executable code; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. Rewording these reasons is a change to the suppression registry's own provenance text and is owned by the registry, not by the gate mount. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "scripts/petri_conversational_driver.py",
+      "reason": "1 internal-tracker reference in a developer-facing driver script's provenance comments; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/dispatch/test_trust_project_settings_key.py",
+      "reason": "6 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/smoke/smoke_test.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_analysis_models.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_analysis_schema.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_architect_handler.py",
+      "reason": "8 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_architecture_doc_exists.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bard_handler.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bon_1072_cost_accounting_close.py",
+      "reason": "3 internal-tracker references in a test module whose FILENAME also encodes one, so cleaning it is a file rename plus every import and node id that points at it; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bon_1073_security_polish.py",
+      "reason": "4 internal-tracker references in a test module whose FILENAME also encodes one, so cleaning it is a file rename plus every import and node id that points at it; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bon_1074_onboard_polish.py",
+      "reason": "13 internal-tracker references in a test module whose FILENAME also encodes one, so cleaning it is a file rename plus every import and node id that points at it; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bon_1075_read_symmetric_hardening.py",
+      "reason": "4 internal-tracker references in a test module whose FILENAME also encodes one, so cleaning it is a file rename plus every import and node id that points at it; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_bon_1100_install_skill.py",
+      "reason": "2 internal-tracker references in a test module whose FILENAME also encodes one, so cleaning it is a file rename plus every import and node id that points at it; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_classifier.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_classifier_module_surface.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_claude_memory_scan.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cli_app_no_dispatch_command.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cli_conservative.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_config.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_conversation_message_cap.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cost_analyzer.py",
+      "reason": "12 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cost_analyzer_caching.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cost_cli.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cost_consumer.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_cost_models.py",
+      "reason": "6 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_dispatch_options_role.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_dispatch_options_security_hooks.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_dispatch_package_surface.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_dispatch_runner.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_engine_factory.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_engine_init.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_engine_pipeline.py",
+      "reason": "7 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_engine_pipeline_tool_policy.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_envelope.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_event_bus.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_event_consumers.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_events.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_factory_bon1757.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_git.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_git_state_bon1757.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_git_state_sanitize.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_git_workflow.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_github.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_github_client_list_open_prs.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_handlers_package.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_handlers_role_binding.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_init_docstring_quality.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_backend_bon1757.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_backfill.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_chunker.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_consumer.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_embeddings.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_factory.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_ingest.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_memory.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_package.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_knowledge_scanner.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_lancedb_backend_exists.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_memory_vault.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_merge_preflight_bon1757.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_merge_preflight_handler.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_model_tiers.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_no_persona_names_in_public_docs.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_protocol.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_claude_memory.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_cli_toolchain.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_git_state.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_mcp_servers.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_project_structure.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_scanner_vault_seed.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_onboard_server.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_persona_builtins_dynamic_role_coverage.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_persona_cli.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_persona_rename_sweep.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_protocols.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_resolver.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_role_tier_map.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_safe_write.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sage_correction_bounce_bon1757.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sage_correction_handler.py",
+      "reason": "13 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sage_correction_resolved_gate.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_scan_cli.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_scan_decision_recorder.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_scan_package.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_scan_tech_scanner.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sdk_backend_hooks_wiring.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sdk_backend_setting_sources_gate.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_sdk_backend_tool_presence.py",
+      "reason": "9 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_denied_event.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_blindspots.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_bon1757.py",
+      "reason": "4 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_compile_once.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_config.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_event.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_factory.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_failsafe.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_matcher.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_normalize.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_runtime.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_hooks_unwrap.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C1.py",
+      "reason": "3 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C2.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C3.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C4.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C5.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C6.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_C7.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_security_patterns_module.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_steward_handler.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_tool_policy.py",
+      "reason": "2 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_wave_11_lane_e_stage_executor_deleted.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_wizard_handler.py",
+      "reason": "5 internal-tracker references in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_xp_calculator.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_xp_consumer.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_xp_display.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_xp_session.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    },
+    {
+      "path": "tests/unit/test_xp_tracker.py",
+      "reason": "1 internal-tracker reference in this test module's provenance header and/or test names, describing which wave of work the cases came from; recorded when the shared quality kit's pin was advanced 2026-07-28, the run on which this gauge first measured this repository at all. docs/release-gates.md scopes the repo-wide cleanup as a rename sweep, tracked apart from mounting the gate. shrink-only: remove this entry when the file is cleaned, never widen it."
+    }
+  ]
+}

@@ -76,6 +76,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `bonfire init` now seeds two `.gitignore` entries instead of one:
+  `.bonfire/tools.local.toml`, the per-machine tool inventory, and
+  `.bonfire/vault`, where the knowledge backend keeps its store once an
+  operator enables a persistent one. The store entry carries no trailing
+  slash because `.bonfire/vault` is the documented default path for both
+  on-disk shapes that store can take, and one pattern has to cover both:
+  the LanceDB backend makes it a directory holding a vector index built
+  from the operator's own source, while the SQLite backend hands the same
+  path to `sqlite3.connect` and gets a regular file whose row content
+  holds that source as cleartext. A directory-only pattern would leave
+  the file shape stageable, which is the worse of the two to publish.
+  Nothing else under `.bonfire/` is covered: `sessions/` handoffs,
+  `context.json` and `costs.jsonl` stay committable. Re-running `init`
+  still duplicates neither line, and the success output names both
+  entries. The repo's own `.gitignore` moved to the same pattern.
 - README: the "What's Not There Yet" list is re-derived against the
   current tree. `bonfire run` exists and is documented; `status`,
   `resume` and `handoff` are implementations rather than stubs; four

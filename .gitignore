@@ -216,3 +216,17 @@ __marimo__/
 # per-run copy of the operator's OAuth credential plus claude-stream logs and a
 # clone of the fixture target — local-only, must never be committed.
 .e2e-runs/
+
+# Bonfire's own knowledge-backend store. .bonfire/vault is the documented
+# default path for BOTH on-disk shapes that store can take, and one pattern
+# has to cover both: the LanceDB backend makes it a DIRECTORY holding a vector
+# index built from this repo's own source, while the SQLite backend hands the
+# same path to sqlite3.connect and gets a REGULAR FILE whose
+# vault_entries.content column holds that source as cleartext. Hence NO
+# trailing slash — a directory-only pattern cannot reach the file shape, which
+# is the worse of the two to publish. The laws and the mechanism travel; the
+# operator's contents never do. No other .bonfire-specific pattern lives here:
+# sessions/ handoffs, context.json and costs.jsonl stay committable, which is
+# why there is no bare .bonfire/ line. (The broad patterns elsewhere in this
+# file — *.log, .env*, .cache — reach into .bonfire/ as they reach everywhere.)
+.bonfire/vault

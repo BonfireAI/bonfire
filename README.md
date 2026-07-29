@@ -117,8 +117,9 @@ Claude Code session.
 #   - .bonfire/ (per-project state directory)
 #   - agents/ (role-local prompt + identity-block overrides; see
 #     Extension Points)
-#   - .gitignore entry: `.bonfire/tools.local.toml` (appended if
-#     missing; idempotent — re-running does not duplicate the line)
+#   - .gitignore carrying two entries, appended if missing (idempotent;
+#     re-running duplicates neither line): `.bonfire/tools.local.toml`
+#     and `.bonfire/vault`, the knowledge-backend store
 bonfire init .
 
 # Drive a prompt through a workflow and the pipeline engine. Needs a

@@ -31,6 +31,10 @@ jobs:
           ruff check src/ tests/
           ruff format --check src/ tests/
 
+      # Three-valued: 0 clean · 1 a citation drifted (re-anchor it) · 2 the gate
+      # could not verify (an unregistered unverifiable citation, an absent cited
+      # source, a stale/over-ratchet citation-baseline.json, or zero citations
+      # graded). Both 1 and 2 fail the step; the script's report says which.
       - name: Protocol-doc citation drift check
         run: python scripts/check_protocol_doc_citations.py
 

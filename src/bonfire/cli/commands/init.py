@@ -34,20 +34,40 @@ from bonfire._safe_write import safe_append_text, safe_write_text
 # sites stay consistent.
 _INIT_READ_MAX_BYTES: int = 1 * 1024 * 1024
 
-# ``.bonfire/`` carries a MIX of operator-local state (the per-machine
-# ``tools.local.toml`` written by ``bonfire scan``) AND artefacts that
-# ARE committable: ``.bonfire/sessions`` (handoff history),
-# ``.bonfire/context.json`` (project config), ``.bonfire/vault``
-# (knowledge backend seed), ``.bonfire/costs.jsonl`` (cost ledger, when
-# operator opts in to commit). A broad ``.bonfire/`` ignore would
-# silently exclude those committable sub-paths and break workflows that
-# depend on them landing in git. The narrower entry names the single
-# operator-local file the W8.G work introduced so other sub-paths under
-# ``.bonfire/`` remain stageable by default — a contract pinned by the
-# gitignore-narrowness test in ``test_tools_section_is_local.py``. The
-# operator can still add broader patterns to ``.gitignore`` by hand if
-# they want; ``bonfire init`` does not assume that policy.
+# ``.bonfire/`` carries a MIX of state that must never leave the
+# operator's machine AND state that is committable by design. The seeded
+# entries name ONLY the former, one line each.
+#
+# Committable — deliberately NOT ignored: ``.bonfire/sessions/`` (handoff
+# history operators commit so the next session picks up the thread),
+# ``.bonfire/context.json`` (project config, portable by design),
+# ``.bonfire/costs.jsonl`` (cost ledger, committed when the operator opts
+# in to keeping the spend record in the repo).
+#
+# Never committable — seeded here:
+#   * ``.bonfire/tools.local.toml`` — the host tool inventory and version
+#     footprint ``bonfire scan`` stamps; per-machine, and a privacy leak
+#     in a public repo. (Introduced by the W8.G migration.)
+#   * ``.bonfire/vault`` — the knowledge backend's store, once an
+#     operator enables a persistent one. NO trailing slash: one default
+#     path, TWO on-disk shapes, and one pattern must cover both. LanceDB
+#     makes it a DIRECTORY (a vector index of the operator's own source);
+#     SQLite hands it to ``sqlite3.connect``, making it a REGULAR FILE
+#     holding the indexed source as cleartext — the worse leak, and the
+#     shape a directory-only pattern cannot reach. Slash-less covers both.
+#
+# A broad ``.bonfire/`` ignore would be simpler and is deliberately NOT
+# used: it would silently exclude the committable sub-paths above and
+# break the workflows that depend on them landing in git. BOTH
+# directions — the vault IS covered, no other ``.bonfire`` sub-path is —
+# are pinned by ``tests/unit/test_init_gitignore_width.py``. An operator
+# may still add broader patterns by hand; ``bonfire init`` does not
+# assume that policy. ``_GITIGNORE_LINE`` keeps its name and
+# single-string shape (the tools-file entry, imported by name from the
+# hardening tests); ``_GITIGNORE_LINES`` is the full seeded sequence.
 _GITIGNORE_LINE = ".bonfire/tools.local.toml"
+_GITIGNORE_VAULT_LINE = ".bonfire/vault"
+_GITIGNORE_LINES: tuple[str, ...] = (_GITIGNORE_LINE, _GITIGNORE_VAULT_LINE)
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +204,26 @@ def _make_directory_or_refuse(path: Path, label: str) -> None:
 
 
 def _ensure_gitignore_entry(target: Path, line: str) -> None:
-    """Append ``line`` to ``target/.gitignore`` iff not already present.
+    """Seed exactly one entry — the single-line primitive.
+
+    Kept as the narrow entry point (one line in, one write out): that is
+    the shape the symlink/TOCTOU hardening tests drive directly.
+    """
+    _ensure_gitignore_entries(target, (line,))
+
+
+def _ensure_gitignore_entries(target: Path, lines: tuple[str, ...]) -> None:
+    """Append each of ``lines`` to ``target/.gitignore`` iff absent.
 
     Idempotent: re-running ``bonfire init`` MUST NOT duplicate an entry
     (the no-duplicate canary pins this). The presence check matches a
-    stripped/non-comment line against the requested entry; existing
-    comments and blank lines are preserved. Creates ``.gitignore`` if
-    absent.
+    stripped line against each requested entry; existing comments and
+    blank lines are preserved. Creates ``.gitignore`` if absent.
+
+    All missing entries land in ONE write — the fresh-file branch emits
+    the header plus every line, the extend branch appends the missing
+    lines as a single payload — so the number of writes is independent
+    of the number of entries.
 
     Uses :func:`safe_write_text` (W7.M) when creating the file fresh
     and :func:`safe_append_text` (W7.M append helper) when extending
@@ -219,19 +252,21 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
     _require_regular_file_slot(gitignore_path, ".gitignore")
 
     if not gitignore_path.exists():
-        # Fresh file — create with the entry and a brief header so a
+        # Fresh file — create with the entries and a brief header so a
         # future contributor reading ``.gitignore`` understands why the
-        # operator-local file is excluded.
-        body = f"# Bonfire — operator-local state (do not commit).\n{line}\n"
-        _write_or_refuse(gitignore_path, body, label=".gitignore")
+        # operator-local paths are excluded.
+        header = "# Bonfire — operator-local state (do not commit).\n"
+        _write_or_refuse(gitignore_path, header + _as_entry_block(lines), label=".gitignore")
         return
 
     # W11 M2: route through ``safe_read_capped_text`` so the read uses
     # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
     # between the ``is_symlink`` pre-check above and this read.
     existing = _read_or_refuse(gitignore_path, ".gitignore")
-    if line in [ln.strip() for ln in existing.splitlines()]:
-        # Already covered — idempotent no-op.
+    present = {ln.strip() for ln in existing.splitlines()}
+    missing = tuple(line for line in lines if line not in present)
+    if not missing:
+        # Every entry already covered — idempotent no-op.
         return
 
     # Append on a fresh line. Ensure exactly one trailing newline before
@@ -251,7 +286,16 @@ def _ensure_gitignore_entry(target: Path, line: str) -> None:
     # is refused at ``open(2)`` time by the kernel rather than slipping
     # through to an attacker-controlled target.
     suffix = "" if existing.endswith("\n") else "\n"
-    _append_or_refuse(gitignore_path, suffix + f"{line}\n", label=".gitignore")
+    _append_or_refuse(gitignore_path, suffix + _as_entry_block(missing), label=".gitignore")
+
+
+def _as_entry_block(lines: tuple[str, ...]) -> str:
+    """Render ``lines`` as newline-terminated ``.gitignore`` entries.
+
+    One place decides that each seeded entry owns its line and ends in
+    ``\\n``, so the fresh-file body and the append payload cannot drift.
+    """
+    return "".join(f"{line}\n" for line in lines)
 
 
 def _existing_gitignore_entries(gitignore_path: Path) -> set[str]:
@@ -268,7 +312,7 @@ def _existing_gitignore_entries(gitignore_path: Path) -> set[str]:
         body = safe_read_capped_text(gitignore_path, max_bytes=_INIT_READ_MAX_BYTES)
     except (OSError, ValueError):
         return set()
-    return {ln.strip() for ln in body.splitlines()} & {_GITIGNORE_LINE}
+    return {ln.strip() for ln in body.splitlines()} & set(_GITIGNORE_LINES)
 
 
 def _has_legacy_tools_section(toml_path: Path) -> bool:
@@ -348,9 +392,9 @@ def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str])
     Quick Start enumerated only the subset (``bonfire.toml`` +
     ``.bonfire/``) and the prior success message hid the rest: the
     ``agents/`` scaffold the prompt compiler reads from, and the
-    operator-local-state line appended to ``.gitignore``. A README
-    reconciliation test pins this list against the README so the two
-    cannot drift.
+    operator-local-state lines appended to ``.gitignore``. The README
+    reconciliation test only checks that four artefact tokens appear near
+    the README's ``bonfire init`` example, so it cannot notice a NEW one.
 
     Per-artefact verb prefix: ``Created:`` when the artefact was created
     this run, ``Already present:`` when it pre-existed. The artefact-name
@@ -370,12 +414,15 @@ def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str])
         f"  - {_verb(pre_existed['agents_dir'])}: agents/ "
         "(role-local prompt + identity-block overrides)"
     )
-    # The .gitignore entry is reported per-entry, not per-file, because
-    # the file may pre-exist with unrelated user content while the entry
-    # is freshly appended. Reporting "Already present" only when BOTH the
-    # file and the line existed before this run keeps the truth honest.
-    entry_existed = pre_existed["gitignore"] and _GITIGNORE_LINE in seeded_before
-    typer.echo(f"  - {_verb(entry_existed)}: .gitignore entry: {_GITIGNORE_LINE}")
+    # The .gitignore entries are reported per-entry, not per-file: the
+    # file may pre-exist with user content while one entry is freshly
+    # appended and the other was already there. Each line's verb follows
+    # whether THAT entry was in the file before this run, so a fresh
+    # append never reads "Already present" and neither is a pre-existing
+    # entry announced as "Created".
+    for line in _GITIGNORE_LINES:
+        entry_existed = pre_existed["gitignore"] and line in seeded_before
+        typer.echo(f"  - {_verb(entry_existed)}: .gitignore entry: {line}")
 
 
 def init(
@@ -444,11 +491,9 @@ def init(
     _make_directory_or_refuse(bonfire_dir, ".bonfire/")
     _make_directory_or_refuse(agents_dir, "agents/")
 
-    # W8.G — seed .gitignore so ``.bonfire/tools.local.toml`` (and any
-    # future operator-local file under ``.bonfire/``) is never staged
-    # for commit. Idempotent: re-running ``bonfire init`` does not
-    # duplicate the entry.
-    _ensure_gitignore_entry(target, _GITIGNORE_LINE)
+    # Seed .gitignore for the operator-local paths (which ones, and why
+    # each, at ``_GITIGNORE_LINES``). Idempotent on re-run.
+    _ensure_gitignore_entries(target, _GITIGNORE_LINES)
 
     _report(target, pre_existed, seeded_before)
     raise typer.Exit(0)

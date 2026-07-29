@@ -163,12 +163,12 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # `standard_build` bullet was corrected against the tree.
         (
             "README.md",
-            377,
+            378,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            378,
+            379,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -194,22 +194,22 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # under [Unreleased]. Anchors only; expected text is unchanged.
         (
             "CHANGELOG.md",
-            662,
+            677,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            664,
+            679,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            665,
+            680,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            682,
+            697,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

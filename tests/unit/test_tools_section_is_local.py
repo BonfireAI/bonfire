@@ -23,7 +23,13 @@ SEPARATE file ``.bonfire/tools.local.toml`` that is ``.gitignore``'d at
 ``bonfire init`` time. ``bonfire.toml`` stays project-portable;
 ``.bonfire/tools.local.toml`` stays per-machine, never committed.
 
-This file pins six contracts:
+This file pins the six numbered contracts below, plus two
+defense-in-depth pins documented at their own classes (#7, the reader's
+symlink refusal; #8, the sentinel label whitelist). A ninth pin — the
+WIDTH of the ``.gitignore`` ``bonfire init`` seeds, in both directions —
+lives in ``tests/unit/test_init_gitignore_width.py``.
+
+The six:
 
   1. ``generate_config`` MUST NOT include a ``[bonfire.tools]`` section
      in the main ``config_toml`` string.
@@ -34,9 +40,10 @@ This file pins six contracts:
      ``[bonfire.tools]`` table.
 
   3. ``bonfire init`` MUST add a ``.gitignore`` entry covering
-     ``.bonfire/tools.local.toml`` (the simplest sufficient cover is the
-     directory itself, ``.bonfire/``, but a narrower entry that names
-     the file directly is equally acceptable).
+     ``.bonfire/tools.local.toml``. Any pattern that matches the file
+     under standard git semantics satisfies this pin — but the width
+     module independently forbids a blanket ``.bonfire/`` cover, so the
+     seed has to name the operator-local paths rather than the dir.
 
   4. The reader API ``load_tools_config(project_path)`` (new module
      surface owned by the Warrior) MUST prefer
@@ -105,6 +112,25 @@ def _scan(panel: str, label: str, value: str, detail: str = "") -> ScanUpdate:
 def _fake_tool_scans() -> list[ScanUpdate]:
     """Build a representative ``cli_toolchain`` scan-result list."""
     return [_scan("cli_toolchain", name, ver) for name, ver in _FAKE_TOOLS]
+
+
+def _run_init(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run ``bonfire init .`` inside *tmp_path* and require a clean exit.
+
+    Shared by every init-facing pin below so there is one assertion text
+    for "init did not even succeed" — no pin can mistake a crashed init
+    for a narrow gitignore.
+    """
+    from typer.testing import CliRunner
+
+    from bonfire.cli.app import app
+
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(app, ["init", "."])
+    assert result.exit_code == 0, (
+        f"bonfire init must succeed in {tmp_path}; got exit_code={result.exit_code}, "
+        f"output={result.output!r}"
+    )
 
 
 def _load_tools_reader():
@@ -305,11 +331,14 @@ class TestWriteConfigEmitsLocalToolsFile:
 
 class TestInitGitignoresLocalToolsFile:
     """``bonfire init`` MUST seed a ``.gitignore`` entry that prevents
-    ``.bonfire/tools.local.toml`` from ever being staged. The simplest
-    sufficient cover is the directory ``.bonfire/`` itself; a narrower
-    entry naming the file directly is equally acceptable. The Knight
+    ``.bonfire/tools.local.toml`` from ever being staged. This class
     accepts any pattern that matches the operator-local file under
-    standard git semantics.
+    standard git semantics, including the blanket ``.bonfire/`` cover —
+    it grades coverage, not width. Width is graded in
+    ``tests/unit/test_init_gitignore_width.py``, which asserts set
+    equality against the two entries the seed is allowed to hold and so
+    rules the blanket cover out; the two together admit only a seed that
+    names the operator-local paths.
     """
 
     def test_init_creates_gitignore_covering_tools_local_file(
@@ -320,16 +349,7 @@ class TestInitGitignoresLocalToolsFile:
         """``bonfire init`` adds an entry to ``.gitignore`` matching
         ``.bonfire/tools.local.toml``.
         """
-        from typer.testing import CliRunner
-
-        from bonfire.cli.app import app
-
-        runner = CliRunner()
-        monkeypatch.chdir(tmp_path)
-        result = runner.invoke(app, ["init", "."])
-        assert result.exit_code == 0, (
-            f"init must succeed; got exit_code={result.exit_code}, output={result.output!r}"
-        )
+        _run_init(tmp_path, monkeypatch)
 
         gitignore_path = tmp_path / ".gitignore"
         assert gitignore_path.exists(), (
@@ -372,36 +392,51 @@ class TestInitGitignoresLocalToolsFile:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Running ``bonfire init`` twice (re-init) MUST NOT duplicate the
-        ``.bonfire/`` entry in ``.gitignore``. ``bonfire init`` is
+        """Running ``bonfire init`` twice (re-init) MUST NOT duplicate any
+        seeded ``.bonfire/`` entry in ``.gitignore``. ``bonfire init`` is
         idempotent (per ``init.py``'s ``if not toml_path.exists()`` and
         ``mkdir(exist_ok=True)``); the gitignore seeding must follow the
-        same rule — re-running must not append a second copy of the
-        same line.
+        same rule — re-running must not append a second copy of a line,
+        nor accumulate blank lines.
+
+        The check is byte-level: the whole file must come back identical,
+        so a duplicate of ANY seeded entry fails and so does stray
+        whitespace. That is strictly stronger than the entry-count cap it
+        replaces ON IDEMPOTENCE and strictly weaker ON WIDTH — the old cap
+        ("at most one line mentioning ``.bonfire``") incidentally bounded
+        how many paths could be seeded, while forbidding a SECOND
+        legitimate operator-local entry, so it conflated the two
+        properties. Width is bounded on its own terms in
+        ``tests/unit/test_init_gitignore_width.py``: set equality against
+        a literal expectation, which a third seeded path fails.
         """
-        from typer.testing import CliRunner
-
-        from bonfire.cli.app import app
-
-        runner = CliRunner()
-        monkeypatch.chdir(tmp_path)
-
-        result1 = runner.invoke(app, ["init", "."])
-        assert result1.exit_code == 0
-        result2 = runner.invoke(app, ["init", "."])
-        assert result2.exit_code == 0
-
         gitignore_path = tmp_path / ".gitignore"
-        assert gitignore_path.exists()
-        body = gitignore_path.read_text()
-        lines = [line.strip() for line in body.splitlines()]
 
-        # Count how many gitignore lines mention the .bonfire token.
-        bonfire_lines = [line for line in lines if ".bonfire" in line and not line.startswith("#")]
-        assert len(bonfire_lines) <= 1, (
-            f"bonfire init duplicated .bonfire-related .gitignore entries on "
-            f"re-init. Got {len(bonfire_lines)} matching lines: "
-            f"{bonfire_lines!r}. Full body:\n{body}"
+        _run_init(tmp_path, monkeypatch)
+        after_first = gitignore_path.read_text()
+        _run_init(tmp_path, monkeypatch)
+        after_second = gitignore_path.read_text()
+
+        assert after_second == after_first, (
+            f"re-running bonfire init rewrote {gitignore_path}. After first run:\n"
+            f"{after_first}\n--- After second run:\n{after_second}"
+        )
+        bonfire_lines = [
+            line.strip()
+            for line in after_second.splitlines()
+            if ".bonfire" in line and not line.strip().startswith("#")
+        ]
+        # Non-vacuity: with no seeded entries at all, the duplicate check
+        # below would pass over an empty list.
+        assert bonfire_lines, (
+            f"bonfire init seeded no .bonfire entry at all into {gitignore_path}, "
+            f"so the no-duplicate check has nothing to grade. Full body:\n{after_second}"
+        )
+        duplicated = sorted({ln for ln in bonfire_lines if bonfire_lines.count(ln) > 1})
+        assert not duplicated, (
+            f"bonfire init duplicated a .bonfire .gitignore entry in "
+            f"{gitignore_path} on re-init: {duplicated!r}. All .bonfire lines: "
+            f"{bonfire_lines!r}. Full body:\n{after_second}"
         )
 
 
@@ -817,77 +852,17 @@ class TestToolsSentinelLabelWhitelist:
 
 
 # ---------------------------------------------------------------------------
-# Pin #9 — Gitignore narrowness: committable sub-paths under .bonfire/
-#          must remain stageable by default.
+# Pin #9 — MOVED. The width of the ``.gitignore`` ``bonfire init`` seeds —
+#          both directions, plus the closed set of seeded ``.bonfire``
+#          entries — now lives in its own module:
+#
+#              tests/unit/test_init_gitignore_width.py
+#
+#          It did not vanish and it did not weaken: the move added the
+#          SQLite file shape of ``.bonfire/vault`` to the covered paths,
+#          made a fatal ``git check-ignore`` exit a red instead of a
+#          silent "not ignored", attributed both directions to a source so
+#          a contributor's global excludes cannot decide the verdict, and
+#          replaced the sampled width check with set equality against a
+#          literal expectation. One contract, one file.
 # ---------------------------------------------------------------------------
-
-
-class TestInitGitignoreDoesNotOverCover:
-    """``bonfire init`` must NOT seed a gitignore entry that excludes
-    committable sub-paths under ``.bonfire/`` (sessions, context.json,
-    vault seed, opt-in cost ledger). Over-broad coverage silently
-    breaks workflows that depend on those paths landing in git.
-    """
-
-    def test_gitignore_entry_does_not_cover_bonfire_sessions(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """After init, the gitignore must NOT match
-        ``.bonfire/sessions/2026-05-15-handoff.md`` — operators commit
-        session handoffs.
-        """
-        import subprocess
-
-        from typer.testing import CliRunner
-
-        from bonfire.cli.app import app
-
-        runner = CliRunner()
-        monkeypatch.chdir(tmp_path)
-        result = runner.invoke(app, ["init", "."])
-        assert result.exit_code == 0
-
-        # Use git itself to evaluate the gitignore (most authoritative).
-        # ``git check-ignore`` returns 0 when path IS ignored, 1 when
-        # NOT ignored. We want NOT ignored for these committable paths.
-        try:
-            subprocess.run(
-                ["git", "init", "-q"],
-                cwd=tmp_path,
-                check=True,
-                capture_output=True,
-            )
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            pytest.skip("git not available")
-
-        committable_paths = [
-            ".bonfire/sessions/handoff.md",
-            ".bonfire/context.json",
-            ".bonfire/vault/seed.md",
-            ".bonfire/costs.jsonl",
-        ]
-        for rel_path in committable_paths:
-            check = subprocess.run(
-                ["git", "check-ignore", "-q", rel_path],
-                cwd=tmp_path,
-                capture_output=True,
-            )
-            # Exit code 1 = NOT ignored (good).
-            assert check.returncode == 1, (
-                f"bonfire init's .gitignore over-covers: {rel_path!r} is "
-                f"matched by the seeded entry but should remain stageable. "
-                f"Gitignore body:\n{(tmp_path / '.gitignore').read_text()}"
-            )
-
-        # Sanity: the operator-local file IS ignored.
-        check = subprocess.run(
-            ["git", "check-ignore", "-q", ".bonfire/tools.local.toml"],
-            cwd=tmp_path,
-            capture_output=True,
-        )
-        assert check.returncode == 0, (
-            f"bonfire init's .gitignore did NOT cover the operator-local "
-            f"tools.local.toml file. Body:\n{(tmp_path / '.gitignore').read_text()}"
-        )

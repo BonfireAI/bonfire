@@ -25,6 +25,9 @@
     "tests/unit/test_events.py": 675,
     "tests/unit/test_git.py": 754,
     "tests/unit/test_github.py": 846,
+    "tests/unit/test_init_gitignore_width.py": {
+      "purpose": "the two-direction width contract for the .gitignore that bonfire init seeds: the operator-local paths under .bonfire/ are covered in BOTH on-disk shapes the knowledge store's single default path can take (a LanceDB directory and a SQLite regular file), while every committable sub-path (sessions, context.json, the cost ledger) stays stageable. Split out of test_tools_section_is_local.py, which owns the tools-local-file pins and was at its frozen size: this is one contract with its own module, and the split returns that file BELOW its frozen number rather than raising it. Graded by real git check-ignore against a real repository with git's own global and system config neutralised, so a contributor's excludes file cannot make it pass or fail."
+    },
     "tests/unit/test_merge_preflight_handler.py": 1139,
     "tests/unit/test_onboard_scanner_claude_memory.py": 562,
     "tests/unit/test_onboard_scanner_cli_toolchain.py": 504,

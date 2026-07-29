@@ -1,0 +1,21 @@
+{
+  "frozen_count": 2,
+  "entries": [
+    {
+      "doc_line": 179,
+      "path": "onboard/protocol.py",
+      "cited_start": 107,
+      "cited_end": 110,
+      "finding": "The doc section is 2.5 conversation_start and this line is its **Source (model)** pointer, but src/bonfire/onboard/protocol.py:107-110 covers the blank line before class AllScansComplete plus that class's header and the opening of its docstring. The ConversationStart model the sentence names lives at lines 120-123. Repair = re-point the range at 120-123.",
+      "reason": "hand-verified 2026-07-28 as genuinely drifted: the doc names the conversation_start model while the cited range covers AllScansComplete. Recorded so the gate can mount now; correcting the doc is owned by the doc. NOT registered as merely unmechanisable - the citation is wrong, and it reaches the unverified bucket only because every backticked hint in its context window is listed in _SKIP_HINTS and the cited line sits at module level, so neither resolution pass fires. Remove this entry when the doc range is repaired; the ratchet then owes a shrink."
+    },
+    {
+      "doc_line": 266,
+      "path": "onboard/protocol.py",
+      "cited_start": 175,
+      "cited_end": 177,
+      "finding": "The doc sentence above this line reads 'The client-type registry has exactly one entry', but src/bonfire/onboard/protocol.py:175-177 covers the Parsing banner comment, a blank line, and the first line of _SERVER_TYPES - the SERVER registry, which has eight entries. The one-entry client registry, _CLIENT_TYPES, lives at lines 188-190. Repair = re-point the range at 188-190.",
+      "reason": "hand-verified 2026-07-28 as genuinely drifted: the doc says client while the cited range points at the server registry. Recorded so the gate can mount now; correcting the doc is owned by the doc. NOT registered as merely unmechanisable - the citation is wrong, and it reaches the unverified bucket only because no backticked identifier appears in the five doc lines before it and the cited line sits at module level, so neither resolution pass fires. Remove this entry when the doc range is repaired; the ratchet then owes a shrink."
+    }
+  ]
+}

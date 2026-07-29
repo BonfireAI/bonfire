@@ -3,7 +3,7 @@
 # Copyright 2026 BonfireAI
 r"""Verify ``docs/scan-front-door-protocol.md`` source citations stay anchored.
 
-The Front Door protocol doc cites ~70 ``src/bonfire/...py:NN[-NN]``
+The Front Door protocol doc cites ~60 ``src/bonfire/...py:NN[-NN]``
 line ranges. After any wave of insert-heavy edits in the cited
 modules (Wave 4 trust-triangle, Wave 9 Lane B oversize handling,
 Wave 10 vault_seed symlink hardening, …) the line numbers drift
@@ -12,32 +12,59 @@ through to verify lands in unrelated code. The CHANGELOG advertised
 this doc as the authoritative third-party-client contract, so the
 citations are part of the contract surface, not just decoration.
 
-This script:
+This script reads the doc, extracts every ``src/bonfire/.../<file>.py``
+citation (Python only; ``ui.html`` citations have no AST) and resolves
+each one against the source AST in two passes:
 
-* Reads ``docs/scan-front-door-protocol.md``.
-* Extracts every ``src/bonfire/.../<file>.py:NN`` and
-  ``src/bonfire/.../<file>.py:NN-NN`` citation (Python files only;
-  ``ui.html`` citations are skipped because they have no AST).
-* Resolves each citation against the source AST in two passes:
-  1. **Containment pass.** Find the innermost class/function/
-     module-level assignment that *contains* the cited start line.
-     A citation that lands inside ``FrontDoorServer._ws_handler``'s
-     body is OK regardless of whether the surrounding doc text
-     names ``_ws_handler``, because the line still points at code
-     inside that symbol.
-  2. **Hint pass (fallback).** If the cited line is in module
-     top-level whitespace/imports, walks the doc up to 5 lines back
-     looking for a backticked Python identifier
-     (``\`ConversationEngine.start\```, ``\`_SERVER_TYPES\```)
-     and asserts the symbol's actual start line is within
-     ``--tolerance`` of the cited start.
-* Fails (exit 1) with one line per drifted citation.
+1. **Containment pass.** Find the innermost class/function/module-level
+   assignment that *contains* the cited start line. A citation landing
+   inside ``FrontDoorServer._ws_handler``'s body is OK whether or not the
+   surrounding doc text names ``_ws_handler`` — the line still points at
+   code inside that symbol.
+2. **Hint pass (fallback).** If the cited line is at module level
+   (imports, blank lines, banner comments), walk the doc up to 5 lines
+   back for a backticked Python identifier (``\`ConversationEngine.start\```,
+   ``\`_SERVER_TYPES\```) and assert the symbol's actual start line is
+   within ``--tolerance`` of the cited start.
 
-The check is intentionally conservative: citations whose symbol
-cannot be matched mechanically AND don't land in any indexed body
-are reported as ``unverified`` on stderr and do NOT fail the run.
-The script's job is to catch silent drift on the citations we CAN
-mechanise, not to gate the whole doc on perfect machine-readability.
+The honest exit contract
+------------------------
+
+====  =====================================================================
+Exit  Meaning
+====  =====================================================================
+0     Clean. Every citation resolved (or is registered in
+      ``citation-baseline.json``) AND the run graded a NON-EMPTY set.
+1     DRIFT. The gate DID its job: a citation resolved to a symbol and the
+      cited line is wrong. Re-anchor it.
+2     COULD NOT VERIFY. The gate COULD NOT do its job: a citation it cannot
+      mechanically resolve and that no registry entry covers, a cited
+      source file absent or unparseable, an unreadable doc, a malformed or
+      over-ratchet registry, a stale registry entry, or a run that graded
+      ZERO citations.
+====  =====================================================================
+
+Exit 1 outranks exit 2 when both stand; every could-not-verify blocker is
+still printed under the verdict, so nothing is masked.
+
+This REPLACES the fail-open behaviour the script shipped with, which
+reported unresolvable citations as ``unverified`` on stderr and returned 0
+anyway. That made the gate MOST permissive exactly where its own
+confidence was LOWEST, and the run that measured it found BOTH of its
+``unverified`` citations were real drift, laundered into a category
+structurally incapable of failing. ``unverified`` is no longer a pass.
+
+To land the strict gate ahead of the doc repair it demands, each
+known-unverifiable citation is named — one at a time, with a written
+finding and a written reason, under a ratchet — in
+``citation-baseline.json`` (see ``scripts/citation_baseline.py``). The
+registry covers the ``unverified`` bucket ONLY; it can never launder a
+``drift``, and it can never cover a source file the gate could not read.
+
+Collaborators: ``citation_doc`` (the doc side), ``citation_source`` (the
+source side), ``citation_baseline`` (the registry), ``citation_report``
+(the verdict, the report and the exit code). This file owns the
+resolution rules and the CLI.
 
 Usage::
 
@@ -45,47 +72,47 @@ Usage::
     python scripts/check_protocol_doc_citations.py --json
     python scripts/check_protocol_doc_citations.py --tolerance 0
 
-Exits 0 when every verifiable citation resolves; 1 on any drift.
+``--doc``, ``--source-root`` and ``--baseline`` exist so the control rods
+can point the whole gate at a fixture tree. They relocate WHAT is graded;
+none of them can switch a verdict off.
 """
 
 from __future__ import annotations
 
 import argparse
-import ast
 import json
-import re
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
+# ``scripts/`` is not a package, so the collaborator modules are imported
+# by bare name. The interpreter already seeds ``sys.path[0]`` with this
+# directory when the script runs as ``python scripts/<this>.py``; the
+# insert is what makes the imports work when a test loads this file by
+# path (``importlib.util.spec_from_file_location``) from another cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from citation_baseline import BASELINE_FILENAME, CitationBaselineError, load_baseline
+from citation_doc import (
+    CONTEXT_BACK_LINES,
+    Citation,
+    HintProbe,
+    extract_citations,
+    hint_for_citation,
+)
+from citation_report import CheckResult, Graded, fail_to_run, report
+from citation_source import (
+    SourceIndexError,
+    SymbolIndex,
+    index_symbols,
+    innermost_containing,
+    neighbours,
+)
 
 # Repo root is the parent of this script's parent (``scripts/``).
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DOC_PATH = _REPO_ROOT / "docs" / "scan-front-door-protocol.md"
-
-# Matches ``src/bonfire/<anything>.py:NN`` or ``.py:NN-NN`` inside a
-# markdown backtick span. We accept either an opening ``\``` directly
-# before the path or surrounding text — the doc uses both shapes.
-_CITATION_RE = re.compile(
-    r"src/bonfire/(?P<path>[A-Za-z0-9_/]+\.py):(?P<start>\d+)(?:-(?P<end>\d+))?"
-)
-
-# Matches an inline-code Python identifier. Used to find a symbol hint
-# in the 5 lines preceding a citation. We capture dotted names
-# (``ConversationEngine.start``) so we can resolve method-on-class
-# citations as well as bare ``parse_server_message`` shapes.
-_IDENT_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)`")
-
-# How many lines of doc context to scan backwards from a citation for
-# a symbol hint. The doc's pattern is "**Source (model)**:
-# `src/.../protocol.py:NN-NN`." with the symbol named within the
-# preceding paragraph; 5 lines is enough for the longest case
-# (multi-line bullet) but tight enough that we don't capture an
-# unrelated symbol two paragraphs up.
-_CONTEXT_BACK_LINES = 5
+_SOURCE_ROOT = _REPO_ROOT / "src" / "bonfire"
+_BASELINE_PATH = _REPO_ROOT / BASELINE_FILENAME
 
 # Tolerance window (lines) for "cited start line is close to the
 # symbol's start line". Wave-to-wave inserts of 1-2 lines inside a
@@ -96,179 +123,46 @@ _CONTEXT_BACK_LINES = 5
 # symbol's def/class line.
 _DEFAULT_TOLERANCE = 3
 
-# Identifiers that are doc-shorthand for line ranges we do NOT want
-# to resolve mechanically — protocol modules expose them but they're
-# referenced for context rather than as load-bearing pointers, and a
-# false "drift" alert would be more noise than signal.
-_SKIP_HINTS = frozenset(
-    {
-        # Generic terms that match many things or are doc verbs
-        "true",
-        "false",
-        "none",
-        "type",
-        "yes",
-        "no",
-        # Doc section-anchor backticks that aren't Python symbols
-        "narration",
-        "question",
-        "reflection",
-        "scan_start",
-        "scan_update",
-        "scan_complete",
-        "all_scans_complete",
-        "conversation_start",
-        "falcor_message",
-        "config_generated",
-        "user_message",
-        "server_error",
-    }
-)
-
 
 # ---------------------------------------------------------------------------
-# Data types
+# Resolution
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class Citation:
-    """One ``src/bonfire/...py:NN-NN`` reference in the doc."""
-
-    doc_line: int  # 1-based line number in the doc
-    path: str  # e.g. "onboard/protocol.py"
-    start: int  # cited start line
-    end: int  # cited end line (= start when single-line)
-
-
-@dataclass
-class SymbolIndex:
-    """Top-level + nested symbols extracted from a source file via ``ast``."""
-
-    # name -> (start_line, end_line). Includes both top-level and
-    # dotted ``Class.method`` entries so the doc's
-    # ``ConversationEngine.start`` shape resolves naturally.
-    by_name: dict[str, tuple[int, int]] = field(default_factory=dict)
-
-    # Flat ordered list of (start_line, end_line, name) for the
-    # containment pass. Ordered by widening end-line so the FIRST
-    # match while iterating innermost-out gives the tightest
-    # enclosing symbol.
-    intervals: list[tuple[int, int, str]] = field(default_factory=list)
+def _rejected_hints_text(probe: HintProbe | None) -> str:
+    """Say what the hint pass found and threw away, or that it found nothing."""
+    rejected = probe.rejected if probe is not None else ()
+    if not rejected:
+        return (
+            f"no backticked identifier found in the {CONTEXT_BACK_LINES} doc lines "
+            "before the citation"
+        )
+    shown = ", ".join(f"`{ident}` ({why})" for ident, why in rejected)
+    return f"doc hints found and rejected: {shown}"
 
 
-@dataclass
-class CheckResult:
-    """Per-citation verdict."""
-
-    citation: Citation
-    status: str  # "ok" | "drift" | "unverified"
-    resolved_symbol: str | None = None
-    expected_start: int | None = None
-    expected_end: int | None = None
-    detail: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Source-file symbol indexing
-# ---------------------------------------------------------------------------
-
-
-def _index_symbols(source_path: Path) -> SymbolIndex:  # noqa: C901
-    """Return name -> line-range map for every def/class in *source_path*.
-
-    Top-level functions/classes are keyed by their bare name. Methods
-    are also keyed dotted (``Class.method``). Module-level assignments
-    to ``UPPER_CASE`` or ``_underscore`` names (``_SERVER_TYPES``,
-    ``MAX_USER_MESSAGE_LEN``, etc.) are indexed too — the doc cites
-    those tables/constants by name and we want to detect when they
-    move.
-    """
-    text = source_path.read_text(encoding="utf-8")
-    tree = ast.parse(text, filename=str(source_path))
-    index = SymbolIndex()
-
-    def _add(name: str, lineno: int, end_lineno: int | None) -> None:
-        if end_lineno is None:
-            end_lineno = lineno
-        # First-write-wins so a re-bound name doesn't clobber the
-        # earlier (and usually authoritative) definition.
-        index.by_name.setdefault(name, (lineno, end_lineno))
-        index.intervals.append((lineno, end_lineno, name))
-
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            _add(node.name, node.lineno, node.end_lineno)
-        elif isinstance(node, ast.ClassDef):
-            _add(node.name, node.lineno, node.end_lineno)
-            # Walk class body for methods.
-            for child in node.body:
-                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                    _add(child.name, child.lineno, child.end_lineno)
-                    _add(f"{node.name}.{child.name}", child.lineno, child.end_lineno)
-        elif isinstance(node, ast.Assign):
-            # Module-level constants / tables.
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    _add(target.id, node.lineno, node.end_lineno)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            _add(node.target.id, node.lineno, node.end_lineno)
-
-    # Sort intervals so the tightest (smallest span) enclosing range
-    # comes first when we filter by ``start <= cited <= end``.
-    index.intervals.sort(key=lambda triple: triple[1] - triple[0])
-    return index
-
-
-def _innermost_containing(index: SymbolIndex, lineno: int) -> tuple[int, int, str] | None:
-    """Return the smallest indexed (start, end, name) that contains ``lineno``."""
-    for start, end, name in index.intervals:
-        if start <= lineno <= end:
-            return (start, end, name)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Doc parsing
-# ---------------------------------------------------------------------------
-
-
-def _extract_citations(doc_text: str) -> list[Citation]:
-    """Return one ``Citation`` per ``src/bonfire/...py:NN[-NN]`` match."""
-    citations: list[Citation] = []
-    for doc_line_idx, line in enumerate(doc_text.splitlines(), start=1):
-        for match in _CITATION_RE.finditer(line):
-            path = match.group("path")
-            start = int(match.group("start"))
-            end_raw = match.group("end")
-            end = int(end_raw) if end_raw is not None else start
-            citations.append(Citation(doc_line=doc_line_idx, path=path, start=start, end=end))
-    return citations
-
-
-def _hint_for_citation(doc_lines: list[str], cite: Citation) -> str | None:
-    """Walk back up to ``_CONTEXT_BACK_LINES`` looking for a backticked symbol."""
-    # doc_lines is 0-indexed; cite.doc_line is 1-based.
-    end_idx = cite.doc_line - 1
-    start_idx = max(0, end_idx - _CONTEXT_BACK_LINES)
-    # Walk back from the citation's own line first so an "on the same
-    # line" hint wins ("``parse_server_message``: ``src/...:NN-NN``").
-    for idx in range(end_idx, start_idx - 1, -1):
-        line = doc_lines[idx]
-        for hit in _IDENT_RE.findall(line):
-            head = hit.split(".", 1)[0]
-            if head.lower() in _SKIP_HINTS:
-                continue
-            # Skip pure module shorthands that aren't symbols.
-            if hit in {"flow.py", "server.py", "protocol.py", "scan.py", "ui.html"}:
-                continue
-            return hit
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Check logic
-# ---------------------------------------------------------------------------
+def _unverified_detail(
+    cite: Citation,
+    index: SymbolIndex,
+    hint: str | None,
+    probe: HintProbe | None,
+) -> str:
+    """Say what the cited line actually IS, so a human can act on it."""
+    above, below = neighbours(index, cite.start)
+    parts = [
+        f"cited line {cite.start} is not inside any indexed symbol",
+        f"nearest symbol above: {above}",
+        f"nearest symbol below: {below}",
+    ]
+    if hint is None:
+        parts.append(_rejected_hints_text(probe))
+    else:
+        parts.append(f"doc hint `{hint}` is not an indexed symbol in src/bonfire/{cite.path}")
+    parts.append(
+        "FIX: re-point the citation at the symbol the doc names, or name that symbol in "
+        "backticks within the preceding doc lines so the hint pass can resolve it"
+    )
+    return "; ".join(parts)
 
 
 def _check_citation(
@@ -277,6 +171,7 @@ def _check_citation(
     hint: str | None,
     index: SymbolIndex,
     tolerance: int,
+    probe: HintProbe | None = None,
 ) -> CheckResult:
     """Return the verdict for a single citation.
 
@@ -288,7 +183,7 @@ def _check_citation(
     when the doc hint names a specific symbol AND that symbol exists
     AND the citation's start line is NOT inside that symbol (drift).
     """
-    containing = _innermost_containing(index, cite.start)
+    containing = innermost_containing(index, cite.start)
     if containing is not None:
         c_start, c_end, c_name = containing
         # Containment wins. The hint heuristic is too loose (it walks
@@ -317,19 +212,14 @@ def _check_citation(
         if hint and "." in hint:
             tail = hint.rsplit(".", 1)[1]
             if tail in index.by_name:
-                expected = index.by_name[tail]
-                return _verdict(cite, hint, expected, tolerance)
+                return _verdict(cite, hint, index.by_name[tail], tolerance)
         return CheckResult(
             citation=cite,
             status="unverified",
-            detail=(
-                f"cited line {cite.start} not inside any indexed symbol "
-                f"and no symbol hint resolvable (hint={hint!r})"
-            ),
+            detail=_unverified_detail(cite, index, hint, probe),
         )
 
-    expected = index.by_name[hint]
-    return _verdict(cite, hint, expected, tolerance)
+    return _verdict(cite, hint, index.by_name[hint], tolerance)
 
 
 def _verdict(
@@ -381,12 +271,64 @@ def _verdict(
     )
 
 
+def _grade(doc_text: str, source_root: Path, tolerance: int) -> Graded:
+    """Grade every citation in *doc_text* against *source_root*.
+
+    A source file that cannot be read or parsed blocks only its own
+    citations; the rest of the doc is still graded, so one missing
+    module cannot shrink the report to nothing without saying so.
+    """
+    doc_lines = doc_text.splitlines()
+    citations = extract_citations(doc_text)
+    indices: dict[str, SymbolIndex] = {}
+    blocked: dict[str, str] = {}
+    results: list[CheckResult] = []
+    for cite in citations:
+        if cite.path not in indices and cite.path not in blocked:
+            try:
+                indices[cite.path] = index_symbols(source_root / cite.path)
+            except SourceIndexError as exc:
+                blocked[cite.path] = str(exc)
+        if cite.path in blocked:
+            results.append(CheckResult(citation=cite, status="blocked", detail=blocked[cite.path]))
+            continue
+        probe = hint_for_citation(doc_lines, cite)
+        results.append(
+            _check_citation(
+                cite,
+                hint=probe.symbol,
+                index=indices[cite.path],
+                tolerance=tolerance,
+                probe=probe,
+            )
+        )
+    return Graded(results=results, extracted=len(citations))
+
+
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
+def _emit_json(results: list[CheckResult]) -> None:
+    payload = [
+        {
+            "status": r.status,
+            "doc_line": r.citation.doc_line,
+            "path": r.citation.path,
+            "cited_start": r.citation.start,
+            "cited_end": r.citation.end,
+            "symbol": r.resolved_symbol,
+            "expected_start": r.expected_start,
+            "expected_end": r.expected_end,
+            "detail": r.detail,
+        }
+        for r in results
+    ]
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--tolerance",
@@ -405,90 +347,35 @@ def main(argv: list[str] | None = None) -> int:
         default=_DOC_PATH,
         help="Path to the protocol doc (default: docs/scan-front-door-protocol.md).",
     )
-    args = parser.parse_args(argv)
-
-    doc_text = args.doc.read_text(encoding="utf-8")
-    doc_lines = doc_text.splitlines()
-    citations = _extract_citations(doc_text)
-
-    # Cache: src-path-string -> SymbolIndex.
-    indices: dict[str, SymbolIndex] = {}
-
-    results: list[CheckResult] = []
-    for cite in citations:
-        if cite.path not in indices:
-            source_file = _REPO_ROOT / "src" / "bonfire" / cite.path
-            if not source_file.is_file():
-                results.append(
-                    CheckResult(
-                        citation=cite,
-                        status="unverified",
-                        detail=f"source not found: {source_file}",
-                    )
-                )
-                continue
-            indices[cite.path] = _index_symbols(source_file)
-        hint = _hint_for_citation(doc_lines, cite)
-        results.append(
-            _check_citation(
-                cite,
-                hint=hint,
-                index=indices[cite.path],
-                tolerance=args.tolerance,
-            )
-        )
-
-    drifts = [r for r in results if r.status == "drift"]
-    unverified = [r for r in results if r.status == "unverified"]
-
-    if args.json:
-        payload = [
-            {
-                "status": r.status,
-                "doc_line": r.citation.doc_line,
-                "path": r.citation.path,
-                "cited_start": r.citation.start,
-                "cited_end": r.citation.end,
-                "symbol": r.resolved_symbol,
-                "expected_start": r.expected_start,
-                "expected_end": r.expected_end,
-                "detail": r.detail,
-            }
-            for r in results
-        ]
-        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
-
-    # Human report.
-    if drifts:
-        sys.stderr.write(f"\nDRIFT: {len(drifts)} citation(s) point at moved symbols:\n")
-        for r in drifts:
-            sys.stderr.write(
-                f"  doc line {r.citation.doc_line}: "
-                f"src/bonfire/{r.citation.path}:{r.citation.start}"
-                f"{'-' + str(r.citation.end) if r.citation.end != r.citation.start else ''}"
-                f"  symbol={r.resolved_symbol!r} "
-                f"expected={r.expected_start}-{r.expected_end}\n"
-                f"    {r.detail}\n"
-            )
-    if unverified:
-        sys.stderr.write(
-            f"\n{len(unverified)} citation(s) could not be mechanically verified "
-            "(no symbol hint in surrounding context — review manually):\n"
-        )
-        for r in unverified:
-            sys.stderr.write(
-                f"  doc line {r.citation.doc_line}: "
-                f"src/bonfire/{r.citation.path}:{r.citation.start} "
-                f"({r.detail})\n"
-            )
-
-    ok_count = sum(1 for r in results if r.status == "ok")
-    sys.stderr.write(
-        f"\nSummary: {ok_count} ok, {len(drifts)} drift, {len(unverified)} unverified, "
-        f"{len(results)} total citations checked.\n"
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        default=_SOURCE_ROOT,
+        help="Root the citations' paths resolve against (default: src/bonfire).",
     )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=_BASELINE_PATH,
+        help=f"Registry of reasoned unverifiable citations (default: {BASELINE_FILENAME}).",
+    )
+    return parser
 
-    return 1 if drifts else 0
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    try:
+        doc_text = args.doc.read_text(encoding="utf-8")
+    except OSError as exc:
+        return fail_to_run(f"cannot read the doc under test: {exc}")
+    try:
+        baseline = load_baseline(args.baseline)
+    except CitationBaselineError as exc:
+        return fail_to_run(f"{BASELINE_FILENAME} is unusable: {exc}")
+    graded = _grade(doc_text, args.source_root, args.tolerance)
+    if args.json:
+        _emit_json(graded.results)
+    return report(graded, baseline, args.doc)
 
 
 if __name__ == "__main__":

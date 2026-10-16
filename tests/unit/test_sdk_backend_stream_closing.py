@@ -17,6 +17,7 @@ import inspect
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -56,14 +57,14 @@ class _PlainAsyncIterator:
 class _ClosableAsyncIterator:
     """Async iterator with an awaitable ``aclose`` that is NOT an async generator."""
 
-    def __init__(self, items: list[int]) -> None:
+    def __init__(self, items: list[Any]) -> None:
         self._items = list(items)
         self.aclose_calls = 0
 
     def __aiter__(self) -> _ClosableAsyncIterator:
         return self
 
-    async def __anext__(self) -> int:
+    async def __anext__(self) -> Any:
         if not self._items:
             raise StopAsyncIteration
         return self._items.pop(0)
@@ -116,10 +117,10 @@ async def test_closing_stream_propagates_exception_and_closes_generator() -> Non
 
 
 async def test_closing_stream_full_consumption_cleans_up_exactly_once() -> None:
+    # Non-generator source: it has no self-cleanup on exhaustion, so the count is the helper's.
     closing_stream = _helper()
-    cleanup: list[str] = []
     items = [1, 2, 3]
-    source = _recording_gen(cleanup, items)
+    source = _ClosableAsyncIterator(items)
     seen: list[int] = []
 
     async with closing_stream(source) as stream:
@@ -127,8 +128,7 @@ async def test_closing_stream_full_consumption_cleans_up_exactly_once() -> None:
             seen.append(item)
 
     assert seen == items, f"consumed {len(seen)} of {len(items)} items"
-    assert cleanup == ["closed"], f"cleanup ran {len(cleanup)} times, expected 1"
-    assert source.ag_frame is None
+    assert source.aclose_calls == 1, f"aclose ran {source.aclose_calls} times, expected 1"
 
 
 async def test_closing_stream_passes_plain_async_iterator_through() -> None:
@@ -165,4 +165,25 @@ async def test_closing_stream_closes_non_generator_with_aclose_on_early_break() 
 
     # Asserted immediately after the block: cleanup must not rely on GC.
     assert seen == [1], f"consumed {len(seen)} of {len(items)} items, expected 1"
+    assert source.aclose_calls == 1, f"aclose ran {source.aclose_calls} times, expected 1"
+
+
+async def test_backend_execute_closes_query_stream_on_rate_limit_return() -> None:
+    from claude_agent_sdk.types import RateLimitEvent  # type: ignore[import-untyped]
+
+    from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
+    from bonfire.models.envelope import Envelope
+    from bonfire.protocols import DispatchOptions
+
+    rejected = MagicMock(spec=RateLimitEvent)
+    rejected.status = "rejected"
+    source = _ClosableAsyncIterator([rejected, rejected])
+    envelope = Envelope(task="run something", agent_name="scout", model="claude-sonnet")
+
+    with patch("bonfire.dispatch.sdk_backend.query", return_value=source):
+        out = await ClaudeSDKBackend().execute(envelope, options=DispatchOptions())
+
+    # The early-return path ran: one item left unconsumed, then the stream was closed once.
+    assert out.error is not None and out.error.error_type == "RateLimitError"
+    assert len(source._items) == 1, "backend did not leave the loop on the rejection"
     assert source.aclose_calls == 1, f"aclose ran {source.aclose_calls} times, expected 1"

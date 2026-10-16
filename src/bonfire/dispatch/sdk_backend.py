@@ -17,16 +17,16 @@ import logging
 import os
 import tomllib
 import traceback as tb_module
-from contextlib import aclosing
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from bonfire.dispatch.artifacts import artifacts_from_tool_uses
 from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncIterator, Callable
 
     from bonfire.events.bus import EventBus
     from bonfire.protocols import DispatchOptions
@@ -155,6 +155,20 @@ def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
     return mapping.get(depth, ({"type": "adaptive"}, "medium"))
 
 
+@runtime_checkable
+class _SupportsAclose(Protocol):
+    async def aclose(self) -> object: ...
+
+
+@asynccontextmanager
+async def _closing_stream[T](stream: AsyncIterator[T]) -> AsyncIterator[AsyncIterator[T]]:
+    try:
+        yield stream
+    finally:
+        if isinstance(stream, _SupportsAclose):
+            await stream.aclose()
+
+
 class ClaudeSDKBackend:
     """Backend that dispatches work through the Claude Agent SDK.
 
@@ -225,7 +239,7 @@ class ClaudeSDKBackend:
         )
 
         # query() is an async generator — iterate, do NOT await.
-        # Wrap in aclosing() to ensure cleanup on early return (e.g. rate limit).
+        # _closing_stream() closes it on early return (e.g. rate limit), by capability.
         message_stream = query(prompt=envelope.task, options=agent_options)
 
         text_parts: list[str] = []
@@ -237,7 +251,7 @@ class ClaudeSDKBackend:
         is_error: bool = False
         errors: list[str] | None = None
 
-        async with aclosing(message_stream) as stream:
+        async with _closing_stream(message_stream) as stream:
             async for msg in stream:
                 if AssistantMessage is not None and isinstance(msg, AssistantMessage):
                     for block in getattr(msg, "content", []):

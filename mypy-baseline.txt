@@ -50,4 +50,3 @@ src/bonfire/dispatch/sdk_backend.py:0: error: Argument "hooks" to "ClaudeAgentOp
 src/bonfire/dispatch/sdk_backend.py:0: error: Argument "setting_sources" to "ClaudeAgentOptions" has incompatible type "list[str]"; expected "list[Literal['user', 'project', 'local']] | None"  [arg-type]
 src/bonfire/dispatch/sdk_backend.py:0: error: Argument "thinking" to "ClaudeAgentOptions" has incompatible type "dict[str, Any]"; expected "ThinkingConfigAdaptive | ThinkingConfigEnabled | ThinkingConfigDisabled | None"  [arg-type]
 src/bonfire/dispatch/sdk_backend.py:0: error: Argument "effort" to "ClaudeAgentOptions" has incompatible type "str"; expected "Literal['low', 'medium', 'high', 'xhigh', 'max'] | None"  [arg-type]
-src/bonfire/dispatch/sdk_backend.py:0: error: Value of type variable "_SupportsAcloseT" of "aclosing" cannot be "AsyncIterator[UserMessage | AssistantMessage | SystemMessage | ResultMessage | StreamEvent | RateLimitEvent]"  [type-var]

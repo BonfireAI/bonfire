@@ -27,9 +27,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Today only 3.12 is declared in `pyproject.toml` classifiers.
-        # Add 3.13 here once the classifier lands in pyproject.toml.
-        python-version: ["3.12"]
+        # Mirrors the Python versions declared in the `pyproject.toml`
+        # classifiers. Smoke gates the release artifact, so only declared
+        # versions belong here (no pre-release probes).
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

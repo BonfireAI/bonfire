@@ -9,9 +9,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # 3.15 is a non-blocking probe only: its job may fail without failing the
+    # workflow. Known hazard on 3.15: PEP 810 lazy imports change when import
+    # side effects run, so never set PYTHON_LAZY_IMPORTS in CI.
+    continue-on-error: ${{ matrix.python-version == '3.15' }}
     strategy:
+      # A 3.15 failure must never cancel the blocking 3.12 / 3.13 / 3.14 jobs.
+      fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        # Keep ONE matrix key. Branch protection requires a status check named
+        # exactly `test (3.12)`; a second key would rename every job (for
+        # example `test (3.12, false)`) and leave PRs waiting on a missing check.
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
 
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +29,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          # Lets the 3.15 probe resolve while only pre-releases exist; has no
+          # effect on versions that already have a final release.
+          allow-prereleases: true
 
       - name: Install dependencies
         run: |

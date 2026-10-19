@@ -145,12 +145,12 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2869,
+    "src/bonfire/dispatch": 2883,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74023
+    "tests/unit": 74187
   },
   "package_raises": [
     {
@@ -231,6 +231,22 @@
       "to": 74023,
       "lines": 246,
       "reason": "exemptions.json anchored 44 of its 52 entries by LINE NUMBER, so inserting any line above a registered noqa silently un-registered a blessed exemption and cf-exemptions then reported UNREGISTERED_SUPPRESSION against the suppression -- naming the code as the culprit when the registry pointer was what rotted. That message is convincing: it cost three lanes an afternoon and nearly bought a rewrite of two load-bearing error barriers that a measurement showed would have turned 10 tests red. This PR converts 41 of the 44 to symbol anchors; the 246 lines are tests/unit/test_exemption_anchors_are_drift_proof.py, which stops the class from coming back. It pins three things nothing else pins: (1) every entry is symbol-anchored except an explicit map of the three that provably cannot be, each carrying the reason -- and the map must match the registry EXACTLY, so a re-introduced line anchor fails AND a stale pin fails; (2) every entry resolves to exactly one live suppression, which catches an ambiguous anchor that blanket-blesses a whole function and a dead entry that covers nothing; (3) the small ast+tokenize resolver the first two use agrees entry-for-entry with cf_quality's own _scan_src/_matches whenever the kit is importable, so the mirror cannot drift from the gate it mirrors. A fourth test is a control rod on the measure itself: a synthetic module with two S101 suppressions in one method must resolve to TWO lines, so the assertion is proved able to fail rather than only observed passing. Explicitly rejected: (1) parking the file at tests/ root, which is unbudgeted and would have cost zero -- there is a repo-wide pin already living there so the placement was arguable, but two earlier raises in this same file rejected the unbudgeted tree as dodging the ratchet and the same answer applies here; (2) a purpose entry, which registers the file out of the ratchet permanently; (3) dropping the kit-agreement test to save ~25 lines, which is the only thing keeping the local resolver honest and would leave a gate that grades a copy of the rule instead of the rule; (4) relying solely on the kit's existing EXEMPTION_ENTRY_OVERLOADED violation, which does catch an ambiguous anchor (rodded: it fails with 'entry 47 covers 2 live suppressions') but does NOT catch a re-introduced line anchor or a dead entry, which are the two failure modes this lane was fired over; (5) padding the ask -- 246 is the file's measured line count and nothing else. The file was tightened before the number was taken (a duplicated pin reason hoisted to one constant, the pin map collapsed from exploded tuples to single lines), which took the measurement from 261 to 246.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/dispatch",
+      "from": 2869,
+      "to": 2883,
+      "lines": 14,
+      "reason": "The agent SDK, which floats at >=0.1 on purpose, now annotates query() as AsyncIterator, and contextlib.aclosing rejects that at type-check time. The gate's mypy stage went red on main for every PR. The 14 lines are a runtime-checkable aclose protocol plus a context manager in sdk_backend.py that closes the stream by capability, so a stream that is not a generator but has aclose() is still closed on the rate-limit early return. The fix holds against the floating SDK with no cast, no ignore, no config change and no version cap. Measured by cf-file-budget on the final tree: 'package src/bonfire/dispatch is 2883 lines (frozen 2869)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74023,
+      "to": 74187,
+      "lines": 164,
+      "reason": "The 164 lines are tests/unit/test_sdk_backend_stream_closing.py, the contract for the stream-closing helper above, written and observed failing before the helper existed. It pins the same stream back, closing on early break for generators and for non-generator streams with aclose(), exception propagation, exactly one close on full consumption, pass-through for streams without aclose(), and the backend call site itself (a patched query() on the rate-limit return must be closed exactly once). Three mutants of the helper were killed by it: bare iteration at the call site, gating on the generator class instead of the capability, and a double close. Measured by cf-file-budget on the final tree: 'package tests/unit is 74187 lines (frozen 74023)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

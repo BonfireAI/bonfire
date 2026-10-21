@@ -24,7 +24,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "claude-agent-sdk>=0.1",
+    "claude-agent-sdk>=0.2.121",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "typer>=0.15",

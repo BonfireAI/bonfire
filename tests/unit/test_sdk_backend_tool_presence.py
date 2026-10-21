@@ -387,19 +387,26 @@ class TestAdversarialToolListContent:
 
         assert list(captured["tools"]) == ["读取", "Write"]
 
-    async def test_duplicate_tool_names_propagate_verbatim(self) -> None:
-        """Duplicates in incoming list are NOT deduplicated by sdk_backend."""
+    async def test_duplicate_tool_names_dedup_in_presence_kept_in_approval(self) -> None:
+        """PRESENCE de-duplicates in first-seen order; APPROVAL keeps duplicates."""
+        # Old pin (test_duplicate_tool_names_propagate_verbatim): duplicates reached
+        # tools= verbatim. Changed because tools= now holds de-duplicated base names.
         captured, FakeOptions = _make_capture()
+        incoming = ["Read", "Read", "Write", "Read"]
 
         with (
             patch("bonfire.dispatch.sdk_backend.ClaudeAgentOptions", FakeOptions),
             patch("bonfire.dispatch.sdk_backend.query", _empty_query),
         ):
             backend = ClaudeSDKBackend()
-            options = DispatchOptions(tools=["Read", "Read", "Write"])
+            options = DispatchOptions(tools=incoming)
             await backend.execute(_envelope(), options=options)
 
-        assert list(captured["tools"]) == ["Read", "Read", "Write"]
+        assert list(captured["tools"]) == ["Read", "Write"], (
+            f"tools= must be de-duplicated in first-seen order from {len(incoming)} entries; "
+            f"got {captured['tools']!r}"
+        )
+        assert list(captured["allowed_tools"]) == incoming
 
     async def test_very_large_tool_list_propagates(self) -> None:
         """100-tool list propagates without truncation."""
@@ -430,6 +437,64 @@ class TestAdversarialToolListContent:
             await backend.execute(_envelope(), options=options)
 
         assert list(captured["tools"]) == ["read", "BASH", "WrItE"]
+
+
+# ===========================================================================
+# 6b. PRESENCE layer holds BUILT-IN BASE names only
+# ===========================================================================
+#
+# The CLI's ``tools=`` flag accepts only built-in tool names. A permission
+# pattern such as ``Bash(git status)`` passed there silently DROPS the tool
+# (measured against the bundled CLI), and ``mcp__*`` names are not governed by
+# that flag at all. The PRESENCE layer therefore derives base names; the
+# APPROVAL layer keeps the caller's grant exactly.
+
+
+async def _capture_for(tools: list[str]) -> dict[str, Any]:
+    """Run one execute() with ``tools`` and return the captured option kwargs."""
+    captured, FakeOptions = _make_capture()
+    with (
+        patch("bonfire.dispatch.sdk_backend.ClaudeAgentOptions", FakeOptions),
+        patch("bonfire.dispatch.sdk_backend.query", _empty_query),
+    ):
+        backend = ClaudeSDKBackend()
+        await backend.execute(_envelope(), options=DispatchOptions(tools=tools))
+    return captured
+
+
+class TestPresenceLayerBaseNames:
+    """``tools=`` = de-duplicated built-in base names; ``allowed_tools=`` = verbatim grant."""
+
+    async def test_permission_patterns_reduce_to_base_names(self) -> None:
+        """``Bash(...)`` patterns become ``Bash`` once; approval keeps all patterns."""
+        grant = ["Read", "Bash(git diff:*)", "Bash(pytest:*)", "Edit"]
+        captured = await _capture_for(list(grant))
+
+        assert list(captured["tools"]) == ["Read", "Bash", "Edit"], (
+            f"from {len(grant)} granted entries expected 3 base names; got {captured['tools']!r}"
+        )
+        assert list(captured["allowed_tools"]) == grant
+
+    async def test_mcp_entries_excluded_from_presence_kept_in_approval(self) -> None:
+        """``mcp__*`` names are not built-ins: absent from ``tools=``, kept in approval."""
+        grant = ["Read", "mcp__lexicon__memory_read"]
+        captured = await _capture_for(list(grant))
+
+        assert list(captured["tools"]) == ["Read"], (
+            f"from {len(grant)} granted entries expected only 'Read'; got {captured['tools']!r}"
+        )
+        assert list(captured["allowed_tools"]) == grant
+
+    async def test_pattern_only_custom_policy_grant_keeps_the_tool_present(self) -> None:
+        """A policy granting only a pattern must not silently empty the PRESENCE layer."""
+        grant = ["Bash(git status)"]
+        captured = await _capture_for(list(grant))
+
+        assert list(captured["tools"]) == ["Bash"], (
+            f"pattern-only grant of {len(grant)} entry must expose 'Bash', "
+            f"not drop it; got {captured['tools']!r}"
+        )
+        assert list(captured["allowed_tools"]) == grant
 
 
 # ===========================================================================

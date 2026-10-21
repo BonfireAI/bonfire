@@ -91,6 +91,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   behaviour is not exercised by this repo's test suite; the unit tests
   pin the derivation only. This is a behaviour change: duplicate names
   in a grant no longer reach the presence list.
+  Dispatched agents also no longer see the user's claude.ai account
+  connectors: the backend sets `ENABLE_CLAUDEAI_MCP_SERVERS=false` for the
+  agent, after a manual check saw a connector reach a read-only agent.
 
 ### Changed
 

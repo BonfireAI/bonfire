@@ -51,6 +51,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# A logged-in CLI attaches the user's claude.ai account connectors; no grant declares them.
+_AGENT_ENV: dict[str, str] = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
+
 
 # ---------------------------------------------------------------------------
 # Traceback redaction
@@ -253,6 +256,7 @@ class ClaudeSDKBackend:
             setting_sources=_resolve_setting_sources(options.cwd),
             thinking=thinking_config,
             effort=effort_level,
+            env={**_AGENT_ENV},
             stderr=lambda line: logger.warning("[CLI stderr] %s", line),
         )
 

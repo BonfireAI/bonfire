@@ -145,12 +145,12 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2883,
+    "src/bonfire/dispatch": 2901,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74187
+    "tests/unit": 74295
   },
   "package_raises": [
     {
@@ -247,6 +247,22 @@
       "to": 74187,
       "lines": 164,
       "reason": "The 164 lines are tests/unit/test_sdk_backend_stream_closing.py, the contract for the stream-closing helper above, written and observed failing before the helper existed. It pins the same stream back, closing on early break for generators and for non-generator streams with aclose(), exception propagation, exactly one close on full consumption, pass-through for streams without aclose(), and the backend call site itself (a patched query() on the rate-limit return must be closed exactly once). Three mutants of the helper were killed by it: bare iteration at the call site, gating on the generator class instead of the capability, and a double close. Measured by cf-file-budget on the final tree: 'package tests/unit is 74187 lines (frozen 74023)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "src/bonfire/dispatch",
+      "from": 2883,
+      "to": 2901,
+      "lines": 18,
+      "reason": "The 18 lines are _builtin_tools in sdk_backend.py plus its Sequence import: the derivation of the SDK presence list (tools=) from a ToolPolicy grant. The presence list used to be the grant verbatim, and a permission pattern such as Bash(git status) placed there was seen, in a manual check against the bundled CLI, to remove that tool from the agent, so a custom ToolPolicy written with patterns lost its tools silently. The helper has to live at the dispatch layer, beside the one ClaudeAgentOptions call that consumes it; the private lineage keeps the identical derivation at the same path and the two change together. The docstring was cut from 17 lines to 5 before this raise was measured. Explicitly rejected: a purpose entry for sdk_backend.py, which would drop the whole module out of the ratchet to accommodate 18 lines, the same trade the two earlier raises on this package rejected. Measured by cf-file-budget on the final tree: 'package src/bonfire/dispatch is 2901 lines (frozen 2883)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74187,
+      "to": 74295,
+      "lines": 108,
+      "reason": "The 108 lines are tests/unit/test_sdk_backend_presence_base_names.py (122 lines), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced. Four tests, three of which failed on origin/main before the helper existed: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74295 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

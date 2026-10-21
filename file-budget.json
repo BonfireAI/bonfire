@@ -150,7 +150,7 @@
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74295
+    "tests/unit": 74298
   },
   "package_raises": [
     {
@@ -260,9 +260,9 @@
     {
       "package": "tests/unit",
       "from": 74187,
-      "to": 74295,
-      "lines": 108,
-      "reason": "The 108 lines are tests/unit/test_sdk_backend_presence_base_names.py (122 lines), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced. Four tests, three of which failed on origin/main before the helper existed: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74295 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
+      "to": 74298,
+      "lines": 111,
+      "reason": "The 111 lines are tests/unit/test_sdk_backend_presence_base_names.py (122 lines), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced, plus a 3-line history breadcrumb in test_no_persona_names_in_public_docs.py, whose CHANGELOG line anchors moved by 11 when this rung's Fixed entry was written (anchors only, expected text unchanged, as every earlier CHANGELOG addition did). Four tests, three of which failed on origin/main before the helper existed: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74298 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

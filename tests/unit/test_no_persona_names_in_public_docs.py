@@ -192,24 +192,27 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Doc-truth pass: shifted 615/617/618/635 -> 662/664/665/682 when
         # the CHANGELOG entries owed by three merged PRs were written
         # under [Unreleased]. Anchors only; expected text is unchanged.
+        # Presence-list fix entry: shifted 684/686/687/704 -> 695/697/698/715
+        # when a Fixed entry was added under [Unreleased]. Anchors only;
+        # expected text is unchanged.
         (
             "CHANGELOG.md",
-            684,
+            695,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            686,
+            697,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            687,
+            698,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            704,
+            715,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

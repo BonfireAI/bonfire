@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
+  are affected by an argument-injection advisory in the `resume` option
+  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Installs that resolved an older SDK
+  now resolve a patched one.
+
 ### Fixed
 
 - A pipeline stage naming a gate the engine does not hold in its

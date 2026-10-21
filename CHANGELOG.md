@@ -80,6 +80,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and exits non-zero when the config cannot be read.
 - Configs written by `bonfire scan` on 1.0.1 are migrated on load: a
   legacy `[bonfire.persona]` table is relocated to `bonfire.profile`.
+- The SDK backend no longer passes a custom `ToolPolicy` grant verbatim
+  as the presence list (`tools=`). The presence list now carries base
+  built-in names (`Bash(git status)` becomes `Bash`, `mcp__*` entries
+  are left out, an entry with no name before `(` is left out),
+  de-duplicated in first-seen order, while the approval list
+  (`allowed_tools=`) keeps the grant verbatim. Why: a permission
+  pattern in the presence list was observed, in a manual check against
+  the bundled CLI, to remove that tool from the agent. That CLI
+  behaviour is not exercised by this repo's test suite; the unit tests
+  pin the derivation only. This is a behaviour change: duplicate names
+  in a grant no longer reach the presence list.
 
 ### Changed
 

@@ -26,7 +26,7 @@ from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncIterator, Callable, Sequence
 
     from bonfire.events.bus import EventBus
     from bonfire.protocols import DispatchOptions
@@ -144,6 +144,36 @@ def _resolve_setting_sources(cwd: str | None) -> list[str]:
     return []
 
 
+# Mirror: the private v1 lineage of this module (same path, src/bonfire/dispatch/sdk_backend.py)
+# carries the identical derivation; change both together.
+def _builtin_tools(declared: Sequence[str]) -> list[str]:
+    """Derive the PRESENCE-layer tool list (``tools=``) from a declared grant.
+
+    Contract: each entry reduces to its base name, the text before the
+    first ``(`` (``"Bash(pytest:*)"`` -> ``"Bash"``); entries starting with
+    ``mcp__`` are skipped; an entry whose base is empty (``""`` or
+    ``"(x)"``) is skipped, so no empty name reaches the presence list;
+    duplicates are removed keeping first-seen order. Whitespace and case
+    are NOT altered, including whitespace before ``(`` (``"Bash (x)"`` ->
+    ``"Bash "``). Always returns a NEW list (empty in -> ``[]``).
+
+    Why: the CLI's presence list governs built-in tools only, and a
+    permission pattern placed there was observed in a manual check against
+    the bundled CLI (not exercised by this repo's unit tests, which pin the
+    derivation only) to silently drop that tool from the agent. The
+    APPROVAL layer (``allowed_tools=``) keeps the grant verbatim, so a
+    skipped entry still reaches the CLI there, unchanged.
+    """
+    result: list[str] = []
+    for entry in declared:
+        if entry.startswith("mcp__"):
+            continue
+        base = entry.split("(", 1)[0]
+        if base and base not in result:
+            result.append(base)
+    return result
+
+
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
     """Map ``thinking_depth`` to SDK thinking config and effort level."""
     mapping: dict[str, tuple[dict[str, Any], str]] = {
@@ -225,7 +255,7 @@ class ClaudeSDKBackend:
             max_budget_usd=options.max_budget_usd,
             cwd=options.cwd or None,
             permission_mode=options.permission_mode,
-            tools=list(options.tools),
+            tools=_builtin_tools(options.tools),
             allowed_tools=options.tools,
             hooks=_build_security_hooks_dict(
                 options.security_hooks,

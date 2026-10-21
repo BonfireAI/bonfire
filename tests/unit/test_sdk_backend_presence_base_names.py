@@ -120,3 +120,24 @@ class TestPresenceLayerBaseNames:
             f"got {captured['tools']!r}"
         )
         assert list(captured["allowed_tools"]) == incoming
+
+
+class TestAccountConnectorsExcluded:
+    """No grant declares the user's claude.ai account connectors; the CLI must not load them."""
+
+    async def test_every_grant_disables_claude_ai_connectors(self) -> None:
+        grants = [["Read", "Write", "Bash"], ["Read", "Grep"], []]
+        seen: list[Any] = []
+        for grant in grants:
+            env = (await _capture_for(list(grant))).get("env") or {}
+            seen.append(env.get("ENABLE_CLAUDEAI_MCP_SERVERS"))
+        assert len(seen) == len(grants) == 3, f"ran {len(seen)} of {len(grants)} grant cases"
+        assert seen == ["false"] * len(grants), (
+            f"ENABLE_CLAUDEAI_MCP_SERVERS per grant (of {len(grants)}) must be 'false'; "
+            f"got {seen!r}"
+        )
+
+    async def test_backend_adds_no_mcp_servers_and_no_strict_mcp_config(self) -> None:
+        captured = await _capture_for(["Read", "Grep"])
+        leaked = sorted({"mcp_servers", "strict_mcp_config"} & captured.keys())
+        assert leaked == [], f"of 2 forbidden kwargs, backend passed {leaked!r}"

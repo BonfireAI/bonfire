@@ -145,12 +145,12 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2901,
+    "src/bonfire/dispatch": 2905,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74298
+    "tests/unit": 74319
   },
   "package_raises": [
     {
@@ -252,17 +252,17 @@
     {
       "package": "src/bonfire/dispatch",
       "from": 2883,
-      "to": 2901,
-      "lines": 18,
-      "reason": "The 18 lines are _builtin_tools in sdk_backend.py (a one-line mirror comment, the 15-line function and its 2 blank separators; the Sequence import joined an existing line and costs none): the derivation of the SDK presence list (tools=) from a ToolPolicy grant. The presence list used to be the grant verbatim, and a permission pattern such as Bash(git status) placed there was seen, in a manual check against the bundled CLI, to remove that tool from the agent, so a custom ToolPolicy written with patterns lost its tools silently. The helper has to live at the dispatch layer, beside the one ClaudeAgentOptions call that consumes it; the private lineage keeps the identical derivation at the same path and the two change together. The docstring was cut from 17 lines to 6 before this raise was measured. The loop body could fold into about two statements with dict.fromkeys and a comprehension, saving about six lines; rejected because the explicit loop states each rule of the contract on its own line. Explicitly rejected: a purpose entry for sdk_backend.py, which would drop the whole module out of the ratchet to accommodate 18 lines, the same trade the two earlier raises on this package rejected. Measured by cf-file-budget on the final tree: 'package src/bonfire/dispatch is 2901 lines (frozen 2883)'. Raised to exactly the measurement, with no headroom.",
+      "to": 2905,
+      "lines": 22,
+      "reason": "The 22 lines are, first, 18 for _builtin_tools in sdk_backend.py (a one-line mirror comment, the 15-line function and its 2 blank separators; the Sequence import joined an existing line and costs none): the derivation of the SDK presence list (tools=) from a ToolPolicy grant; and 4 for the agent environment that switches off the user's claude.ai account connectors (a one-line comment, the _AGENT_ENV constant, its blank separator and the env= kwarg), after a live check saw a Claude Docs and a Google Drive connector reach a read-only agent in 2 of 9 runs. The presence list used to be the grant verbatim, and a permission pattern such as Bash(git status) placed there was seen, in a manual check against the bundled CLI, to remove that tool from the agent, so a custom ToolPolicy written with patterns lost its tools silently. The helper has to live at the dispatch layer, beside the one ClaudeAgentOptions call that consumes it; the private lineage keeps the identical derivation at the same path and the two change together. The docstring was cut from 17 lines to 6 before this raise was measured. The loop body could fold into about two statements with dict.fromkeys and a comprehension, saving about six lines; rejected because the explicit loop states each rule of the contract on its own line. Explicitly rejected: a purpose entry for sdk_backend.py, which would drop the whole module out of the ratchet to accommodate 18 lines, the same trade the two earlier raises on this package rejected. Measured by cf-file-budget on the final tree: 'package src/bonfire/dispatch is 2905 lines (frozen 2883)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     },
     {
       "package": "tests/unit",
       "from": 74187,
-      "to": 74298,
-      "lines": 111,
-      "reason": "The 111 lines are tests/unit/test_sdk_backend_presence_base_names.py (122 lines), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced, plus a 3-line history breadcrumb in test_no_persona_names_in_public_docs.py, whose CHANGELOG line anchors moved by 11 when this rung's Fixed entry was written (anchors only, expected text unchanged, as every earlier CHANGELOG addition did). Four tests, all four of which fail on origin/main: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74298 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
+      "to": 74319,
+      "lines": 132,
+      "reason": "The 132 lines are tests/unit/test_sdk_backend_presence_base_names.py (143 lines: 122 for the presence-list contract and 21 for the connector contract, one driving test and one pin that the backend sets no mcp_servers or strict_mcp_config), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced, plus a 3-line history breadcrumb in test_no_persona_names_in_public_docs.py, whose CHANGELOG line anchors moved by 14 when this rung's Fixed entry was written (anchors only, expected text unchanged, as every earlier CHANGELOG addition did). Four tests, all four of which fail on origin/main: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74319 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

@@ -192,9 +192,6 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Doc-truth pass: shifted 615/617/618/635 -> 662/664/665/682 when
         # the CHANGELOG entries owed by three merged PRs were written
         # under [Unreleased]. Anchors only; expected text is unchanged.
-        # Security floor entry: shifted 677/679/680/697 -> 684/686/687/704
-        # when a Security section was added under [Unreleased]. Anchors
-        # only; expected text is unchanged.
         (
             "CHANGELOG.md",
             684,

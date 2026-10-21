@@ -22,7 +22,7 @@ Sage decisions asserted (BON-337 unified Sage doc, 2026-04-18):
 
 Knight-A adversarial tests elevated to mandatory:
     fresh-list identity across repeat calls; adversarial tool content
-    (whitespace, unicode, duplicates, large lists, case preservation);
+    (whitespace, unicode, large lists, case preservation);
     existing-kwargs-preserved (model, max_turns, setting_sources, stderr);
     empty-tools kill-switch semantics.
 """
@@ -386,20 +386,6 @@ class TestAdversarialToolListContent:
             await backend.execute(_envelope(), options=options)
 
         assert list(captured["tools"]) == ["读取", "Write"]
-
-    async def test_duplicate_tool_names_propagate_verbatim(self) -> None:
-        """Duplicates in incoming list are NOT deduplicated by sdk_backend."""
-        captured, FakeOptions = _make_capture()
-
-        with (
-            patch("bonfire.dispatch.sdk_backend.ClaudeAgentOptions", FakeOptions),
-            patch("bonfire.dispatch.sdk_backend.query", _empty_query),
-        ):
-            backend = ClaudeSDKBackend()
-            options = DispatchOptions(tools=["Read", "Read", "Write"])
-            await backend.execute(_envelope(), options=options)
-
-        assert list(captured["tools"]) == ["Read", "Read", "Write"]
 
     async def test_very_large_tool_list_propagates(self) -> None:
         """100-tool list propagates without truncation."""

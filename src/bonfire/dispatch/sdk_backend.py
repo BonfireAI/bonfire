@@ -26,7 +26,7 @@ from bonfire.dispatch.security_hooks import _build_security_hooks_dict
 from bonfire.models.envelope import Envelope, ErrorDetail
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncIterator, Callable, Sequence
 
     from bonfire.events.bus import EventBus
     from bonfire.protocols import DispatchOptions
@@ -50,6 +50,9 @@ except ImportError:
     HookMatcher = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
+
+# A logged-in CLI attaches the user's claude.ai account connectors; no grant declares them.
+_AGENT_ENV: dict[str, str] = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +147,24 @@ def _resolve_setting_sources(cwd: str | None) -> list[str]:
     return []
 
 
+# Mirror: the private v1 lineage keeps this derivation at the same path; change both together.
+def _builtin_tools(declared: Sequence[str]) -> list[str]:
+    """Derive the PRESENCE-layer ``tools=`` list: base name before the first ``(``.
+
+    Skips ``mcp__`` entries and empty bases, de-duplicates first-seen, returns a
+    fresh list; whitespace and case are untouched. Why: a permission pattern in the
+    presence list was seen, in a manual check against the bundled CLI, to drop the tool.
+    """
+    result: list[str] = []
+    for entry in declared:
+        if entry.startswith("mcp__"):
+            continue
+        base = entry.split("(", 1)[0]
+        if base and base not in result:
+            result.append(base)
+    return result
+
+
 def _map_thinking(depth: str) -> tuple[dict[str, Any], str]:
     """Map ``thinking_depth`` to SDK thinking config and effort level."""
     mapping: dict[str, tuple[dict[str, Any], str]] = {
@@ -225,7 +246,7 @@ class ClaudeSDKBackend:
             max_budget_usd=options.max_budget_usd,
             cwd=options.cwd or None,
             permission_mode=options.permission_mode,
-            tools=list(options.tools),
+            tools=_builtin_tools(options.tools),
             allowed_tools=options.tools,
             hooks=_build_security_hooks_dict(
                 options.security_hooks,
@@ -235,6 +256,7 @@ class ClaudeSDKBackend:
             setting_sources=_resolve_setting_sources(options.cwd),
             thinking=thinking_config,
             effort=effort_level,
+            env={**_AGENT_ENV},
             stderr=lambda line: logger.warning("[CLI stderr] %s", line),
         )
 

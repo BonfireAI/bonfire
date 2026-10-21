@@ -144,25 +144,13 @@ def _resolve_setting_sources(cwd: str | None) -> list[str]:
     return []
 
 
-# Mirror: the private v1 lineage of this module (same path, src/bonfire/dispatch/sdk_backend.py)
-# carries the identical derivation; change both together.
+# Mirror: the private v1 lineage keeps this derivation at the same path; change both together.
 def _builtin_tools(declared: Sequence[str]) -> list[str]:
-    """Derive the PRESENCE-layer tool list (``tools=``) from a declared grant.
+    """Derive the PRESENCE-layer ``tools=`` list: base name before the first ``(``.
 
-    Contract: each entry reduces to its base name, the text before the
-    first ``(`` (``"Bash(pytest:*)"`` -> ``"Bash"``); entries starting with
-    ``mcp__`` are skipped; an entry whose base is empty (``""`` or
-    ``"(x)"``) is skipped, so no empty name reaches the presence list;
-    duplicates are removed keeping first-seen order. Whitespace and case
-    are NOT altered, including whitespace before ``(`` (``"Bash (x)"`` ->
-    ``"Bash "``). Always returns a NEW list (empty in -> ``[]``).
-
-    Why: the CLI's presence list governs built-in tools only, and a
-    permission pattern placed there was observed in a manual check against
-    the bundled CLI (not exercised by this repo's unit tests, which pin the
-    derivation only) to silently drop that tool from the agent. The
-    APPROVAL layer (``allowed_tools=``) keeps the grant verbatim, so a
-    skipped entry still reaches the CLI there, unchanged.
+    Skips ``mcp__`` entries and empty bases, de-duplicates first-seen, returns a
+    fresh list; whitespace and case are untouched. Why: a permission pattern in the
+    presence list was seen, in a manual check against the bundled CLI, to drop the tool.
     """
     result: list[str] = []
     for entry in declared:

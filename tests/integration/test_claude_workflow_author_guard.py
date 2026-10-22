@@ -1,162 +1,180 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Contract test for the agent workflow's author allow-list.
+"""Contract test: no workflow runs the Claude agent on outsider-written text.
 
-``.github/workflows/claude.yml`` runs an agent whose prompt is the body of
-an issue or comment, in the base-repository context, with the repository's
-Claude credential available to it. Two things follow:
+``.github/workflows/claude.yml`` ran an agent whose prompt was the body of an
+issue or comment. Its author check let only OWNER/MEMBER/COLLABORATOR trigger
+it, but once a trusted account mentioned the bot on an outsider's issue or
+pull request, the agent still read the outsider's text, and it ran with a
+token that could write to the repository. The workflow had gone unused, so it
+was removed; its history stays in git.
 
-* the run is billed to the repository owner, and
-* the instructions the agent follows are written by whoever filed the event.
+This module now pins the state that replaced it, by reading every file under
+``.github/workflows/`` with ``yaml.safe_load``:
 
-So the ``@claude`` mention is not a gate. The gate is ``author_association``.
-This test pins that guard structurally: every trigger declared under ``on:``
-must have a matching clause in the job's ``if:`` that both checks the mention
-*and* restricts ``author_association`` to the trusted set.
+* no workflow that uses an ``anthropics/claude-code-action`` step (any
+  version) declares a trigger whose event body an outsider writes;
+* ``claude.yml`` itself does not exist;
+* a control proves the checker can fail, and can also pass, on in-memory
+  samples, so a green run here is evidence rather than a vacuous loop.
 
-The trigger list is read from the workflow's own ``on:`` block rather than
-hard-coded, so adding a new trigger without adding a guard clause fails here
-instead of shipping. Conversely the allow-list values are written out
-literally, so widening them in the workflow fails the test rather than being
-absorbed by it.
+Breadcrumb: this file previously pinned claude.yml's per-trigger
+``author_association`` allow-list guard; that contract retired with the file.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "claude.yml"
+WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+REMOVED_WORKFLOW = WORKFLOW_DIR / "claude.yml"
+REVIEW_WORKFLOW = WORKFLOW_DIR / "claude-code-review.yml"
 
-#: The only associations trusted to spend the repository's credential and to
-#: choose what the agent is told to do. Anything else -- CONTRIBUTOR,
-#: FIRST_TIME_CONTRIBUTOR, FIRST_TIMER, MANNEQUIN, NONE -- is the internet.
-TRUSTED_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
+#: Step ``uses:`` prefix of the agent action, matched with any ``@version``.
+AGENT_ACTION = "anthropics/claude-code-action"
 
-#: Untrusted associations that must never appear in the allow-list. ``NONE``
-#: is the association of an arbitrary account with no relationship to the
-#: repository, i.e. the anonymous case this guard exists to stop.
-UNTRUSTED_ASSOCIATIONS = (
-    "NONE",
-    "CONTRIBUTOR",
-    "FIRST_TIME_CONTRIBUTOR",
-    "FIRST_TIMER",
-    "MANNEQUIN",
+#: Triggers whose event carries a body an outsider can write. Each one hands
+#: that body to the agent as its instructions, whoever mentioned the bot.
+OUTSIDER_BODY_TRIGGERS = frozenset(
+    {
+        "issue_comment",
+        "issues",
+        "pull_request_review",
+        "pull_request_review_comment",
+        "discussion",
+        "discussion_comment",
+    }
 )
 
-#: For each trigger, the event field that carries the ``@claude`` text and
-#: therefore the field whose author must be checked. Checking the wrong
-#: object's association (e.g. the pull request's author for a review comment)
-#: would let an outsider's comment ride in on a trusted author's PR.
-ASSOCIATION_FIELD_BY_TRIGGER = {
-    "issue_comment": "github.event.comment.author_association",
-    "pull_request_review_comment": "github.event.comment.author_association",
-    "pull_request_review": "github.event.review.author_association",
-    "issues": "github.event.issue.author_association",
+
+def _triggers(workflow: dict) -> set[str]:
+    """Return the trigger names a workflow declares, in any ``on:`` shape.
+
+    PyYAML resolves the bare key ``on`` to the boolean ``True`` (YAML 1.1
+    truthy), so both spellings are read. ``on:`` may be a string, a list or a
+    mapping; all three are normalised to a set of names.
+    """
+    section = workflow.get("on", workflow.get(True))
+    if isinstance(section, str):
+        return {section}
+    if isinstance(section, dict):
+        return {str(name) for name in section}
+    if isinstance(section, list):
+        return {str(name) for name in section}
+    return set()
+
+
+def _uses_agent(workflow: dict) -> bool:
+    """True when any step in any job uses the Claude agent action."""
+    jobs = workflow.get("jobs") or {}
+    for job in jobs.values():
+        for step in (job or {}).get("steps") or []:
+            uses = str((step or {}).get("uses", ""))
+            if uses == AGENT_ACTION or uses.startswith(f"{AGENT_ACTION}@"):
+                return True
+    return False
+
+
+def outsider_trigger_violations(workflow: dict) -> list[str]:
+    """Return the outsider-body triggers an agent workflow declares, sorted.
+
+    An empty list means the workflow is compliant: either it does not run
+    the agent, or it runs it only on triggers whose body an outsider cannot
+    hand to the agent as instructions.
+    """
+    if not _uses_agent(workflow):
+        return []
+    return sorted(_triggers(workflow) & OUTSIDER_BODY_TRIGGERS)
+
+
+def _workflow_files() -> list[Path]:
+    return sorted([*WORKFLOW_DIR.glob("*.yml"), *WORKFLOW_DIR.glob("*.yaml")])
+
+
+def _load(path: Path) -> dict:
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict), f"{path.name}: expected a YAML mapping, got {type(loaded)}"
+    return loaded
+
+
+#: In-memory control samples. Both use the agent action; only the trigger
+#: differs, so the control isolates the rule under test.
+_AGENT_STEP = {"name": "Run agent", "uses": f"{AGENT_ACTION}@v1"}
+COMMENT_TRIGGERED_SAMPLE: dict = {
+    True: {"issue_comment": {"types": ["created"]}},
+    "jobs": {"agent": {"runs-on": "ubuntu-latest", "steps": [_AGENT_STEP]}},
+}
+PULL_REQUEST_ONLY_SAMPLE: dict = {
+    "on": {"pull_request": {"types": ["opened"]}},
+    "jobs": {"agent": {"runs-on": "ubuntu-latest", "steps": [_AGENT_STEP]}},
 }
 
 
-def _workflow() -> dict:
-    return yaml.safe_load(WORKFLOW.read_text())
+def test_checker_sees_at_least_one_workflow_file() -> None:
+    """Denominator rod: the tree scan below must have something to scan."""
+    files = _workflow_files()
+    assert len(files) > 0, (
+        f"found 0 workflow files under {WORKFLOW_DIR.relative_to(REPO_ROOT)}; "
+        "the outsider-trigger scan would pass vacuously"
+    )
 
 
-def _triggers(workflow: dict) -> list[str]:
-    """Return the trigger names under ``on:``.
+def test_no_agent_workflow_declares_an_outsider_body_trigger() -> None:
+    files = _workflow_files()
+    offenders = {}
+    for path in files:
+        found = outsider_trigger_violations(_load(path))
+        if found:
+            offenders[path.name] = found
+    assert len(files) > 0, "checked 0 workflow files; the scan is vacuous"
+    assert not offenders, (
+        f"checked {len(files)} workflow file(s); {len(offenders)} run the Claude agent on "
+        f"triggers whose body an outsider writes: {offenders}"
+    )
 
-    PyYAML resolves the bare key ``on`` to the boolean ``True`` (YAML 1.1
-    truthy), so accept either spelling rather than depending on the loader.
+
+def test_comment_triggered_agent_workflow_is_removed() -> None:
+    assert not REMOVED_WORKFLOW.exists(), (
+        f"{REMOVED_WORKFLOW.relative_to(REPO_ROOT)} exists; it ran the agent on issue and "
+        "comment bodies with a write-capable token and must stay removed"
+    )
+
+
+def test_control_checker_flags_a_comment_triggered_agent_sample() -> None:
+    """Control rod: the checker can fail (the ``True`` key spelling included)."""
+    found = outsider_trigger_violations(COMMENT_TRIGGERED_SAMPLE)
+    assert found == ["issue_comment"], (
+        f"checked 1 sample (issue_comment + {AGENT_ACTION}); expected 1 violation "
+        f"['issue_comment'], got {len(found)}: {found}"
+    )
+
+
+def test_control_checker_passes_a_pull_request_only_agent_sample() -> None:
+    """Control rod: the checker can pass, so it does not flag every agent workflow."""
+    found = outsider_trigger_violations(PULL_REQUEST_ONLY_SAMPLE)
+    assert found == [], (
+        f"checked 1 sample (pull_request + {AGENT_ACTION}); expected 0 violations, "
+        f"got {len(found)}: {found}"
+    )
+
+
+def test_review_workflow_runs_the_agent_and_passes_the_checker() -> None:
+    """The pull_request review workflow is an agent workflow and is compliant.
+
+    Asserting it uses the agent first keeps the pass from being vacuous: a
+    checker that missed the action step would report nothing for any file.
     """
-    section = workflow.get("on", workflow.get(True))
-    assert isinstance(section, dict), "workflow must declare a mapping of triggers"
-    return sorted(section)
-
-
-def _job_condition(workflow: dict) -> str:
-    jobs = workflow["jobs"]
-    assert len(jobs) == 1, (
-        f"this test guards a single job; found {sorted(jobs)}. "
-        "A second job needs its own author guard and its own assertion here."
+    workflow = _load(REVIEW_WORKFLOW)
+    assert _uses_agent(workflow), (
+        f"{REVIEW_WORKFLOW.name}: no {AGENT_ACTION} step detected; the checker would "
+        "pass it without inspecting its triggers"
     )
-    return next(iter(jobs.values()))["if"]
-
-
-def test_workflow_declares_triggers_and_a_condition() -> None:
-    """Control rod: the assertions below must have something to check.
-
-    Every other test in this module iterates over the trigger list. If that
-    list were empty -- a renamed key, a loader change, a restructured file --
-    those tests would pass vacuously while guarding nothing.
-    """
-    workflow = _workflow()
-    triggers = _triggers(workflow)
-    assert triggers, "no triggers found; the guard tests below would be vacuous"
-    assert set(triggers) <= set(ASSOCIATION_FIELD_BY_TRIGGER), (
-        f"unmapped trigger(s): {sorted(set(triggers) - set(ASSOCIATION_FIELD_BY_TRIGGER))}. "
-        "Add the event field carrying the mention to ASSOCIATION_FIELD_BY_TRIGGER "
-        "and a guard clause to the workflow."
-    )
-    assert _job_condition(workflow).strip(), "the job must carry an if: condition"
-
-
-@pytest.mark.parametrize("association", TRUSTED_ASSOCIATIONS)
-def test_condition_names_each_trusted_association(association: str) -> None:
-    assert association in _job_condition(_workflow()), f"the allow-list must name {association}"
-
-
-@pytest.mark.parametrize("association", UNTRUSTED_ASSOCIATIONS)
-def test_condition_never_names_an_untrusted_association(association: str) -> None:
-    condition = _job_condition(_workflow())
-    # FIRST_TIME_CONTRIBUTOR contains CONTRIBUTOR as a substring, so compare
-    # against the whole-word occurrences rather than a naive `in`.
-    words = set(condition.replace('"', " ").replace(",", " ").split())
-    assert association not in words, (
-        f"{association} must not be trusted to spend the repository credential "
-        "or to author the agent's prompt"
-    )
-
-
-def test_every_trigger_is_guarded_by_its_own_association_check() -> None:
-    """Each declared trigger has a clause pairing mention + author check.
-
-    A filter on three of four triggers is a hole with extra steps, so this
-    walks the ``on:`` block rather than a hard-coded list.
-    """
-    workflow = _workflow()
-    condition = _job_condition(workflow)
-    checked = 0
-    for trigger in _triggers(workflow):
-        assert f"github.event_name == '{trigger}'" in condition, (
-            f"trigger {trigger!r} is accepted by on: but has no clause in if:"
-        )
-        field = ASSOCIATION_FIELD_BY_TRIGGER[trigger]
-        assert field in condition, (
-            f"trigger {trigger!r} is not gated on {field}; without it any account "
-            "can run the agent on instructions of its choosing"
-        )
-        checked += 1
-    assert checked == len(ASSOCIATION_FIELD_BY_TRIGGER), (
-        f"checked {checked} trigger(s); expected all {len(ASSOCIATION_FIELD_BY_TRIGGER)}"
-    )
-
-
-def test_association_check_count_matches_trigger_count() -> None:
-    """No clause may check the mention without also checking the author.
-
-    Counting is what catches the half-guarded shape: a clause that keeps its
-    ``contains(..., '@claude')`` test but loses its allow-list still parses,
-    still matches the trigger name, and still runs for anyone.
-    """
-    workflow = _workflow()
-    condition = _job_condition(workflow)
-    triggers = _triggers(workflow)
-    assert condition.count("author_association") == len(triggers), (
-        f"{condition.count('author_association')} author checks for {len(triggers)} "
-        "triggers; every trigger needs exactly one"
-    )
-    assert condition.count("fromJSON") == len(triggers), (
-        "every trigger's clause must carry its own allow-list"
+    found = outsider_trigger_violations(workflow)
+    assert found == [], (
+        f"{REVIEW_WORKFLOW.name}: checked {len(_triggers(workflow))} trigger(s); "
+        f"{len(found)} outsider-body trigger(s) found: {found}"
     )

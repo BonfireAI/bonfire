@@ -49,14 +49,14 @@ class TestDevVersion:
         assert Version(_declared()).is_devrelease
 
     def test_declared_version_is_above_the_patch_release(self) -> None:
-        assert Version(_declared()) > Version("1.0.2")
+        assert Version(_declared()) > Version("1.0.3")
 
     def test_patch_tag_on_main_fails_the_guard(self) -> None:
         proc = subprocess.run(
             [
                 sys.executable,
                 str(GUARD),
-                "v1.0.2",
+                "v1.0.3",
                 "--pyproject",
                 str(REPO_ROOT / "pyproject.toml"),
             ],
@@ -72,6 +72,7 @@ class TestChangelogPatchEntry:
     def test_patch_release_heading_exists(self) -> None:
         text = (REPO_ROOT / "CHANGELOG.md").read_text()
         assert re.search(r"^## \[1\.0\.2\]", text, re.MULTILINE)
+        assert re.search(r"^## \[1\.0\.3\]", text, re.MULTILINE)
 
     def test_unreleased_has_no_sdk_security_note(self) -> None:
         section = _unreleased_section()

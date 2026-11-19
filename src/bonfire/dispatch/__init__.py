@@ -17,8 +17,8 @@ no-op stub for the per-tier dispatch contract — every check returns
 
 Trust-Triangle user-facing config types are re-exported here for
 discoverability: :class:`ToolPolicy` / :class:`DefaultToolPolicy`
-(W4.1 — per-role tool allow-lists) and :class:`SecurityHooksConfig`
-(W4.2 — pre-exec security hook policy).
+(per-role tool allow-lists) and :class:`SecurityHooksConfig`
+(pre-exec security hook policy).
 """
 
 from bonfire.dispatch.pydantic_ai_backend import PydanticAIBackend

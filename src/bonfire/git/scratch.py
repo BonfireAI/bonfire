@@ -48,7 +48,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 # Subdirectory under WORKTREE_DIR that holds preflight scratch worktrees.
-# Sage §D3 line 346: ``<repo>/.bonfire-worktrees/preflight/pr-<N>-<8-hex>/``.
+# Layout: ``<repo>/.bonfire-worktrees/preflight/pr-<N>-<8-hex>/``.
 PREFLIGHT_DIR_NAME: str = "preflight"
 
 _RANDOM_SUFFIX_BYTES: int = 4  # 4 bytes -> 8 hex chars
@@ -111,7 +111,7 @@ def _validate_prefix(prefix: str) -> None:
 
 
 def _new_random_suffix() -> str:
-    """Generate an 8-hex random suffix for race-safety (§D-CL.7 #1)."""
+    """Generate an 8-hex random suffix for race-safety."""
     return secrets.token_hex(_RANDOM_SUFFIX_BYTES)
 
 
@@ -124,7 +124,7 @@ def _new_random_suffix() -> str:
 class ScratchWorktreeInfo:
     """Immutable snapshot of an acquired scratch worktree.
 
-    Per Sage §D3 lines 305-310. Mirrors :class:`WorktreeInfo` but adds
+    Mirrors :class:`WorktreeInfo` but adds
     ``base_sha`` and ``created_at`` for forensic inspection.
     """
 
@@ -144,7 +144,7 @@ class ScratchWorktreeInfo:
 class ScratchWorktreeFactory:
     """Creates scratch worktrees for transient verification.
 
-    Per Sage §D3 lines 312-329. The factory is stateless apart from
+    The factory is stateless apart from
     ``repo_path``; each :py:meth:`acquire` returns a fresh async context
     manager with its own random branch suffix.
     """
@@ -195,7 +195,7 @@ class ScratchWorktreeContext:
     ``.bonfire-worktrees/preflight/`` and uses ephemeral branch names with
     an 8-hex random suffix.
 
-    Sage §D3 lines 332-349. The teardown swallows cleanup exceptions
+    The teardown swallows cleanup exceptions
     (logs only) so a cleanup failure NEVER masks the original handler
     error -- mirrors :py:meth:`WorktreeManager.cleanup`.
     """
@@ -224,11 +224,11 @@ class ScratchWorktreeContext:
         return str(self._pr_number)
 
     def _branch_name(self) -> str:
-        """``bonfire/preflight-pr-<N>-<8hex>`` (§D3 line 345)."""
+        """``bonfire/preflight-pr-<N>-<8hex>``."""
         return f"bonfire/{self._prefix}-pr-{self._pr_token()}-{self._suffix}"
 
     def _worktree_path(self) -> Path:
-        """``<repo>/.bonfire-worktrees/<prefix>/pr-<N>-<8hex>/`` (§D3 line 346)."""
+        """``<repo>/.bonfire-worktrees/<prefix>/pr-<N>-<8hex>/``."""
         return self._repo / WORKTREE_DIR / self._prefix / f"pr-{self._pr_token()}-{self._suffix}"
 
     # -- async CM protocol --------------------------------------------
@@ -266,7 +266,7 @@ class ScratchWorktreeContext:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Swallow all cleanup exceptions (Sage §D3 lines 348-349).
+        """Swallow all cleanup exceptions.
 
         Cleanup order (mirrors :py:meth:`WorktreeManager.cleanup`):
             1. ``git worktree remove --force <path>`` (best-effort)
@@ -300,7 +300,7 @@ class ScratchWorktreeContext:
                     info.path,
                 )
 
-        # Step 3: best-effort branch delete (§D3 line 348 idiom).
+        # Step 3: best-effort branch delete.
         with contextlib.suppress(Exception):
             await _run_git(self._repo, "branch", "-D", info.branch_name)
 

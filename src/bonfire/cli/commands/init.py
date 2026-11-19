@@ -387,7 +387,7 @@ def _prepare_target_dir(project_dir: str) -> Path:
 def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str]) -> None:
     """Print the per-artefact summary.
 
-    W9 Lane B (release-gate-5: every documented surface accurate) —
+    (release-gate-5: every documented surface accurate) —
     enumerate every artefact ``bonfire init`` creates or touches. README
     Quick Start enumerated only the subset (``bonfire.toml`` +
     ``.bonfire/``) and the prior success message hid the rest: the
@@ -398,7 +398,7 @@ def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str])
 
     Per-artefact verb prefix: ``Created:`` when the artefact was created
     this run, ``Already present:`` when it pre-existed. The artefact-name
-    part of each line is preserved verbatim so the W9 Lane B
+    part of each line is preserved verbatim so the
     reconciliation pin (substring search for artefact names in stdout)
     keeps passing. Every line printed here describes a path this command
     has already confirmed exists in the shape it claims.

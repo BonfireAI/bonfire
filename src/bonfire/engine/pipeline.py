@@ -137,7 +137,7 @@ class PipelineEngine:
 
         Outer-exception branch (everything not caught by an inner per-stage
         try/except) emits :class:`PipelineFailed` BEFORE returning the
-        failed result. Wave 11 Lane D closes the bus-vs-``PipelineResult``
+        failed result. This closes the bus-vs-``PipelineResult``
         parity gap on this halt branch: without the emit, every observer
         subscribed to ``PipelineFailed`` (``CostLedgerConsumer``,
         ``DisplayConsumer``, ``XPConsumer``) silently missed the halt;

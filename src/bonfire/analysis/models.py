@@ -6,11 +6,11 @@
 Frozen Pydantic models used across the Cartographer pipeline.
 
 ``CartographerBudget`` holds all tunables; defaults are pinned by
-the §12 H3 default pin table and mirrored byte-for-byte by
+the default pin table and mirrored byte-for-byte by
 
 ``RankedNode`` / ``StudyMetadata`` / ``ProjectAnalysis`` are the
 Projector's immutable output types. ``ProjectAnalysis`` is the self-
-describing, cache-ready scan artefact consumed by Wave 2b.
+describing, cache-ready scan artefact consumed by the analysis cache.
 
 This module must stay importable without loading ``tiktoken``,
 ``networkx``, ``grep_ast``, or ``tree_sitter``.
@@ -88,7 +88,7 @@ class CartographerBudget(BaseModel):
 class RankedNode(BaseModel):
     """One symbol surviving ranking + projection. Immutable.
 
-    §12 M5 — ``snippet`` is never empty in a valid ``ProjectAnalysis``; the
+    ``snippet`` is never empty in a valid ``ProjectAnalysis``; the
     Projector filters out any node whose render collapsed to an empty
     string before materialising a ``RankedNode``.
     """
@@ -102,7 +102,7 @@ class RankedNode(BaseModel):
     line_end: int = Field(ge=0)
     snippet: str = Field(
         min_length=1,
-        description="Projected TreeContext signature text. Never empty (§12 M5). "
+        description="Projected TreeContext signature text. Never empty. "
         "The non-empty invariant is enforced at the model layer via "
         "``min_length=1`` so an external caller (composition root, future "
         "plugin, serializer round-trip path) cannot construct an invalid "
@@ -110,7 +110,7 @@ class RankedNode(BaseModel):
     )
     tokens: int = Field(
         ge=0,
-        description="Raw tiktoken count — no multiplier (§12 M1).",
+        description="Raw tiktoken count — no multiplier.",
     )
     file_rank: float = Field(ge=0.0)
     symbol_rank: float = Field(ge=0.0)
@@ -151,7 +151,7 @@ class RankedNode(BaseModel):
 
 
 class StudyMetadata(BaseModel):
-    """Scan-time provenance. Wave 2b reads this for cache validity."""
+    """Scan-time provenance. The analysis cache reads this for validity."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -189,7 +189,7 @@ class StudyMetadata(BaseModel):
 class GapFinding(BaseModel):
     """One structural gap discovered by the Strategist scan.
 
-    Fields mirror the minimal surface from design doc §6.3:
+    Fields mirror the minimal surface:
     ``gap_id``, ``title``, ``severity``, ``size``, ``urgency``, ``category``.
     Structural-only — no enriched fields.
     """
@@ -253,7 +253,7 @@ class ProjectAnalysis(BaseModel):
         """Inverse of :meth:`to_bytes`.
 
         Raises ``pydantic.ValidationError`` on schema drift and
-        ``gzip.BadGzipFile`` / ``OSError`` on a corrupt envelope. Wave 2b
+        ``gzip.BadGzipFile`` / ``OSError`` on a corrupt envelope. Analysis
         cache reads catch those and fall back to a fresh scan.
         """
         import gzip

@@ -113,7 +113,7 @@ async def _run_scan(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     except MessageTooLargeError as exc:
-        # W9 Lane B (H3): the client sent a WS frame larger than the
+        # The client sent a WS frame larger than the
         # server's 8 KiB cap (just-merged W8.L defense). The server
         # closes with WS code 1009; without this branch the user saw
         # the generic "Browser closed" message — a misleading diagnosis

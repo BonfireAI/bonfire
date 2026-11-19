@@ -75,7 +75,7 @@ class CostLedgerConsumer:
     async def _on_pipeline_failed(self, event: PipelineFailed) -> None:
         """Persist a ``PipelineRecord`` for halt-path runs.
 
-        Wave 11 Lane A grew ``PipelineFailed`` to carry
+        ``PipelineFailed`` carries
         ``duration_seconds`` (M3) and ``stages_completed`` (M7),
         symmetric with ``PipelineCompleted``. Forwarding both fields
         means halt-path rows carry real run length and real progress

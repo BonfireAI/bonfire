@@ -4,7 +4,7 @@
 """Synthesizer pipeline stage handler -- auto-bounce under-marked xfail to Sage.
 
 The ``sage_correction_bounce`` stage fires after Warrior reports a verdict
-and (per Sage §A Q3) before Bard publishes the PR. It owns three jobs:
+and before Bard publishes the PR. It owns three jobs:
 
 1. Classify the warrior verdict + sage decision log via the pure-function
    :func:`bonfire.verify.classifier.classify_warrior_failure`.
@@ -92,7 +92,7 @@ _VERDICT_NOT_NEEDED_WARRIOR_GREEN: str = "not_needed_warrior_green"
 
 # Warrior-was-already-green skip signals. Two spellings carry the same
 # routing intent: ``"green"`` (canonical classifier output) and the legacy
-# ``"not_needed_warrior_green"`` from Sage §D3 line 291. Treating them as
+# ``"not_needed_warrior_green"`` from an earlier design. Treating them as
 # a single set keeps ``_route_verdict`` symmetric and prevents the legacy
 # spelling from silently falling through to the SAGE_UNDER_MARKED path.
 _GREEN_VERDICTS: frozenset[str] = frozenset(
@@ -142,7 +142,7 @@ class _CorrectionCycleOutcome:
     return path stays linear.
 
     ``cost_usd`` carries the dollars the backend reported through
-    ``backend_result.cost_usd``. Wave 11 Lane D — without this field,
+    ``backend_result.cost_usd``. Parity fix — without this field,
     ``_build_envelope_from_cycle_outcome`` returned an envelope with
     ``cost_usd = 0.0`` regardless of how much Sage actually spent, and
     the engine's per-iteration cost accumulator
@@ -283,8 +283,7 @@ class SageCorrectionBounceHandler:
             # Step 2: extract / resolve the classifier verdict. We only
             # invoke the live classifier when prior_results carries an
             # actionable warrior signal (e.g. "1 failed"); otherwise an
-            # empty prior_results dict is the "no input -> skip" path
-            # (Sage §D-CL.1 line 77).
+            # empty prior_results dict is the "no input -> skip" path.
             verdict = _extract_verdict_from_prior(prior_results)
             if (
                 verdict is None
@@ -638,7 +637,7 @@ class SageCorrectionBounceHandler:
         so the three ``Dispatch*`` events fire on the event bus and the
         backend's ``cost_usd`` reaches bus observers (``CostTracker``,
         ``CostLedgerConsumer``, the budget watchdog,
-        ``KnowledgeIngestConsumer``). Wave 11 Lane D parity fix —
+        ``KnowledgeIngestConsumer``). Parity fix —
         without this routing the handler-seam silently bypassed every
         observer that subscribed to the dispatch lifecycle.
 
@@ -750,7 +749,7 @@ class SageCorrectionBounceHandler:
     def _safe_cherry_pick_abort(self) -> None:
         """Best-effort ``git cherry-pick --abort`` on failure path.
 
-        Idempotency mitigation (Sage §D-CL.7 #7): a failed cherry-pick
+        Idempotency mitigation: a failed cherry-pick
         leaves the working tree in MERGING state. Abort BEFORE returning
         FAILED so the next pipeline run starts clean.
         """
@@ -847,7 +846,7 @@ class SageCorrectionBounceHandler:
         engine's per-iteration cost accumulator
         (``engine/pipeline.py:565`` —
         ``cumulative_iteration_cost += result_env.cost_usd``) counts
-        every dollar the Sage backend charged. Wave 11 Lane D —
+        every dollar the Sage backend charged. Parity fix —
         without this stamp, ``PipelineResult.total_cost_usd``
         under-counted by every Sage correction-cycle spend.
         """

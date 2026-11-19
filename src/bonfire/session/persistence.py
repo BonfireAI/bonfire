@@ -92,7 +92,7 @@ class SessionPersistence:
         ``O_NOFOLLOW`` defense-in-depth, and to cap reads at
         ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
         ``safe_append_text`` write-side hardening on ``append_event``:
-        Wave 9 closed the write half of the operator-controlled JSONL
+        Earlier work closed the write half of the operator-controlled JSONL
         attack surface; this closes the read half.
 
         Distinguish missing-file (legitimate "session never ran") from

@@ -80,7 +80,7 @@ class XPTracker:
         Uses ``safe_read_capped_text`` (W7.M read-side helper) to refuse
         symlinks at ``xp_events.jsonl`` and to cap reads at
         ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
-        ``safe_append_text`` write-side hardening on ``record``: Wave 9
+        ``safe_append_text`` write-side hardening on ``record``: earlier work
         closed the write half of the XP-ledger attack surface; this
         closes the read half.
 

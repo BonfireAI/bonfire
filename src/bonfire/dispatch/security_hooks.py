@@ -965,7 +965,7 @@ def _extract_command(tool_name: str, tool_input: Any) -> str:
     """Extract the string payload to scan for a given tool.
 
     Bash → ``command``. Write/Edit → ``file_path`` (and optionally
-    ``content``, but v0.1 does NOT scan content per Scout-2/338 §5.12).
+    ``content``, but v0.1 does NOT scan content).
     """
     if not isinstance(tool_input, dict):
         return ""

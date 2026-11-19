@@ -10,12 +10,12 @@ prior-results extraction helpers used by
 random, and -- critically -- never imports from ``merge_preflight``
 (the import edge points the other way), so it stays a dependency leaf.
 
-Sage references retained verbatim from the original colocated code:
-    - Public types -- §D4 lines 390-419
-    - PR-number / verdict extraction -- §D-CL.1 lines 820-821
-    - Pure classifier -- §A Q4 + §D4
-    - JUnit XML parser -- §D-CL.4 line 981; §D-CL.2 lines 884-888
-    - Stdout fallback parser -- §D-CL.4 line 982; §D-CL.2 lines 890-892
+Contents, in order:
+    - Public types
+    - PR-number / verdict extraction
+    - Pure classifier
+    - JUnit XML parser
+    - Stdout fallback parser
 """
 
 from __future__ import annotations
@@ -36,14 +36,14 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Public types -- enum + dataclass surface (Sage §D4 lines 390-419)
+# Public types -- enum + dataclass surface
 # ---------------------------------------------------------------------------
 
 
 class PreflightVerdict(StrEnum):
     """Six deterministic verdicts emitted by the preflight classifier.
 
-    Sage §D4 lines 390-396 + §D-CL.5 PR body table. ``MERGE_CONFLICT`` is
+    ``MERGE_CONFLICT`` is
     produced by the handler shell when ``git apply --3way`` fails (not by
     the classifier itself), but the enum exposes it for envelope
     construction.
@@ -61,7 +61,7 @@ class PreflightVerdict(StrEnum):
 class FailingTest:
     """Single failing test, parsed from JUnit XML or pytest stdout.
 
-    Sage §D4 lines 398-405. Field shape is **load-bearing** for the
+    Field shape is **load-bearing** for the
     classifier and parser tests:
         - ``file_path`` (repo-relative, forward-slash) -- intersected with
           baseline + sibling file sets.
@@ -84,7 +84,7 @@ class FailingTest:
 class PreflightClassification:
     """Result of the deterministic preflight classifier.
 
-    Sage §D4 lines 407-419. The handler embeds this dataclass as JSON
+    The handler embeds this dataclass as JSON
     metadata under ``META_PREFLIGHT_CLASSIFICATION`` for forensic
     inspection.
     """
@@ -107,7 +107,7 @@ class _PytestResult:
     and
     :py:meth:`~bonfire.handlers.merge_preflight.MergePreflightHandler._classify_preflight_run`.
     Field shape mirrors what :py:func:`classify_pytest_run` consumes plus
-    the JUnit XML path for the parser. Sage §D2 lines 279-280.
+    the JUnit XML path for the parser.
     """
 
     returncode: int
@@ -123,24 +123,24 @@ class _PytestResult:
 # ---------------------------------------------------------------------------
 
 # Maximum bytes of pytest stdout retained in the classification result for
-# forensics (Sage §D-CL.7 #6: envelope-size discipline). Also imported by
+# forensics (envelope-size discipline). Also imported by
 # the handler shell in ``merge_preflight`` for its own tail-truncation.
 _PYTEST_STDOUT_TAIL_BYTES: int = 2048
 
 # Regex extracting ``file.py:LINE`` references from JUnit XML failure text.
 # Used to populate ``FailingTest.traceback_files`` so the cross-wave
-# classifier (Sage §D4 step 4) can intersect traceback paths with the
-# sibling-PR file set (Sage edge case row line 469).
+# classifier can intersect traceback paths with the
+# sibling-PR file set.
 _TRACEBACK_FILE_RE = re.compile(r"([\w./\-]+\.py):\d+")
 
 # Regex matching ``FAILED <path>::<rest>`` lines in pytest stdout for
-# the JUnit-XML fallback parser (Sage §D4 line 432).
+# the JUnit-XML fallback parser.
 # Captures the file path before ``::`` and the test ID after.
 _FAILED_LINE_RE = re.compile(r"^FAILED\s+(\S+?\.py)::(\S+?)(?:\s|$)", re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
-# PR-number extraction (Steward-mirror chain, Sage §D-CL.1 lines 820-821)
+# PR-number extraction (Steward-mirror chain)
 # ---------------------------------------------------------------------------
 
 
@@ -195,7 +195,7 @@ def _extract_verdict(prior_results: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Pure-function classifier (Sage §A Q4 + §D4)
+# Pure-function classifier
 # ---------------------------------------------------------------------------
 
 
@@ -211,8 +211,8 @@ def classify_pytest_run(
 ) -> PreflightClassification:
     """Deterministic 6-verdict pytest-run classifier.
 
-    Pure function. NO I/O, NO clock, NO random. Sage §D-CL.4 lines 980-986.
-    First-match-wins ordering per Sage §A Q4 line 87 + §D4 lines 447-454:
+    Pure function. NO I/O, NO clock, NO random.
+    First-match-wins ordering:
 
         1. ``returncode != 0`` AND ``failing_tests`` empty -> PYTEST_COLLECTION_ERROR
         2. ``failing_tests`` empty AND ``returncode == 0`` -> GREEN
@@ -239,7 +239,7 @@ def classify_pytest_run(
     }
 
     # Step 1: PYTEST_COLLECTION_ERROR -- pytest crash before collecting any
-    # tests (e.g. ImportError in conftest). Sage §D4 line 448.
+    # tests (e.g. ImportError in conftest).
     if pytest_returncode != 0 and not failing_tests:
         return PreflightClassification(
             verdict=PreflightVerdict.PYTEST_COLLECTION_ERROR,
@@ -247,7 +247,7 @@ def classify_pytest_run(
             **common_kwargs,
         )
 
-    # Step 2: GREEN -- no failures, clean exit. Sage §D4 line 449.
+    # Step 2: GREEN -- no failures, clean exit.
     if not failing_tests and pytest_returncode == 0:
         return PreflightClassification(
             verdict=PreflightVerdict.GREEN,
@@ -256,7 +256,7 @@ def classify_pytest_run(
         )
 
     # Step 3: PRE_EXISTING_DEBT -- ALL failing files present in baseline.
-    # Sage §D4 line 450-451 ("NOT 'any' -- ALL").
+    # ("NOT 'any' -- ALL").
     if failing_tests and all(ft.file_path in baseline_failures for ft in failing_tests):
         return PreflightClassification(
             verdict=PreflightVerdict.PRE_EXISTING_DEBT,
@@ -265,8 +265,8 @@ def classify_pytest_run(
         )
 
     # Step 4: CROSS_WAVE_INTERACTION -- failing test file (or any traceback
-    # file) intersects union of sibling-PR files. Sage §D4 lines 452-453.
-    # Honoured only when sibling detection succeeded (Sage edge case 468).
+    # file) intersects union of sibling-PR files.
+    # Honoured only when sibling detection succeeded.
     if sibling_detection_status == "ok":
         intersecting_prs: list[int] = []
         for pr_n, files in sibling_files.items():
@@ -283,7 +283,7 @@ def classify_pytest_run(
             )
 
     # Step 5: PURE_WARRIOR_BUG -- novel failure not in baseline and not
-    # explained by a sibling diff. Sage §D4 line 454.
+    # explained by a sibling diff.
     return PreflightClassification(
         verdict=PreflightVerdict.PURE_WARRIOR_BUG,
         sibling_pr_numbers=(),
@@ -292,7 +292,7 @@ def classify_pytest_run(
 
 
 # ---------------------------------------------------------------------------
-# JUnit XML parser (Sage §D-CL.4 line 981; §D-CL.2 lines 884-888)
+# JUnit XML parser
 # ---------------------------------------------------------------------------
 
 
@@ -309,7 +309,7 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
         - ``traceback_files`` -- file paths matched by
           :py:data:`_TRACEBACK_FILE_RE` inside the failure/error text.
 
-    Fail-safe per Sage §D-CL.2 lines 887-888:
+    Fail-safe:
         - missing file -> ``()``
         - malformed XML -> ``()``
         - well-formed but no failures -> ``()``
@@ -340,7 +340,7 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
         message = problem.attrib.get("message", "")
 
         # Pull file paths out of the traceback text for cross-wave
-        # detection (Sage §D4 step 4 "or traceback_files entry").
+        # detection ("or traceback_files entry").
         text_parts: list[str] = []
         if problem.text:
             text_parts.append(problem.text)
@@ -365,7 +365,7 @@ def parse_pytest_junit_xml(path: Path) -> tuple[FailingTest, ...]:
 
 
 # ---------------------------------------------------------------------------
-# Stdout fallback parser (Sage §D-CL.4 line 982; §D-CL.2 lines 890-892)
+# Stdout fallback parser
 # ---------------------------------------------------------------------------
 
 
@@ -373,9 +373,9 @@ def parse_pytest_stdout_fallback(stdout: str) -> tuple[FailingTest, ...]:
     """Regex-extract ``FAILED <path>::...`` lines from pytest stdout.
 
     Used when the JUnit XML is missing or malformed. Pattern matches
-    ``FAILED <file.py>::<rest>`` lines (Sage §D4 line 432). Parametrize
+    ``FAILED <file.py>::<rest>`` lines. Parametrize
     suffixes are preserved on ``name`` but stripped from ``file_path``
-    (Sage §D-CL.2 line 892: ``FAILED tests/x.py::test_z[param-1]`` ->
+    (e.g. ``FAILED tests/x.py::test_z[param-1]`` ->
     ``file_path = "tests/x.py"``).
 
     Returns ``()`` when no FAILED lines are present.

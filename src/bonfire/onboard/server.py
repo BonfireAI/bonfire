@@ -465,7 +465,7 @@ class FrontDoorServer:
                         except Exception:
                             logger.exception("on_message callback failed")
             except ConnectionClosed as exc:
-                # W9 Lane B (H3): the ``websockets`` library raises
+                # The ``websockets`` library raises
                 # ``ConnectionClosedError`` (a ``ConnectionClosed`` subclass)
                 # when ``max_size`` is exceeded and closes the connection
                 # with code 1009 (message-too-big). Check both ``rcvd`` (the

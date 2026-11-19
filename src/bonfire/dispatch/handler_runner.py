@@ -27,8 +27,8 @@ Pipeline stages reach the agent backend via two paths:
       ``backend_result.cost_usd``. The dollars vanished from
       ``PipelineResult.total_cost_usd`` too.
 
-Wave 10 + Wave 11 Lanes A/B/C restored bus-vs-``PipelineResult`` parity on
-every other halt branch. Lane D closes the handler-seam gap with a thin
+Bus-vs-``PipelineResult`` parity is restored on
+every other halt branch. The handler-seam gap is closed with a thin
 shared helper that handlers route through instead of calling
 ``backend.execute`` raw.
 

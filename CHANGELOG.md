@@ -4,6 +4,24 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] — 2026-11-19
+
+Release fix on top of 1.0.2. No feature changes. 1.0.2 was tagged but
+never reached PyPI, so 1.0.3 is the first published release with the
+patched `claude-agent-sdk` floor.
+
+### Security
+
+- The PyPI publish step is pinned to `pypa/gh-action-pypi-publish`
+  v1.14.3, which fixes GHSA-5xjx-3w67-w9x9 (CRITICAL). The minimum
+  `claude-agent-sdk` stays at 0.2.121 (GHSA-h4mw-j7qp-8mwm).
+
+### Fixed
+
+- 1.0.2 was tagged but never published: the publish step rejected
+  Metadata-Version 2.5. The build job now checks the wheel with the
+  same twine and packaging versions the publish step uploads with.
+
 ## [1.0.2] — 2026-11-18
 
 Security patch on top of 1.0.1. No feature changes.

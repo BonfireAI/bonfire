@@ -134,7 +134,8 @@ _EXEMPT_PATH = "src/bonfire/engine/gates.py"
 _EXEMPT_ENTRIES: dict[tuple[str, str], str] = {
     (
         _EXEMPT_PATH,
-        "# Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.",
+        "# Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) "
+        "for the merge-preflight gate.",
     ): _EXEMPT_REASON,
     (
         _EXEMPT_PATH,

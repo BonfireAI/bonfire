@@ -12,6 +12,8 @@ from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[2]
 ATTRIBUTION = re.compile(r"\b[A-Z][a-z]+-ratified\b")
+# Mirrors _PERSON_NAME in tests/unit/test_no_persona_names_in_public_docs.py.
+PERSON_NAME = re.compile(r"\b(Anta|Antawari)\b")
 
 
 def _pyproject() -> dict:
@@ -71,3 +73,31 @@ def test_no_internal_attribution_marker_in_shipped_tree() -> None:
             if ATTRIBUTION.search(line):
                 hits.append(f"{path.relative_to(ROOT)}:{lineno}")
     assert not hits, "internal attribution markers found: " + ", ".join(hits)
+
+
+def _name_hits(text: str, label: str) -> list[str]:
+    return [
+        f"{label}:{n}"
+        for n, line in enumerate(text.splitlines(), start=1)
+        if PERSON_NAME.search(line)
+    ]
+
+
+def test_no_personal_name_in_shipped_tree() -> None:
+    hits: list[str] = []
+    paths = [p for p in sorted((ROOT / "src" / "bonfire").rglob("*")) if p.is_file()]
+    for path in [*paths, ROOT / "README.md"]:
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="strict")
+        except UnicodeDecodeError:
+            continue
+        hits += _name_hits(text, str(path.relative_to(ROOT)))
+    assert not hits, "personal names found: " + ", ".join(hits)
+
+
+def test_personal_name_rod_has_teeth() -> None:
+    assert _name_hits("    + Anta-ratified §A Q9a):\n", "plant") == ["plant:1"]
+    assert _name_hits("x@antawari.example", "plant") == []
+    assert _name_hits("Antawari wrote this", "plant") == ["plant:1"]

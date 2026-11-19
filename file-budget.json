@@ -150,7 +150,7 @@
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74618
+    "tests/unit": 74922
   },
   "package_raises": [
     {
@@ -271,6 +271,14 @@
       "to": 74618,
       "lines": 299,
       "reason": "The 299 lines are the release-guard contract that came back with the restored tag guard: tests/unit/test_check_tag_version.py (98 lines, the guard script's own tests, restored unchanged from history), tests/unit/test_release_workflow_guard.py (81 lines, the rod that the guard step runs before the build and that publish needs build, with three plants), and tests/unit/test_main_dev_version_contract.py (118 lines: main stays a development version above the 1.0.2 release so a 1.0.2 tag on main fails the guard; the changelog record; absolute README image URLs; no attribution marker and no personal name in the shipped tree, each with a plant), plus small re-pins in existing files (version strings, changelog line anchors, the dev-ahead version-truth rule). Explicitly rejected: a purpose entry for the new files, which takes them out of the ratchet rather than paying for them; compressing the restored guard tests, which are restored verbatim from history so the two branches stay identical; and folding the rods into existing frozen files, which moves the lines without removing them. Measured by cf-file-budget on the final tree: 'package tests/unit is 74618 lines (frozen 74319)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74618,
+      "to": 74922,
+      "lines": 304,
+      "reason": "The 304 lines are the 1.0.3 publish fix carried forward from release/1.0.x: tests/unit/test_release_workflow_guard.py grows 81 -> 290 (+209: the publisher drift rod, a table of publisher SHAs to the twine and packaging pair each one bundles, a shell-aware reader that takes pins only from pip install commands and ignores comments and echo, and eleven plants by name), tests/unit/test_readme_release_notice.py is new (90 lines, ported unchanged: the README upgrade line names the newest released CHANGELOG version, with plants and an [Unreleased] control), tests/unit/test_main_dev_version_contract.py +1 (the 1.0.3 changelog heading), and tests/unit/test_no_persona_names_in_public_docs.py +4 (two line-anchor breadcrumbs). Explicitly rejected: a purpose entry for the new file, which takes it out of the ratchet rather than paying for it; compressing the ported rods, whose logic, plant names and expected problems are unchanged from the release branch copy (only the access is adapted to main's helpers), so the two stay comparable; and trimming comments or blank lines to dodge the raise. Measured by cf-file-budget on the branch: 'package tests/unit is 74922 lines (frozen 74618, shrink-only)'. Raised to exactly the measurement, with no headroom.",
       "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
     }
   ]

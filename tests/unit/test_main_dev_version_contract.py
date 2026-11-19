@@ -87,7 +87,7 @@ class TestPublicSurfaceHygiene:
         assert not relative, f"README images without a scheme: {relative}"
 
     def test_no_internal_attribution_marker_in_shipped_tree(self) -> None:
-        """Pins the personal-attribution marker only; planning-note citations are a separate cleanup."""
+        """Pins the attribution marker only; planning-note citations are a separate cleanup."""
         marker = re.compile(r"\b[A-Z][a-z]+-ratified\b")
         files = sorted((REPO_ROOT / "src" / "bonfire").rglob("*.py")) + [REPO_ROOT / "README.md"]
         hits = [

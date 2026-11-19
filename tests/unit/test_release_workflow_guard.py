@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import re
+import shlex
 from pathlib import Path
 
 import yaml
@@ -86,13 +87,47 @@ _PUBLISHER_PREFIX = "pypa/gh-action-pypi-publish@"
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
 
 
-def _pin(run_texts: list[str], name: str) -> str | None:
-    pattern = re.compile(r"(?<![\w.-])" + re.escape(name) + r"==([^\s]+)")
-    for text in run_texts:
-        found = pattern.search(text)
-        if found:
-            return found.group(1)
-    return None
+_COMMENT_RE = re.compile(r"(^|\s)#.*$")
+
+
+def _tokens(line: str) -> list[str]:
+    try:
+        return shlex.split(line)
+    except ValueError:
+        return line.split()
+
+
+def _commands(runs: list[str]) -> list[list[str]]:
+    """Tokenised shell commands: comments removed, blank lines dropped."""
+    lines = (_COMMENT_RE.sub("", ln).strip() for text in runs for ln in text.splitlines())
+    return [_tokens(ln) for ln in lines if ln]
+
+
+def _install_args(commands: list[list[str]]) -> list[list[str]]:
+    """Per pip-install command, the tokens after ``install``."""
+    found = []
+    for tokens in commands:
+        for i, tok in enumerate(tokens[:-1]):
+            if "pip" in tok and tokens[i + 1] == "install":
+                found.append(tokens[i + 2 :])
+                break
+    return found
+
+
+def _pin_state(installs: list[list[str]], name: str) -> str | None:
+    """The pinned version, or None when unpinned or any install names it bare."""
+    pinned = None
+    for args in installs:
+        for tok in args:
+            if tok.startswith(name + "=="):
+                pinned = pinned or tok[len(name) + 2 :]
+            elif re.match(re.escape(name) + r"(?![\w.-])", tok):
+                return None
+    return pinned
+
+
+def _has_strict_check(commands: list[list[str]]) -> bool:
+    return any(c[:4] == ["python", "-m", "twine", "check"] and "--strict" in c for c in commands)
 
 
 def _publish_pin_problems(workflow: dict, bundles: dict[str, tuple[str, str]]) -> list[str]:
@@ -120,13 +155,15 @@ def _publish_pin_problems(workflow: dict, bundles: dict[str, tuple[str, str]]) -
         else:
             sha_recorded = True
     runs = [_run(s) for s in jobs.get("build", {}).get("steps", [])]
+    commands = _commands(runs)
+    installs = _install_args(commands)
     for idx, name in enumerate(("twine", "packaging")):
-        pinned = _pin(runs, name)
+        pinned = _pin_state(installs, name)
         if pinned is None:
             problems.append(f"build-{name}-unpinned")
         elif sha_recorded and pinned != bundles[sha][idx]:
             problems.append(f"build-{name}-mismatch")
-    if not any(re.search(r"twine check\s+--strict", r) for r in runs):
+    if not _has_strict_check(commands):
         problems.append("build-twine-check-missing")
     return problems
 
@@ -198,3 +235,47 @@ def test_plant_publisher_step_removed() -> None:
     steps = wf["jobs"]["publish"]["steps"]
     steps[:] = [s for s in steps if not str(s.get("uses", "")).startswith(_PUBLISHER_PREFIX)]
     assert _publish_pin_problems(wf, _bundles()) == ["publisher-step-missing"]
+
+
+def _without_check_step(workflow: dict) -> list[dict]:
+    steps = workflow["jobs"]["build"]["steps"]
+    steps[:] = [s for s in steps if "twine check" not in _run(s)]
+    return steps
+
+
+def test_plant_check_only_in_comment() -> None:
+    wf = copy.deepcopy(_load())
+    steps = _without_check_step(wf)
+    install = next(s for s in steps if "pip install" in _run(s) and "twine" in _run(s))
+    install["run"] = _run(install) + "# later: python -m twine check --strict dist/*\n"
+    assert _publish_pin_problems(wf, _bundles()) == ["build-twine-check-missing"]
+
+
+def test_plant_pins_only_in_comment() -> None:
+    wf = copy.deepcopy(_load())
+    _install_step(wf)["run"] = (
+        "python -m pip install build twine  # was twine==7.0.0 packaging==26.2"
+    )
+    assert _publish_pin_problems(wf, _bundles()) == [
+        "build-twine-unpinned",
+        "build-packaging-unpinned",
+    ]
+
+
+def test_plant_pins_only_in_echo() -> None:
+    wf = copy.deepcopy(_load())
+    _install_step(wf)["run"] = (
+        "echo twine==7.0.0 packaging==26.2\npython -m pip install build twine\n"
+    )
+    assert _publish_pin_problems(wf, _bundles()) == [
+        "build-twine-unpinned",
+        "build-packaging-unpinned",
+    ]
+
+
+def test_plant_unpinned_install_beside_pinned_one() -> None:
+    wf = copy.deepcopy(_load())
+    _install_step(wf)["run"] = (
+        "python -m pip install build twine\npython -m pip install twine==7.0.0 packaging==26.2\n"
+    )
+    assert _publish_pin_problems(wf, _bundles()) == ["build-twine-unpinned"]

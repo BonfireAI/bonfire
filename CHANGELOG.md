@@ -4,6 +4,28 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] — 2026-11-18
+
+Security patch on top of 1.0.1. No feature changes.
+
+### Security
+
+- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
+  are affected by an argument-injection advisory in the `resume` option
+  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Bonfire never passes `resume` itself;
+  the exposure was an environment that already held an older SDK.
+  Installs of 1.0.2 resolve a patched one.
+
+### Changed
+
+- The release workflow refuses to publish when the pushed tag does not
+  equal `v` plus the version declared in `pyproject.toml`. The check runs
+  before anything is built or uploaded.
+- CI and smoke checks also run for pull requests into `release/**`
+  maintenance branches.
+- A docstring in `bonfire.engine.gates` no longer cites internal
+  planning notes.
+
 ## [1.0.1] — 2026-05-17
 
 Docs-only release. README repositioned for marketing impact on the

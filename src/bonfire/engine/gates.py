@@ -210,8 +210,8 @@ class SageCorrectionResolvedGate:
     """Gate adapter for :class:`SageCorrectionBounceHandler` envelopes.
 
     Translates the handler's correction-cycle envelope into a
-    :class:`GateResult`. Verdict-routing matrix (Sage §D-CL.1 lines 93-97
-    + Anta-ratified §A Q9a):
+    :class:`GateResult`. Verdict-routing matrix (envelope shape to gate
+    result):
 
         | envelope shape                                      | passed | severity |
         |-----------------------------------------------------|--------|----------|

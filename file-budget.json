@@ -150,7 +150,7 @@
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74922
+    "tests/unit": 74986
   },
   "package_raises": [
     {
@@ -279,6 +279,14 @@
       "to": 74922,
       "lines": 304,
       "reason": "The 304 lines are the 1.0.3 publish fix carried forward from release/1.0.x: tests/unit/test_release_workflow_guard.py grows 81 -> 290 (+209: the publisher drift rod, a table of publisher SHAs to the twine and packaging pair each one bundles, a shell-aware reader that takes pins only from pip install commands and ignores comments and echo, and eleven plants by name), tests/unit/test_readme_release_notice.py is new (90 lines, ported unchanged: the README upgrade line names the newest released CHANGELOG version, with plants and an [Unreleased] control), tests/unit/test_main_dev_version_contract.py +1 (the 1.0.3 changelog heading), and tests/unit/test_no_persona_names_in_public_docs.py +4 (two line-anchor breadcrumbs). Explicitly rejected: a purpose entry for the new file, which takes it out of the ratchet rather than paying for it; compressing the ported rods, whose logic, plant names and expected problems are unchanged from the release branch copy (only the access is adapted to main's helpers), so the two stay comparable; and trimming comments or blank lines to dodge the raise. Measured by cf-file-budget on the branch: 'package tests/unit is 74922 lines (frozen 74618, shrink-only)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74922,
+      "to": 74986,
+      "lines": 64,
+      "reason": "The 64 lines are tests/unit/test_memory_vault.py growing 295 -> 359. The ingest-scaling test used to time ingest at 100k versus 200k entries with a 3.0x wall-clock cap; on a shared CI runner it measured 3.16x on a correct implementation. It is replaced by two load-free work counters at 2k versus 4k entries: equality comparisons on the content hashes, and interpreter instructions executed inside bonfire/knowledge/memory.py (via sys.monitoring, with a typed error if the profiler tool id is taken), each with a guard that fails if the counter never fired, and an absolute linear bound, never a ratio. The change is +133 for the two counters, the counting hash helper and the typed error, -70 for the removed wall-clock test, and +1 for a guard fix. Explicitly rejected: dropping the comparison counter to save lines, since it measures the hash lookup directly and does not depend on sys.monitoring, so it still holds if the instruction counter cannot run; trimming comments or blank lines to fit; and a purpose entry, which takes the file out of the ratchet instead of paying for it. Measured by cf-file-budget on the final tree: 'package tests/unit is 74986 lines (frozen 74922)'. Raised to exactly the measurement, with no headroom.",
       "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
     }
   ]

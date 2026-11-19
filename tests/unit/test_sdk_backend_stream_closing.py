@@ -17,7 +17,7 @@ import inspect
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -169,14 +169,13 @@ async def test_closing_stream_closes_non_generator_with_aclose_on_early_break() 
 
 
 async def test_backend_execute_closes_query_stream_on_rate_limit_return() -> None:
-    from claude_agent_sdk.types import RateLimitEvent  # type: ignore[import-untyped]
+    from claude_agent_sdk.types import RateLimitEvent, RateLimitInfo  # type: ignore[import-untyped]
 
     from bonfire.dispatch.sdk_backend import ClaudeSDKBackend
     from bonfire.models.envelope import Envelope
     from bonfire.protocols import DispatchOptions
 
-    rejected = MagicMock(spec=RateLimitEvent)
-    rejected.status = "rejected"
+    rejected = RateLimitEvent(RateLimitInfo(status="rejected"), "uuid-1", "session-1")
     source = _ClosableAsyncIterator([rejected, rejected])
     envelope = Envelope(task="run something", agent_name="scout", model="claude-sonnet")
 

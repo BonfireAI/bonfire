@@ -195,7 +195,7 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         ),
         (
             "CHANGELOG.md",
-            618,
+            600,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (

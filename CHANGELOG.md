@@ -137,7 +137,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   prints, the `__version__` import fallback and the newest CHANGELOG
   release heading must all agree, checked on every run of the suite.
 
-## [1.0.2] — 2026-11-18
+## [1.0.3] — 2026-11-19
+
+Release fix on top of 1.0.2. No feature changes. 1.0.2 was tagged but
+never reached PyPI, so 1.0.3 is the first published release with the
+patched `claude-agent-sdk` floor.
+
+### Security
+
+- The PyPI publish step is pinned to `pypa/gh-action-pypi-publish`
+  v1.14.3, which fixes GHSA-5xjx-3w67-w9x9 (CRITICAL). The minimum
+  `claude-agent-sdk` stays at 0.2.121 (GHSA-h4mw-j7qp-8mwm).
+
+### Fixed
+
+- 1.0.2 was tagged but never published: the publish step rejected
+  Metadata-Version 2.5. The build job now checks the wheel with the
+  same twine and packaging versions the publish step uploads with.
+
+## [1.0.2] — 2026-11-18 (tagged, never published; see 1.0.3)
 
 Security patch on top of 1.0.1. No feature changes.
 

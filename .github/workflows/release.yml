@@ -22,6 +22,9 @@ name: Release
 # See `CLAUDE.md` § "Release Policy and Gates" and `docs/release-policy.md`
 # for what blocks a `v0.1.0` tag.
 #
+# The build job also runs scripts/check_tag_version.py, which fails the build
+# (and so the publish) when the tag does not equal "v" + project.version.
+#
 # `workflow_dispatch` is enabled so a maintainer can manually re-run the
 # pipeline from the Actions tab if a tag-driven run fails partway through.
 
@@ -64,6 +67,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Release version-truth guard (tag must equal declared version)
+        # Tripwire: this workflow publishes on ANY v*.*.* tag push, so a tag
+        # that disagrees with pyproject.toml would ship a wrong public
+        # release. Fail closed, with a typed error, before anything builds.
+        run: python scripts/check_tag_version.py "${GITHUB_REF_NAME}"
 
       - name: Install build frontend
         run: |

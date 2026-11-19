@@ -150,7 +150,7 @@
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74319
+    "tests/unit": 74618
   },
   "package_raises": [
     {
@@ -263,6 +263,14 @@
       "to": 74319,
       "lines": 132,
       "reason": "The 132 lines are tests/unit/test_sdk_backend_presence_base_names.py (143 lines: 122 for the presence-list contract and 21 for the connector contract, one driving test and one pin that the backend sets no mcp_servers or strict_mcp_config), less 14 net lines removed from test_sdk_backend_tool_presence.py when its old verbatim-duplicate pin was replaced, plus a 3-line history breadcrumb in test_no_persona_names_in_public_docs.py, whose CHANGELOG line anchors moved by 14 when this rung's Fixed entry was written (anchors only, expected text unchanged, as every earlier CHANGELOG addition did). Four tests, all four of which fail on origin/main: a pattern grant reduces to its base name while the approval list keeps the pattern, an mcp__ grant stays out of the presence list but in the approval list, and a pattern-only grant keeps the tool present rather than producing an empty list. The fourth replaces a pin whose contract changed on purpose: duplicates are now removed from the presence list and still reach the approval list verbatim. The tests moved into their own module because the derivation is its own contract and the presence module would otherwise have crossed the 500-line cap. Explicitly rejected: an unbudgeted tree such as tests/dispatch, which dodges the ratchet and hides the contract from whoever maintains sdk_backend.py; and a purpose entry for the new file, an exemption in everything but name. Measured by cf-file-budget on the final tree: 'package tests/unit is 74319 lines (frozen 74187)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74319,
+      "to": 74618,
+      "lines": 299,
+      "reason": "The 299 lines are the release-guard contract that came back with the restored tag guard: tests/unit/test_check_tag_version.py (98 lines, the guard script's own tests, restored unchanged from history), tests/unit/test_release_workflow_guard.py (81 lines, the rod that the guard step runs before the build and that publish needs build, with three plants), and tests/unit/test_main_dev_version_contract.py (118 lines: main stays a development version above the 1.0.2 release so a 1.0.2 tag on main fails the guard; the changelog record; absolute README image URLs; no attribution marker and no personal name in the shipped tree, each with a plant), plus small re-pins in existing files (version strings, changelog line anchors, the dev-ahead version-truth rule). Explicitly rejected: a purpose entry for the new files, which takes them out of the ratchet rather than paying for them; compressing the restored guard tests, which are restored verbatim from history so the two branches stay identical; and folding the rods into existing frozen files, which moves the lines without removing them. Measured by cf-file-budget on the final tree: 'package tests/unit is 74618 lines (frozen 74319)'. Raised to exactly the measurement, with no headroom.",
       "approver": "Anta gates via PR merge -- raise surfaced in the PR body and in the lane report, not taken silently"
     }
   ]

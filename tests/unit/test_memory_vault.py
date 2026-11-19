@@ -24,9 +24,9 @@ These tests pin the *intended post-fix* complexity:
 * ``query`` must not allocate a fresh ``e.content.lower()`` per entry in
   the hot path — the lowercased form is cached at insert. Pinned by
   counting ``str.lower`` invocations across two successive queries.
-* a scaling benchmark asserts ingest of N and 2N entries stays roughly
-  linear (the time ratio is ~2x, not ~4x) — the AC's wall-clock cap,
-  expressed as a ratio so it is robust to machine speed.
+* ingest of N and 2N entries does linear work — pinned by counting
+  comparisons and interpreter instructions, not by timing (see
+  ``TestIngestWorkIsLinear``).
 
 Test authors and implementation authors are different hands (TDD law).
 Implementation NEVER edits this file.
@@ -42,20 +42,6 @@ from collections.abc import Callable
 
 from bonfire.knowledge.memory import InMemoryVaultBackend
 from bonfire.protocols import VaultEntry
-
-# Scaling-benchmark sizes for ``test_ingest_does_not_scale_quadratically``.
-# Sized to make the small-n timing noise wash out: at n=10k the ratio's noise
-# tail on shared GitHub runners spiked into the 3.4-3.5x band even for a
-# correct linear-time impl, failing the gate on BOTH buggy and fixed code.
-# At n=50k the first-run still pushed 2.7x on a developer machine — too close
-# to the 3.0 cap for shared-runner comfort. At n=100k/200k the asymptotic
-# O(n²) vs O(n) separation dominates the noise — a correct impl settles
-# tightly into the ~1.9-2.3x band over 5 runs and a regression to O(n²)
-# still clears the ~4x bar by a wide margin. Bumping n (not the cap) is the
-# right knob; the < 3.0 cap stays. Total wall-clock ~3s per run on a
-# developer machine, well under the 30s test-budget ceiling.
-_INGEST_N_SMALL = 100_000
-_INGEST_N_LARGE = 200_000
 
 # Sizes for the work-counting tests in ``TestIngestWorkIsLinear``.
 _WORK_N = 2_000
@@ -206,6 +192,11 @@ class TestIngestWorkIsLinear:
     Known residue: quadratic work done entirely in C, for example a list
     copied on every store (``self._entries = self._entries + [entry]``),
     raises neither counter. This class does not cover that family.
+
+    History: an earlier test timed ingest at 100k and 200k entries and capped
+    the ratio at 3.0x. On a shared CI runner it measured 3.16x on a correct
+    implementation, so it was replaced by counts that do not depend on
+    machine load.
     """
 
     async def test_ingest_comparisons_scale_linearly(self) -> None:
@@ -348,69 +339,8 @@ class TestQueryDoesNotRelowerPerEntry:
         )
 
 
-class TestIngestScalesLinearly:
-    """AC: a benchmark asserts ingest of many entries completes in linear
-    time. Expressed as a scaling ratio so it is robust across machines:
-    doubling the entry count must roughly double the wall time, not
-    quadruple it."""
-
-    async def test_ingest_does_not_scale_quadratically(self) -> None:
-        """Ingest N and 2N entries; assert the time ratio is sub-quadratic.
-
-        O(n²) ingest gives a ~4x ratio when n doubles; O(n) gives ~2x. We
-        fail above 3.0x — comfortably between the two so timing jitter on a
-        loaded machine does not flake a correct linear implementation, but a
-        genuine quadratic regression (4x+) is caught.
-
-        Scale history. n=10_000 was the original sizing: characterized GREEN
-        (set-indexed exists) showed median ~2.05x, max ~2.48x over 10 runs
-        on a developer machine; characterized PRE-FIX (linear-scan exists)
-        showed median ~4.09x, min ~3.57x over 5 runs. (Smaller n e.g. 4_000
-        produced a flat ~2.2x median for BOTH buggy and fixed — the signal
-        had not yet risen out of timing noise.)
-
-        Scale today: n = 100_000 / 2n = 200_000. On shared GitHub runners the
-        n=10_000 ratio's noise tail spiked into the 3.4-3.5x band even with
-        the linear-time fix in place, failing the gate on both buggy and
-        fixed code — i.e. the cap discriminated nothing. The right knob is
-        larger n, NOT raising the cap: asymptotic O(n) vs O(n²) behavior
-        dominates at higher n while wall-clock noise stays bounded. At
-        100k/200k the ratio sits tightly in the ~1.9-2.3x band on a
-        developer machine over 5 runs (max ratio 2.27, well below the cap)
-        and a true quadratic still clears 4x by a wide margin. The < 3.0
-        cap stays. Test wall-clock ~3s per run on a developer machine.
-
-        If CI runners ever can't budget the wall-clock cost, mark this
-        with ``@pytest.mark.slow`` rather than weakening the cap or
-        lowering n. The cap is the load-bearing invariant; n is the knob
-        that makes the cap meaningful.
-        """
-        n_small = _INGEST_N_SMALL
-        n_large = _INGEST_N_LARGE
-
-        backend_n = InMemoryVaultBackend()
-        start = time.perf_counter()
-        await _ingest(backend_n, n_small, prefix="a")
-        elapsed_n = time.perf_counter() - start
-
-        backend_2n = InMemoryVaultBackend()
-        start = time.perf_counter()
-        await _ingest(backend_2n, n_large, prefix="b")
-        elapsed_2n = time.perf_counter() - start
-
-        # Guard against a near-zero denominator on a very fast machine.
-        floor = 1e-4
-        ratio = elapsed_2n / max(elapsed_n, floor)
-        # performance: linear-time invariant. Ratio of wall-clock for 2n vs n
-        # ingest must stay sub-quadratic. ~2.0 = O(n), ~4.0 = O(n²); the 3.0
-        # cap is load-bearing — see this method's docstring for the
-        # characterization data behind the choice of cap and n.
-        assert ratio < 3.0, (
-            f"Doubling ingest from {n_small} to {n_large} entries took "
-            f"{ratio:.2f}x longer ({elapsed_n:.4f}s -> {elapsed_2n:.4f}s) — "
-            "expected ~2x for linear ingest; ~4x indicates the O(n²) "
-            "exists()-per-entry defect"
-        )
+class TestIngestHasTimeCap:
+    """AC: ingest of many entries completes under a generous wall-clock cap."""
 
     async def test_ten_thousand_entry_ingest_completes_under_cap(self) -> None:
         """The AC's explicit wall-clock check: ingest of 10,000 entries

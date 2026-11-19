@@ -15,7 +15,7 @@ Name your assistant — your cadre wires itself around the name.*
 
 <br>
 
-<img src="docs/media/bonfire-hero.gif" alt="Bonfire CLI demo — the command palette, an opinionated project init, and persona list" width="820">
+<img src="https://raw.githubusercontent.com/BonfireAI/bonfire/main/docs/media/bonfire-hero.gif" alt="Bonfire CLI demo — the command palette, an opinionated project init, and persona list" width="820">
 
 </div>
 

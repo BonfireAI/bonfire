@@ -6,13 +6,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Security
-
-- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
-  are affected by an argument-injection advisory in the `resume` option
-  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Installs that resolved an older SDK
-  now resolve a patched one.
-
 ### Fixed
 
 - A pipeline stage naming a gate the engine does not hold in its
@@ -143,6 +136,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A version-truth guard: `pyproject.toml`, what `bonfire --version`
   prints, the `__version__` import fallback and the newest CHANGELOG
   release heading must all agree, checked on every run of the suite.
+
+## [1.0.2] — 2026-11-18
+
+Security patch on top of 1.0.1. No feature changes.
+
+### Security
+
+- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
+  are affected by an argument-injection advisory in the `resume` option
+  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Bonfire never passes `resume` itself;
+  the exposure was an environment that already held an older SDK.
+  Installs of 1.0.2 resolve a patched one.
+
+### Changed
+
+- The release workflow refuses to publish when the pushed tag does not
+  equal `v` plus the version declared in `pyproject.toml`. The check runs
+  before anything is built or uploaded.
+- CI and smoke checks also run for pull requests into `release/**`
+  maintenance branches.
+- A docstring in `bonfire.engine.gates` no longer cites internal
+  planning notes.
 
 ## [1.0.1] — 2026-05-17
 

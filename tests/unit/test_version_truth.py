@@ -132,7 +132,11 @@ class TestVersionTruth:
     def test_changelog_documents_the_declared_version(self) -> None:
         declared = _declared_version()
         logged = _latest_changelog_version()
-        assert logged == declared, (
+        # Dev-ahead rule: a dev release newer than the newest heading is documented.
+        from packaging.version import Version
+
+        dev_ahead = Version(declared).is_devrelease and Version(declared) > Version(logged)
+        assert logged == declared or dev_ahead, (
             f"CHANGELOG.md's newest release heading is [{logged}] but pyproject.toml "
             f"declares {declared!r}. Either the version was bumped without release "
             "notes, or notes were written for a version that was never declared."

@@ -6,6 +6,8 @@ name: Release
 # `vX.Y.ZbN` / `vX.Y.ZrcN` for pre-releases). The `build` job assembles
 # the wheel + sdist and twine-checks both; the `publish` job uploads them
 # to PyPI via the `pypa/gh-action-pypi-publish` action.
+# A guard step fails the build (and so the publish) when the tag differs from
+# 'v' + project.version.
 #
 # Auth path: PyPI Trusted Publisher (OIDC). No API token is referenced —
 # the `id-token: write` permission plus the `pypi` GitHub Environment let
@@ -64,6 +66,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+
+      - name: Release version-truth guard (tag must equal declared version)
+        # Tripwire: this workflow publishes on ANY v*.*.* tag push, so a tag
+        # that disagrees with pyproject.toml would ship a wrong public
+        # release. Fail closed, with a typed error, before anything builds.
+        run: python scripts/check_tag_version.py "${GITHUB_REF_NAME}"
 
       - name: Install build frontend
         run: |

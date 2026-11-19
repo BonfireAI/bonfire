@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""RED tests — BON-907 — `InMemoryVaultBackend` O(n²) ingest hardening.
+"""Tests: `InMemoryVaultBackend` O(n²) ingest hardening.
 
-Surfaced by the Mirror Path B production-1 performance Scout. The
+Found in a performance review. The
 "in-memory" vault backend is the *shipping default* when knowledge is
 unconfigured (`knowledge/__init__.py` factory returns it for both
 ``enabled=False`` and ``backend="memory"``).

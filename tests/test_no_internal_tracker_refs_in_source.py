@@ -115,6 +115,12 @@ _MARKER_FAMILIES: dict[str, re.Pattern[str]] = {
     "analysis-doc-section": re.compile(r"§12 [A-Z]\d"),
     "plan-doc": re.compile(r"design doc §|public-port plan|Scout-\d+/\d+"),
     "personal-name": re.compile(r"\bAnta\b"),
+    "w-letter": re.compile(r"\bW\d+\.[A-Z]\b"),
+    "w-finding": re.compile(r"\bW\d+ [A-Z]\d\b"),
+    "design-lock": re.compile(r"\bD-CL\b|\bcluster-\d+\b"),
+    "ambiguity-ref": re.compile(r"\bAMBIG #\d+"),
+    "role-instance": re.compile(r"\bWarrior [A-Z]\b"),
+    "follow-up-wave": re.compile(r"\bfollow-up wave\b"),
 }
 
 _MarkerHit = tuple[str, int, str, str]  # (rel_path, lineno, family, stripped_line)
@@ -231,6 +237,12 @@ def _plant(tmp_path: Path, rel: str, line: str) -> list[_MarkerHit]:
         ("analysis-doc-section", "# per §12 C3 so two workspaces"),
         ("plan-doc", "# per the public-port plan §D-FT A/B/C"),
         ("personal-name", "# + Anta-ratified §A Q9a):"),
+        ("w-letter", "# closed by W7.M (see below)"),
+        ("w-finding", "# W11 M4: reject hostile prefixes"),
+        ("design-lock", "# (per the cluster-350 D-CL.1 lock)"),
+        ("ambiguity-ref", "# per AMBIG #5."),
+        ("role-instance", "# (Warrior B pure function)"),
+        ("follow-up-wave", "# will land in a follow-up wave."),
     ],
 )
 def test_marker_family_is_caught(tmp_path: Path, family: str, line: str) -> None:
@@ -253,6 +265,12 @@ def test_marker_in_non_python_file_is_caught(tmp_path: Path) -> None:
         "SHA-256 hex digest",
         "a waveform sample",
         "the Sage reviewer role",
+        "Cross-wave interaction detected with",
+        "CROSS_WAVE_INTERACTION",
+        "closed by PR #93",
+        'f"PR #{number}"',
+        "the Warrior agent writes code",
+        "a cluster of nodes",
     ],
 )
 def test_innocent_text_is_not_caught(tmp_path: Path, line: str) -> None:
@@ -277,4 +295,4 @@ def test_exemption_applies_only_to_exact_path_and_text(tmp_path: Path) -> None:
     gates.write_text(exact + "# also per Sage §D-CL.9 here\n", encoding="utf-8")
     offenders, present = _split_exempt(_scan_markers(tmp_path, tmp_path)[0])
     assert present == len(_EXEMPT_ENTRIES)
-    assert [h[3] for h in offenders] == ["# also per Sage §D-CL.9 here"]
+    assert {h[3] for h in offenders} == {"# also per Sage §D-CL.9 here"}

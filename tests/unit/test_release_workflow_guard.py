@@ -284,6 +284,7 @@ class TestPublisherPin:
     def test_plant_unpinned_install_beside_pinned_one(self) -> None:
         wf = copy.deepcopy(_real())
         _install_step(wf)["run"] = (
-            "python -m pip install build twine\npython -m pip install twine==7.0.0 packaging==26.2\n"
+            "python -m pip install build twine\n"
+            "python -m pip install twine==7.0.0 packaging==26.2\n"
         )
         assert _publish_pin_problems(wf, _bundles()) == ["build-twine-unpinned"]

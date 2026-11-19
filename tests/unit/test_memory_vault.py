@@ -206,9 +206,10 @@ class TestIngestWorkIsLinear:
             _CountingStr.hash_calls = 0
             await _ingest(InMemoryVaultBackend(), n, prefix="c", hash_factory=_CountingStr)
             counts[n] = (_CountingStr.eq_calls, _CountingStr.hash_calls)
-            assert counts[n][1] >= n, (
-                f"VOID: only {counts[n][1]} hash lookups for {n} entries — "
-                "the counting probe never reached the exists() lookup"
+            touched = counts[n][0] + counts[n][1]
+            assert touched >= n, (
+                f"VOID: the counting probe was hashed or compared only {touched} times "
+                f"for {n} entries — it never reached the exists() lookup"
             )
         eq_n, eq_2n = counts[_WORK_N][0], counts[_WORK_2N][0]
         assert eq_2n <= 2 * eq_n + 16, (

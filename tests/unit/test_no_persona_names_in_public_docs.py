@@ -195,24 +195,26 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Presence-list fix entry: shifted 684/686/687/704 -> 698/700/701/718
         # when a Fixed entry was added under [Unreleased] (11 lines, then 3 more
         # for the connector switch). Anchors only; expected text is unchanged.
+        # Patch-release forward-port: shifted 698/700/701/718 -> 713/715/716/733 (the
+        # Unreleased Security note moved out, the [1.0.2] block went in). Text unchanged.
         (
             "CHANGELOG.md",
-            698,
+            713,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            700,
+            715,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            701,
+            716,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            718,
+            733,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

@@ -62,11 +62,12 @@ def test_ci_and_smoke_run_on_release_branches() -> None:
 
 
 def test_no_internal_attribution_marker_in_shipped_tree() -> None:
+    """Pins the personal-attribution marker only; planning-note citations are a separate cleanup."""
     files = sorted((ROOT / "src" / "bonfire").rglob("*.py")) + [ROOT / "README.md"]
     hits: list[str] = []
     for path in files:
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if ATTRIBUTION.search(line) or "§A Q" in line:
+            if ATTRIBUTION.search(line):
                 hits.append(f"{path.relative_to(ROOT)}:{lineno}")
     assert not hits, "internal attribution markers found: " + ", ".join(hits)

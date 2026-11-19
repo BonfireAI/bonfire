@@ -34,7 +34,11 @@ Implementation NEVER edits this file.
 
 from __future__ import annotations
 
+import importlib
+import sys
 import time
+import types
+from collections.abc import Callable
 
 from bonfire.knowledge.memory import InMemoryVaultBackend
 from bonfire.protocols import VaultEntry
@@ -53,6 +57,10 @@ from bonfire.protocols import VaultEntry
 _INGEST_N_SMALL = 100_000
 _INGEST_N_LARGE = 200_000
 
+# Sizes for the work-counting tests in ``TestIngestWorkIsLinear``.
+_WORK_N = 2_000
+_WORK_2N = 4_000
+
 
 class _CountingStr(str):
     """A ``str`` that counts how many times it is compared with ``==``.
@@ -64,12 +72,14 @@ class _CountingStr(str):
     """
 
     eq_calls = 0
+    hash_calls = 0
 
     def __eq__(self, other: object) -> bool:
         type(self).eq_calls += 1
         return str.__eq__(self, other)
 
     def __hash__(self) -> int:
+        type(self).hash_calls += 1
         return str.__hash__(self)
 
 
@@ -91,10 +101,16 @@ class _CountingLowerStr(str):
         return str.lower(self)
 
 
-async def _ingest(backend: InMemoryVaultBackend, n: int, *, prefix: str = "h") -> None:
+async def _ingest(
+    backend: InMemoryVaultBackend,
+    n: int,
+    *,
+    prefix: str = "h",
+    hash_factory: Callable[[str], str] = str,
+) -> None:
     """Ingest n entries the way real ingest paths do: exists-check then store."""
     for i in range(n):
-        c_hash = f"{prefix}{i}"
+        c_hash = hash_factory(f"{prefix}{i}")
         if not await backend.exists(c_hash):
             await backend.store(
                 VaultEntry(
@@ -103,6 +119,123 @@ async def _ingest(backend: InMemoryVaultBackend, n: int, *, prefix: str = "h") -
                     content_hash=c_hash,
                 )
             )
+
+
+class MonitoringToolBusyError(RuntimeError):
+    """The interpreter-work counter cannot run: its monitoring tool id is taken.
+
+    Raised instead of skipping, so a busy profiler can never turn the test
+    into a silent pass.
+    """
+
+    code = "sys_monitoring_tool_busy"
+
+
+def _memory_module_code_objects(module: types.ModuleType) -> list[types.CodeType]:
+    """Every code object defined in ``module``'s file, nested ones included.
+
+    Walks module-level functions and class members, then each code object's
+    ``co_consts`` so nested generator expressions and inner functions are
+    found. The walk is bounded by the finite nesting depth of the source.
+    """
+    found: dict[int, types.CodeType] = {}
+
+    def add(code: types.CodeType) -> None:
+        if code.co_filename != module.__file__ or id(code) in found:
+            return
+        found[id(code)] = code
+        for const in code.co_consts:
+            if isinstance(const, types.CodeType):
+                add(const)
+
+    def add_member(member: object) -> None:
+        member = getattr(member, "__func__", member)
+        member = getattr(member, "fget", member)
+        code = getattr(member, "__code__", None)
+        if isinstance(code, types.CodeType):
+            add(code)
+
+    for value in vars(module).values():
+        if isinstance(value, type):
+            for member in vars(value).values():
+                add_member(member)
+        else:
+            add_member(value)
+    return list(found.values())
+
+
+async def _count_interpreter_ops(n: int, *, prefix: str) -> int:
+    """Count bytecode instructions run inside ``knowledge/memory.py`` by an ingest."""
+    mod = importlib.import_module("bonfire.knowledge.memory")
+    codes = _memory_module_code_objects(mod)
+    monitoring = sys.monitoring
+    tool = monitoring.PROFILER_ID
+    if monitoring.get_tool(tool) is not None:
+        raise MonitoringToolBusyError(
+            f"sys.monitoring tool id {tool} is in use; cannot count interpreter work"
+        )
+    counter = [0]
+
+    def on_instruction(code: types.CodeType, offset: int) -> None:
+        counter[0] += 1
+
+    monitoring.use_tool_id(tool, "memory-ingest-work")
+    try:
+        monitoring.register_callback(tool, monitoring.events.INSTRUCTION, on_instruction)
+        for code in codes:
+            monitoring.set_local_events(tool, code, monitoring.events.INSTRUCTION)
+        await _ingest(mod.InMemoryVaultBackend(), n, prefix=prefix)
+    finally:
+        for code in codes:
+            monitoring.set_local_events(tool, code, 0)
+        monitoring.register_callback(tool, monitoring.events.INSTRUCTION, None)
+        monitoring.free_tool_id(tool)
+    return counter[0]
+
+
+class TestIngestWorkIsLinear:
+    """Ingest does linear work: counted, not timed.
+
+    Two counters, each compared at N and 2N entries against an absolute
+    linear bound (never a ratio):
+
+    * comparisons: stored hashes are compared with ``==`` (``_CountingStr``).
+    * interpreter work: bytecode instructions run inside
+      ``knowledge/memory.py`` (``sys.monitoring``).
+
+    Known residue: quadratic work done entirely in C, for example a list
+    copied on every store (``self._entries = self._entries + [entry]``),
+    raises neither counter. This class does not cover that family.
+    """
+
+    async def test_ingest_comparisons_scale_linearly(self) -> None:
+        counts: dict[int, tuple[int, int]] = {}
+        for n in (_WORK_N, _WORK_2N):
+            _CountingStr.eq_calls = 0
+            _CountingStr.hash_calls = 0
+            await _ingest(InMemoryVaultBackend(), n, prefix="c", hash_factory=_CountingStr)
+            counts[n] = (_CountingStr.eq_calls, _CountingStr.hash_calls)
+            assert counts[n][1] >= n, (
+                f"VOID: only {counts[n][1]} hash lookups for {n} entries — "
+                "the counting probe never reached the exists() lookup"
+            )
+        eq_n, eq_2n = counts[_WORK_N][0], counts[_WORK_2N][0]
+        assert eq_2n <= 2 * eq_n + 16, (
+            f"comparisons grew quadratically: {eq_n} at {_WORK_N} entries, "
+            f"{eq_2n} at {_WORK_2N} entries"
+        )
+
+    async def test_ingest_interpreter_work_scales_linearly(self) -> None:
+        ops_n = await _count_interpreter_ops(_WORK_N, prefix="o")
+        ops_2n = await _count_interpreter_ops(_WORK_2N, prefix="p")
+        assert ops_n >= _WORK_N, (
+            f"VOID: {ops_n} instructions counted for {_WORK_N} entries — "
+            "the counter never fired inside knowledge/memory.py"
+        )
+        assert ops_2n <= 2 * ops_n + 64, (
+            "interpreter work in knowledge/memory.py grew quadratically: "
+            f"{ops_n} instructions at {_WORK_N} entries, {ops_2n} at {_WORK_2N} entries"
+        )
 
 
 class TestExistsIsConstantTime:

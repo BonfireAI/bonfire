@@ -157,14 +157,16 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # `feedback_line_anchored_allowlists_fragile_2026_05_16`,
         # any README hero/section addition above this breadcrumb
         # shifts these anchors and the test fires.
+        # 1.0.3 release fix: shifted 362/363 → 364/365 when the upgrade
+        # line was added to the README Install section.
         (
             "README.md",
-            362,
+            364,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            363,
+            365,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -184,24 +186,26 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # redesign.
         # 1.0.2 security patch: shifted 558/560/561/578 → 580/582/583/600 when
         # the [1.0.2] section was added at the top of CHANGELOG.
+        # 1.0.3 release fix: shifted 580/582/583/600 → 598/600/601/618
+        # when the [1.0.3] section was added at the top of CHANGELOG.
         (
             "CHANGELOG.md",
-            580,
+            598,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            582,
+            618,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            583,
+            601,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            600,
+            618,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

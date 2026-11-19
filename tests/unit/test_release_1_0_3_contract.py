@@ -1,4 +1,7 @@
-"""Contract for the 1.0.2 security patch release."""
+"""Contract for the 1.0.3 release (the 1.0.2 security patch contract, carried forward).
+
+Was test_release_1_0_2_contract.py; 1.0.2 was tagged but never published, 1.0.3 carries the same contract.
+"""
 
 from __future__ import annotations
 
@@ -20,8 +23,8 @@ def _pyproject() -> dict:
     return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
-def test_pyproject_version_is_1_0_2() -> None:
-    assert _pyproject()["project"]["version"] == "1.0.2"
+def test_pyproject_version_is_1_0_3() -> None:
+    assert _pyproject()["project"]["version"] == "1.0.3"
 
 
 def test_claude_agent_sdk_floor_excludes_vulnerable_range() -> None:
@@ -35,15 +38,15 @@ def test_claude_agent_sdk_floor_excludes_vulnerable_range() -> None:
     assert "0.2.185" in spec
 
 
-def test_init_version_fallback_is_1_0_2() -> None:
+def test_init_version_fallback_is_1_0_3() -> None:
     src = (ROOT / "src" / "bonfire" / "__init__.py").read_text(encoding="utf-8")
-    assert '__version__ = "1.0.2"' in src
+    assert '__version__ = "1.0.3"' in src
 
 
-def test_changelog_first_heading_is_1_0_2() -> None:
+def test_changelog_first_heading_is_1_0_3() -> None:
     for line in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
         if line.startswith("## ["):
-            assert line.startswith("## [1.0.2]"), line
+            assert line.startswith("## [1.0.3]"), line
             return
     raise AssertionError("no '## [' heading in CHANGELOG.md")
 

@@ -21,6 +21,16 @@ from packaging.version import Version
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GUARD = REPO_ROOT / "scripts" / "check_tag_version.py"
 
+# Mirrors _PERSON_NAME in test_no_persona_names_in_public_docs.py (case-sensitive).
+PERSON_NAME = re.compile(r"\b(Anta|Antawari)\b")
+
+
+def _name_hits(text: str, label: str) -> list[str]:
+    """``label:lineno`` for each line of ``text`` that names a person."""
+    return [
+        f"{label}:{n}" for n, line in enumerate(text.splitlines(), 1) if PERSON_NAME.search(line)
+    ]
+
 
 def _declared() -> str:
     with (REPO_ROOT / "pyproject.toml").open("rb") as fh:
@@ -87,3 +97,22 @@ class TestPublicSurfaceHygiene:
             if marker.search(line)
         ]
         assert not hits, f"internal attribution markers: {hits}"
+
+    def test_no_personal_name_in_shipped_tree(self) -> None:
+        src = REPO_ROOT / "src" / "bonfire"
+        files = [f for f in sorted(src.rglob("*")) if f.is_file() and "__pycache__" not in f.parts]
+        files.append(REPO_ROOT / "README.md")
+        hits: list[str] = []
+        for f in files:
+            try:
+                text = f.read_text()
+            except UnicodeDecodeError:
+                continue
+            hits += _name_hits(text, str(f.relative_to(REPO_ROOT)))
+        assert not hits, f"personal names in shipped tree: {hits}"
+
+    def test_personal_name_rod_has_teeth(self) -> None:
+        assert _name_hits("    + Anta-ratified §A Q9a):\n", "plant") == ["plant:1"]
+        # Case-sensitive on purpose: a lowercase address host is not a name mention.
+        assert _name_hits("x@antawari.example", "plant") == []
+        assert _name_hits("Antawari wrote this", "plant") == ["plant:1"]

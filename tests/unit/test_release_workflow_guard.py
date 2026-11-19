@@ -44,7 +44,7 @@ def _guard_problems(workflow: dict) -> list[str]:
     build = _index(steps, _BUILD_MARKER)
     if guard is None:
         problems.append("release-guard-missing")
-    elif build is not None and guard > build:
+    elif build is None or guard >= build:
         problems.append("release-guard-after-build")
     if "build" not in _needs(workflow, "publish"):
         problems.append("publish-not-gated-on-build")

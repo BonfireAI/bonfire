@@ -114,13 +114,13 @@ async def _run_scan(
         raise typer.Exit(code=1) from exc
     except MessageTooLargeError as exc:
         # The client sent a WS frame larger than the
-        # server's 8 KiB cap (just-merged W8.L defense). The server
+        # server's 8 KiB cap (the server-side frame-size defense). The server
         # closes with WS code 1009; without this branch the user saw
         # the generic "Browser closed" message — a misleading diagnosis
         # that sent them back through `bonfire scan` only to hit the
         # same wall on the same too-long answer. Surface the actionable
         # remediation: shorten the answer. The WS cap stays at 8 KiB on
-        # purpose — it's the W8.L OOM defense, not a budget slot.
+        # purpose — it's the OOM defense, not a budget slot.
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     except BrowserDisconnectedError as exc:

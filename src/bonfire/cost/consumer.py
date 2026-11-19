@@ -33,7 +33,7 @@ class CostLedgerConsumer:
 
     Writes route through ``bonfire._safe_write.safe_append_text`` so a
     planted symlink at the operator-controlled ledger path is refused
-    at ``open(2)`` time (W7.M defense-in-depth parity).
+    at ``open(2)`` time (defense-in-depth parity).
 
     With no explicit ``ledger_path`` the destination comes from
     :func:`~bonfire.cost.models.resolve_ledger_path`, the same resolver

@@ -273,13 +273,13 @@ def _safe_resolve_config_path(path: Path, *, home_dir: Path, project_path: Path)
 def _read_text_sync(path: Path, *, max_bytes: int) -> str:
     """Synchronous text read offloaded onto a worker thread.
 
-    Routes through :func:`safe_read_capped_text` (W7.M read-side helper)
+    Routes through :func:`safe_read_capped_text` (read-side helper)
     so the read uses ``O_NOFOLLOW`` defense-in-depth — a race-planted
     symlink at the resolved path between ``_safe_resolve_config_path``
     and this read is refused at ``open(2)`` time by the kernel. Without
     the ``O_NOFOLLOW`` open, the prior ``Path.read_text(encoding="utf-8")``
     would dereference the symlink and slurp the attacker-controlled
-    target's bytes into the JSON parser (W11 H1 TOCTOU gap).
+    target's bytes into the JSON parser (TOCTOU gap).
 
     Re-uses the caller's already-resolved byte cap so the symlink-refusal
     is bolted onto the existing size-cap policy without changing the
@@ -337,7 +337,7 @@ async def _read_servers_from_config(
         data = json.loads(raw)
     except (json.JSONDecodeError, OSError, ValueError) as exc:
         # ``OSError`` covers FileExistsError raised by safe_read_capped_text
-        # when a race-planted symlink is detected at open(2) time (W11 H1
+        # when a race-planted symlink is detected at open(2) time (TOCTOU
         # defense-in-depth). ``ValueError`` covers the cap-exceeded case
         # — the symmetric counterpart to the existing stat()-based skip
         # above (a file growing between stat and read past the cap is

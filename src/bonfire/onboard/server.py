@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 MessageCallback = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
-# WS server hard limits (W8.L). Pinning ``max_size`` defends the asyncio loop
+# WS server hard limits. Pinning ``max_size`` defends the asyncio loop
 # from large-frame OOM; the ``websockets`` default of 1 MiB is far above
 # anything the onboard chat protocol sends. ``max_queue`` caps per-connection
 # backpressure depth so a slow handler can't accumulate frames unbounded.

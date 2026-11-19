@@ -58,7 +58,7 @@ _NO_PR_NUMBER_TOKEN: str = "0"  # noqa: S105
 # alphanumerics, 1-32 chars. Same allow-list shape used elsewhere for
 # user-controlled identifiers that interpolate into file paths and git
 # refs (see ``bonfire.models.events._validate_session_id``). Refuses
-# every adversarial shape covered by the W11 M4 audit:
+# every adversarial shape covered by the hostile-input audit:
 #   ``..`` / ``../foo`` / ``foo/../bar`` — parent-traversal
 #   ``foo/bar`` / ``\\``                  — separators
 #   ``-leading-dash``                     — git-flag injection
@@ -82,7 +82,7 @@ def _validate_prefix(prefix: str) -> None:
     ephemeral branch) outside the ``.bonfire-worktrees/`` jail and
     smuggles git-flag-shaped tokens into later ``git`` calls. This
     validator enforces the allow-list shape ``^[a-zA-Z0-9_-]{1,32}$``
-    which refuses every adversarial shape covered in the W11 M4
+    which refuses every adversarial shape covered in the hostile-input
     contract: ``..``, ``/``, ``\\``, leading ``-``, leading ``.``,
     empty, null bytes, control chars, spaces, dots, and length
     overflow.
@@ -168,7 +168,7 @@ class ScratchWorktreeFactory:
         On ``__aexit__``: removes the worktree and deletes the ephemeral
         branch. NEVER raises.
 
-        W11 M4: ``_validate_prefix`` rejects hostile ``prefix`` kwargs
+        ``_validate_prefix`` rejects hostile ``prefix`` kwargs
         (path-traversal, separators, git-flag-shaped, control chars,
         empty) BEFORE the context is constructed so a malicious caller
         cannot land the worktree outside ``.bonfire-worktrees/`` or

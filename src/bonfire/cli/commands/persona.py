@@ -200,7 +200,7 @@ def persona_set(
         raise typer.Exit(code=1)
 
     if toml_path.exists():
-        # W11 M3: route through ``safe_read_capped_text`` so the read uses
+        # Route through ``safe_read_capped_text`` so the read uses
         # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
         # between the ``is_symlink`` pre-check above and this read. The
         # content is partially echoed back through ``re.sub`` into the

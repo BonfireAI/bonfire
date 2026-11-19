@@ -9,5 +9,5 @@ commands shipping in v0.1 are: ``init``, ``scan``, ``status``,
 
 Three additional command modules (``pipeline``, ``project``, ``memory``)
 are intentionally deferred and
-will land in a follow-up wave.
+will land in a later release.
 """

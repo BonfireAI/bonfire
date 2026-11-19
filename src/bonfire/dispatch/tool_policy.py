@@ -103,14 +103,14 @@ class DefaultToolPolicy:
         # Direct lookup: preserves the byte-for-byte contract on
         # gamified inputs. ``dict.get`` raises ``TypeError`` for
         # unhashable inputs (list/dict) — that's the documented
-        # AMBIG #5 behavior and we preserve it.
+        # behavior and we preserve it.
         floor_hit = self._FLOOR.get(role)
         if floor_hit is not None:
             return list(floor_hit)
 
         # Generic-input path: normalize and look up the gamified key.
         # Only str inputs are normalized; non-str hashable inputs (None,
-        # int, tuple) just fall through to ``[]`` per AMBIG #5.
+        # int, tuple) just fall through to ``[]``.
         if isinstance(role, str):
             normalized = role.strip().lower()
             gamified = _GENERIC_TO_GAMIFIED.get(normalized)

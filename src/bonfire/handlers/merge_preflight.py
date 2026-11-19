@@ -299,7 +299,7 @@ class MergePreflightHandler:
         diff -> sibling diffs -> pytest -> JUnit parse -> baseline cache
         -> deterministic classifier).
 
-        Step ordering follows the documented sequence exactly:
+        Step ordering:
             5. Apply current PR diff in scratch (``git apply --3way``).
             6. Apply sibling-batch diffs in ascending PR-number order
                (later PR's diff takes precedence on
@@ -308,7 +308,7 @@ class MergePreflightHandler:
             8. Parse failures from JUnit XML; fall back to stdout regex
                if XML is empty AND returncode != 0.
             9. Compute / cache baseline failures on ``origin/<base>``.
-           10. Call :py:func:`classify_pytest_run` (Warrior B's pure fn).
+           10. Call :py:func:`classify_pytest_run` (the pure classifier function).
 
         Envelope-size discipline:
             - ``pytest_stdout_tail`` is truncated to 2KB.
@@ -395,7 +395,7 @@ class MergePreflightHandler:
         # Step 9: baseline failures on origin/<base> (cached).
         baseline = await self._get_baseline_failures(info.base_sha)
 
-        # Step 10: deterministic classification (Warrior B pure function).
+        # Step 10: deterministic classification (the pure classifier function).
         # ``pytest_stdout`` is already 2KB-tail
         # bounded inside _run_pytest_in_worktree.
         return classify_pytest_run(
@@ -456,7 +456,7 @@ class MergePreflightHandler:
     ) -> _PytestResult:
         """Run pytest inside *worktree_path*; return a :class:`_PytestResult`.
 
-        The safeguards are listed below.
+        Subprocess safeguards:
 
         Subprocess discipline:
             - Args built as a ``tuple[str, ...]``; never a shell string.

@@ -150,7 +150,7 @@
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 74986
+    "tests/unit": 75209
   },
   "package_raises": [
     {
@@ -287,6 +287,14 @@
       "to": 74986,
       "lines": 64,
       "reason": "The 64 lines are tests/unit/test_memory_vault.py growing 295 -> 359. The ingest-scaling test used to time ingest at 100k versus 200k entries with a 3.0x wall-clock cap; on a shared CI runner it measured 3.16x on a correct implementation. It is replaced by two load-free work counters at 2k versus 4k entries: equality comparisons on the content hashes, and interpreter instructions executed inside bonfire/knowledge/memory.py (via sys.monitoring, with a typed error if the profiler tool id is taken), each with a guard that fails if the counter never fired, and an absolute linear bound, never a ratio. The change is +133 for the two counters, the counting hash helper and the typed error, -70 for the removed wall-clock test, and +1 for a guard fix. Explicitly rejected: dropping the comparison counter to save lines, since it measures the hash lookup directly and does not depend on sys.monitoring, so it still holds if the instruction counter cannot run; trimming comments or blank lines to fit; and a purpose entry, which takes the file out of the ratchet instead of paying for it. Measured by cf-file-budget on the final tree: 'package tests/unit is 74986 lines (frozen 74922)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 74986,
+      "to": 75209,
+      "lines": 223,
+      "reason": "The 223 lines are tests/unit/test_workflow_action_pins.py, new: every `uses:` value in every workflow file (read from the parsed YAML, so a pin that exists only in a comment does not count) must be pinned to a 40-hex commit SHA recorded with its tag and measured runtime in one table; node20/node16/node12 runtimes and stale records fail; the publish action stays owned by the PUBLISHER_BUNDLES table in test_release_workflow_guard.py. It came with moving the workflow actions off Node 20 to commit-pinned Node 24 releases. Explicitly rejected: a purpose entry, which takes the file out of the ratchet instead of paying for it; folding the checks into test_release_workflow_guard.py, which moves the lines without removing them and mixes two concerns; trimming comments or blank lines to fit. Measured by cf-file-budget on the final tree: 'package tests/unit is 75209 lines (frozen 74986)'. Raised to exactly the measurement, with no headroom.",
       "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
     }
   ]

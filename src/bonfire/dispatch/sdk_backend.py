@@ -54,6 +54,19 @@ logger = logging.getLogger(__name__)
 # A logged-in CLI attaches the user's claude.ai account connectors; no grant declares them.
 _AGENT_ENV: dict[str, str] = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false"}
 
+# Stable code logged when a rate-limit event arrives without its rate-limit info.
+RATE_LIMIT_EVENT_MALFORMED: str = "rate_limit_event_malformed"
+
+
+# Mirrors the private engine's rate-limit reader; this copy only logs.
+def _rate_limit_status(msg: Any) -> str:
+    """Return the event's status, logging once when the rate-limit info is missing."""
+    info = getattr(msg, "rate_limit_info", None)
+    if info is None:
+        logger.warning("Rate limit event malformed: %s", RATE_LIMIT_EVENT_MALFORMED)
+        return ""
+    return getattr(info, "status", "")
+
 
 # ---------------------------------------------------------------------------
 # Traceback redaction
@@ -294,7 +307,7 @@ class ClaudeSDKBackend:
                     errors = getattr(msg, "errors", None)
 
                 elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
-                    status = getattr(msg.rate_limit_info, "status", "")
+                    status = _rate_limit_status(msg)
                     if status == "rejected":
                         return envelope.with_error(
                             ErrorDetail(

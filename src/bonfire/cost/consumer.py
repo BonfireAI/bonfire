@@ -33,7 +33,7 @@ class CostLedgerConsumer:
 
     Writes route through ``bonfire._safe_write.safe_append_text`` so a
     planted symlink at the operator-controlled ledger path is refused
-    at ``open(2)`` time (W7.M defense-in-depth parity).
+    at ``open(2)`` time (defense-in-depth parity).
 
     With no explicit ``ledger_path`` the destination comes from
     :func:`~bonfire.cost.models.resolve_ledger_path`, the same resolver
@@ -75,7 +75,7 @@ class CostLedgerConsumer:
     async def _on_pipeline_failed(self, event: PipelineFailed) -> None:
         """Persist a ``PipelineRecord`` for halt-path runs.
 
-        Wave 11 Lane A grew ``PipelineFailed`` to carry
+        ``PipelineFailed`` carries
         ``duration_seconds`` (M3) and ``stages_completed`` (M7),
         symmetric with ``PipelineCompleted``. Forwarding both fields
         means halt-path rows carry real run length and real progress

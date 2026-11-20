@@ -56,7 +56,7 @@ class XPTracker:
 
         Uses ``safe_append_text`` to refuse symlinks at
         ``xp_events.jsonl`` (via ``is_symlink()`` pre-check +
-        ``O_NOFOLLOW`` defense-in-depth). The W7.M ``safe_write_text``
+        ``O_NOFOLLOW`` defense-in-depth). The ``safe_write_text``
         rollout closed truncate-mode write sites but missed this
         append-mode site; a planted symlink would otherwise redirect
         every recorded XP event to an attacker-controlled target.
@@ -77,10 +77,10 @@ class XPTracker:
     def events(self) -> list[dict]:
         """Read all events from the JSONL file.
 
-        Uses ``safe_read_capped_text`` (W7.M read-side helper) to refuse
+        Uses ``safe_read_capped_text`` (read-side helper) to refuse
         symlinks at ``xp_events.jsonl`` and to cap reads at
         ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
-        ``safe_append_text`` write-side hardening on ``record``: Wave 9
+        ``safe_append_text`` write-side hardening on ``record``: earlier work
         closed the write half of the XP-ledger attack surface; this
         closes the read half.
 
@@ -89,7 +89,7 @@ class XPTracker:
         NOT collapse into the empty-list "no events yet" branch and
         mask the attack signal. Live, dangling, and looping symlinks
         all route through ``safe_read_capped_text`` which raises
-        ``FileExistsError`` with the W7.M ``"symlink"`` substring.
+        ``FileExistsError`` with the ``"symlink"`` substring.
         """
         if not self._jsonl_path.is_symlink() and not self._jsonl_path.exists():
             return []

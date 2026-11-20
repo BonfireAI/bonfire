@@ -47,7 +47,7 @@ _INIT_READ_MAX_BYTES: int = 1 * 1024 * 1024
 # Never committable — seeded here:
 #   * ``.bonfire/tools.local.toml`` — the host tool inventory and version
 #     footprint ``bonfire scan`` stamps; per-machine, and a privacy leak
-#     in a public repo. (Introduced by the W8.G migration.)
+#     in a public repo. (Introduced by the operator-local tools split.)
 #   * ``.bonfire/vault`` — the knowledge backend's store, once an
 #     operator enables a persistent one. NO trailing slash: one default
 #     path, TWO on-disk shapes, and one pattern must cover both. LanceDB
@@ -225,8 +225,8 @@ def _ensure_gitignore_entries(target: Path, lines: tuple[str, ...]) -> None:
     lines as a single payload — so the number of writes is independent
     of the number of entries.
 
-    Uses :func:`safe_write_text` (W7.M) when creating the file fresh
-    and :func:`safe_append_text` (W7.M append helper) when extending
+    Uses :func:`safe_write_text` when creating the file fresh
+    and :func:`safe_append_text` (append helper) when extending
     an existing ``.gitignore``. ``safe_append_text`` carries the
     ``O_NOFOLLOW`` defense-in-depth guard that closes the TOCTOU
     window a race-planted symlink could otherwise slip through
@@ -259,7 +259,7 @@ def _ensure_gitignore_entries(target: Path, lines: tuple[str, ...]) -> None:
         _write_or_refuse(gitignore_path, header + _as_entry_block(lines), label=".gitignore")
         return
 
-    # W11 M2: route through ``safe_read_capped_text`` so the read uses
+    # Route through ``safe_read_capped_text`` so the read uses
     # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
     # between the ``is_symlink`` pre-check above and this read.
     existing = _read_or_refuse(gitignore_path, ".gitignore")
@@ -280,7 +280,7 @@ def _ensure_gitignore_entries(target: Path, lines: tuple[str, ...]) -> None:
     # complexity in v0.1.
     #
     # Route the append through ``safe_append_text`` (not raw
-    # ``Path.write_text``) so the W7.M ``O_NOFOLLOW`` defense closes
+    # ``Path.write_text``) so the ``O_NOFOLLOW`` defense closes
     # the TOCTOU window between the ``is_symlink()`` pre-check above
     # and the on-disk write — a race-planted symlink at ``.gitignore``
     # is refused at ``open(2)`` time by the kernel rather than slipping
@@ -318,7 +318,7 @@ def _existing_gitignore_entries(gitignore_path: Path) -> set[str]:
 def _has_legacy_tools_section(toml_path: Path) -> bool:
     """Return True iff ``toml_path`` contains a top-level ``[bonfire.tools]`` section.
 
-    Best-effort, non-strict: a substring scan on the file body. The W8.G
+    Best-effort, non-strict: a substring scan on the file body. The tools
     migration demoted the tools table to ``.bonfire/tools.local.toml``;
     a pre-migration ``bonfire.toml`` that still carries the section is
     silently orphaned by :func:`bonfire.onboard.config_generator.load_tools_config`
@@ -331,7 +331,7 @@ def _has_legacy_tools_section(toml_path: Path) -> bool:
     if not toml_path.is_file() or toml_path.is_symlink():
         return False
     try:
-        # W11 M2: route through ``safe_read_capped_text`` so the read uses
+        # Route through ``safe_read_capped_text`` so the read uses
         # ``O_NOFOLLOW`` defense-in-depth against a race-planted symlink
         # between the ``is_symlink`` pre-check above and this read. The
         # cap-exceeded branch (``ValueError``) is treated identically to
@@ -387,7 +387,7 @@ def _prepare_target_dir(project_dir: str) -> Path:
 def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str]) -> None:
     """Print the per-artefact summary.
 
-    W9 Lane B (release-gate-5: every documented surface accurate) —
+    (release-gate-5: every documented surface accurate) —
     enumerate every artefact ``bonfire init`` creates or touches. README
     Quick Start enumerated only the subset (``bonfire.toml`` +
     ``.bonfire/``) and the prior success message hid the rest: the
@@ -398,7 +398,7 @@ def _report(target: Path, pre_existed: dict[str, bool], seeded_before: set[str])
 
     Per-artefact verb prefix: ``Created:`` when the artefact was created
     this run, ``Already present:`` when it pre-existed. The artefact-name
-    part of each line is preserved verbatim so the W9 Lane B
+    part of each line is preserved verbatim so the
     reconciliation pin (substring search for artefact names in stdout)
     keeps passing. Every line printed here describes a path this command
     has already confirmed exists in the shape it claims.
@@ -465,7 +465,7 @@ def init(
         typer.echo(
             f"Warning: {toml_path} contains a legacy [bonfire.tools] section. "
             "Move it to .bonfire/tools.local.toml — the operator-local file "
-            "the W8.G migration introduced. The main bonfire.toml stays "
+            "Bonfire reads tools from. The main bonfire.toml stays "
             "project-portable; the local file holds per-machine state. "
             "(bonfire init does not auto-move; edit by hand.)",
             err=True,

@@ -263,7 +263,7 @@ async def run_front_door(  # noqa: C901,PLR0915
         # Happy path: all three answers in, advance to Act III.
         pass
     elif shutdown_task in finished:
-        # W9 Lane B (H3): discriminate oversize-close from generic browser
+        # Discriminate oversize-close from generic browser
         # disconnect. ``FrontDoorServer._ws_handler`` flips
         # ``oversize_disconnect`` when a client connection closes with
         # WS code 1009 (message-too-big), enforced by ``max_size``. Without

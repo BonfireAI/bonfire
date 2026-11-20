@@ -123,7 +123,7 @@ def main(
 ) -> None:
     """Bonfire — AI agent orchestration framework.
 
-    W9 Lane B: the global ``--persona`` override was removed. No subcommand
+    The global ``--persona`` override was removed. No subcommand
     actually reads it (the value was written to ``ctx.obj`` and
     never consulted by any command), so its presence implied a per-command
     override surface that did not exist. The persona is configured per

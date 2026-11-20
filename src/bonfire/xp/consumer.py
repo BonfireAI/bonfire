@@ -85,7 +85,7 @@ class XPConsumer:
     async def _handle_pipeline_failed(self, event: PipelineFailed) -> None:
         """Bus handler for pipeline failures — applies XP penalty or respawn.
 
-        Wave 11 Lane A grew ``PipelineFailed`` to carry
+        ``PipelineFailed`` carries
         ``stages_completed`` (M7) and ``duration_seconds`` (M3),
         symmetric with ``PipelineCompleted``. Forwarding both lets the
         XP calculator distinguish a stage-1 failure (no progress) from

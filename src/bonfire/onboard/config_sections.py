@@ -37,7 +37,7 @@ _TOOLS_LABEL_WHITELIST = re.compile(r"^[a-z][a-z0-9_-]{0,32}$")
 
 
 # ---------------------------------------------------------------------------
-# Operator-local tools sentinel (W8.G)
+# Operator-local tools sentinel
 # ---------------------------------------------------------------------------
 #
 # ``generate_config`` does not know the project_path on disk; the only
@@ -152,7 +152,7 @@ def _build_project(
 def _build_tools(
     scans: list[ScanUpdate],
 ) -> tuple[str, dict[str, str]] | None:
-    """No-op for the project-portable TOML (W8.G).
+    """No-op for the project-portable TOML.
 
     The ``cli_toolchain`` panel is per-machine state (operator's installed
     CLI tools + versions). Stamping it into ``bonfire.toml`` would:

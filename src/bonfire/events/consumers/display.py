@@ -128,7 +128,7 @@ class DisplayConsumer:
         """Subscribe to the operator-facing state-transition event types.
 
         Originally four (stage success/failure, quality failure, budget
-        warning); Wave 11 Lane A added the three halt-branch /
+        warning); it now adds the three halt-branch /
         budget-broken signals so operators driving the CLI see a
         visible message on every important state transition:
 

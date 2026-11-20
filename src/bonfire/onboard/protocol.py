@@ -23,12 +23,12 @@ from pydantic import BaseModel, Field
 # frame would stall the loop.
 #
 # Unified with ``bonfire.onboard.server._WS_MAX_FRAME_BYTES`` (the
-# websockets ``max_size`` floor wired by W9 Lane B). One value, one
+# websockets ``max_size`` floor). One value, one
 # reason: the Pydantic validator and the WS server share this single
 # source of truth, so a ≥ 8 KiB frame is rejected once with a single
 # diagnostic (``ServerError`` ``message_too_long`` from the Pydantic
 # path) and a ≥ 8 KiB hard-limit close (1009) from the WS path. 8 KiB
-# is long enough for the real Q1/Q2/Q3 free-text answers (W9 Lane B's
+# is long enough for the real Q1/Q2/Q3 free-text answers (the
 # acceptance bracket) and short enough to bound per-frame analyzer cost.
 # Widening (or shrinking) requires a fresh DoS bracket AND a parallel
 # update to ``_WS_MAX_FRAME_BYTES`` so the two stay equal.

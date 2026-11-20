@@ -8,11 +8,11 @@ The Scout-ratified design (Option D) replaces the hardcoded
 with a resolver that DENIES project-settings ingestion by default and only
 opts in when ONE of the following holds:
 
-1. The dispatch ``cwd`` is empty / ``None`` (the operator dispatched from
-   *inside* the bonfire-public tree itself — dogfood ergonomics).
-2. The dispatch ``cwd`` contains a co-located ``bonfire.toml`` (the project
-   has signaled it is Bonfire-aware).
-3. The operator has set ``BONFIRE_TRUST_PROJECT_SETTINGS=1`` in the
+1. The dispatch ``cwd`` (empty / ``None`` means the process cwd) lies inside
+   a directory listed in ``BONFIRE_TRUST_ROOTS`` (absolute paths only; see
+   ``tests/dispatch/test_operator_trust_roots.py``). A directory's own
+   ``bonfire.toml`` is never a trust signal.
+2. The operator has set ``BONFIRE_TRUST_PROJECT_SETTINGS=1`` in the
    environment (explicit acknowledgement that ingesting a foreign repo's
    ``CLAUDE.md`` / ``.claude/`` settings is intentional).
 
@@ -33,8 +33,8 @@ Truth table the Warrior must satisfy:
 
 | cwd                                  | bonfire.toml? | env var      | result        |
 |--------------------------------------|---------------|--------------|---------------|
-| ``""`` / ``None``                    | n/a           | n/a          | ``["project"]`` |
-| ``<dir with bonfire.toml>``          | yes           | unset        | ``["project"]`` |
+| ``""`` / ``None`` (no roots)         | n/a           | n/a          | ``[]``          |
+| ``<dir with bonfire.toml>``          | yes           | unset        | ``[]``          |
 | ``<foreign dir>``                    | no            | unset        | ``[]``          |
 | ``<foreign dir>``                    | no            | ``"1"``      | ``["project"]`` |
 | ``<foreign dir>``                    | no            | ``"yes"``    | ``[]``          |
@@ -83,6 +83,7 @@ def _scrub_trust_env(monkeypatch: pytest.MonkeyPatch) -> None:
     the override into the test runner.
     """
     monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.delenv("BONFIRE_TRUST_ROOTS", raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -142,22 +143,18 @@ class TestResolveSettingSourcesHelper:
         )
 
     def test_co_located_bonfire_toml_returns_project(self, tmp_path: Path) -> None:
-        """Project signal: ``bonfire.toml`` with explicit opt-in → ``["project"]``.
+        """A co-located ``bonfire.toml`` opt-in is NOT a trust signal → ``[]``.
 
-        BON-1043 tightened the gate: file presence ALONE is no longer
-        sufficient — the TOML must carry the explicit
-        ``[bonfire].trust_project_settings = true`` opt-in. See
-        ``tests/dispatch/test_trust_project_settings_key.py`` for the
-        BON-1043 contract surface.
+        Only the operator's ``BONFIRE_TRUST_ROOTS`` trusts a directory. See
+        ``tests/dispatch/test_operator_trust_roots.py``.
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
         (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == ["project"], (
-            "Co-located ``bonfire.toml`` with explicit "
-            "``trust_project_settings = true`` is the opt-in signal; "
-            f"resolver MUST return ``['project']``. Got {result!r}."
+        assert result == [], (
+            "Co-located ``bonfire.toml`` with ``trust_project_settings = true`` "
+            f"MUST NOT trust the directory. Got {result!r}."
         )
 
     def test_env_override_returns_project(
@@ -176,16 +173,15 @@ class TestResolveSettingSourcesHelper:
             f"override; resolver MUST return ``['project']``. Got {result!r}."
         )
 
-    def test_empty_cwd_returns_project(self) -> None:
-        """Empty ``cwd`` is the dogfood ergonomics path → ``["project"]``."""
+    def test_empty_cwd_without_roots_returns_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty ``cwd`` is the process cwd, judged by roots; none set → ``[]``."""
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        # Empty string — caller dispatched from inside bonfire-public itself,
-        # where the SDK falls back to the runner's actual cwd. That is by
-        # design the Bonfire-aware tree.
-        assert _resolve_setting_sources("") == ["project"]
-        # ``None`` — same semantic; sdk_backend passes ``options.cwd or None``.
-        assert _resolve_setting_sources(None) == ["project"]
+        monkeypatch.chdir(tmp_path)
+        assert _resolve_setting_sources("") == []
+        assert _resolve_setting_sources(None) == []
 
     def test_env_override_value_other_than_1_does_not_trust(
         self,
@@ -230,15 +226,16 @@ class TestResolveSettingSourcesHelper:
             f"``bonfire.toml`` is. Got {result!r}."
         )
 
-    def test_resolver_returns_fresh_list_each_call(self, tmp_path: Path) -> None:
+    def test_resolver_returns_fresh_list_each_call(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Each call returns an independent list — no shared-mutable state.
 
-        Fixture updated for BON-1043: file presence alone no longer trusts;
-        the explicit ``trust_project_settings = true`` key is required.
+        Trust comes from the operator's ``BONFIRE_TRUST_ROOTS``.
         """
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
+        monkeypatch.setenv("BONFIRE_TRUST_ROOTS", str(tmp_path))
         a = _resolve_setting_sources(str(tmp_path))
         b = _resolve_setting_sources(str(tmp_path))
         assert a == b == ["project"]
@@ -294,17 +291,20 @@ class TestSdkBackendUsesResolver:
         self,
         tmp_path: Path,
     ) -> None:
-        """Co-located ``bonfire.toml`` cwd → captured ``setting_sources == ["project"]``.
+        """Co-located opted-in ``bonfire.toml`` cwd → captured ``setting_sources == []``.
 
         Also pins that the resolver IS the source of the value — the
-        ``["project"]`` result MUST come from a ``_resolve_setting_sources``
+        result MUST come from a real ``_resolve_setting_sources``
         invocation in ``_do_execute``, not from a leftover hardcode.
         """
+        from bonfire.dispatch import sdk_backend as _sb
+
+        real_resolver = _sb._resolve_setting_sources
         captured, FakeOptions = _make_capture()
 
         aware = tmp_path / "aware"
         aware.mkdir()
-        (aware / "bonfire.toml").write_text("[bonfire]\n")
+        (aware / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
 
         resolver_calls: list[Any] = []
 
@@ -313,7 +313,7 @@ class TestSdkBackendUsesResolver:
         # patch target itself is missing and ``patch`` raises AttributeError.
         with patch(
             "bonfire.dispatch.sdk_backend._resolve_setting_sources",
-            side_effect=lambda cwd: resolver_calls.append(cwd) or ["project"],
+            side_effect=lambda cwd: resolver_calls.append(cwd) or real_resolver(cwd),
         ):
             with (
                 patch("bonfire.dispatch.sdk_backend.ClaudeAgentOptions", FakeOptions),
@@ -330,7 +330,7 @@ class TestSdkBackendUsesResolver:
         assert resolver_calls[0] == str(aware), (
             f"Resolver MUST receive the dispatch ``cwd`` verbatim. Got {resolver_calls[0]!r}."
         )
-        assert captured["setting_sources"] == ["project"], (
+        assert captured["setting_sources"] == [], (
             "Resolver output MUST be threaded into ``ClaudeAgentOptions``. "
             f"Got {captured['setting_sources']!r}."
         )

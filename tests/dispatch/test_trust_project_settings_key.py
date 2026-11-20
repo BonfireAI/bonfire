@@ -23,8 +23,8 @@ Truth table the Warrior must satisfy:
 
 | cwd | trust_project_settings? | env var | result |
 |------------------------------------------------------|-------------------------|---------|-----------------|
-| ``""`` / ``None`` (dogfood) | n/a | n/a | ``["project"]`` |
-| ``<dir with bonfire.toml, key=true>`` | true | unset | ``["project"]`` |
+| ``""`` / ``None`` (process cwd, no roots) | n/a | n/a | ``[]`` |
+| ``<dir with bonfire.toml, key=true>`` | true | unset | ``[]`` (key ignored) |
 | ``<dir with bonfire.toml, key=false>`` | false | unset | ``[]`` |
 | ``<dir with bonfire.toml, key missing>`` | (absent) | unset | ``[]`` |
 | ``<dir with bonfire.toml, [bonfire] table missing>`` | n/a | unset | ``[]`` |
@@ -32,6 +32,9 @@ Truth table the Warrior must satisfy:
 | ``<foreign dir, no bonfire.toml>`` | n/a | unset | ``[]`` |
 | ``<foreign dir>`` | n/a | ``"1"`` | ``["project"]`` |
 | ``<dir with key=false but env="1">`` | false | ``"1"`` | ``["project"]`` |
+
+Only the operator decides: ``BONFIRE_TRUST_ROOTS`` is the trust list (see
+``test_operator_trust_roots.py``); the toml key is never a trust signal.
 
 The env-override stays STRICT-``"1"`` (no normalization). The TOML key
 must be a literal boolean ``true``; ``"true"``/``"1"``/``1`` strings or
@@ -49,6 +52,7 @@ import pytest
 def _scrub_trust_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure ``BONFIRE_TRUST_PROJECT_SETTINGS`` is unset at test start."""
     monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.delenv("BONFIRE_TRUST_ROOTS", raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -124,22 +128,22 @@ class TestBonfireTomlWithoutKeyBlocks:
 # ---------------------------------------------------------------------------
 
 
-class TestExplicitKeyLoads:
-    """``[bonfire].trust_project_settings = true`` is the only valid TOML opt-in."""
+class TestExplicitKeyIgnored:
+    """``[bonfire].trust_project_settings = true`` no longer opts a directory in."""
 
     def test_explicit_true_loads(self, tmp_path: Path) -> None:
-        """``trust_project_settings = true`` → ``["project"]``."""
+        """``trust_project_settings = true`` → ``[]`` (key ignored)."""
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
         (tmp_path / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == ["project"], (
-            "Explicit ``[bonfire].trust_project_settings = true`` MUST "
-            f"return ``['project']``. Got {result!r}."
+        assert result == [], (
+            "A directory's own ``trust_project_settings = true`` MUST be "
+            f"ignored; only the operator's roots trust. Got {result!r}."
         )
 
     def test_explicit_true_with_other_keys_loads(self, tmp_path: Path) -> None:
-        """Explicit opt-in alongside other settings → ``["project"]``."""
+        """Explicit key alongside other settings is still ignored → ``[]``."""
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
         toml = (
@@ -147,9 +151,7 @@ class TestExplicitKeyLoads:
         )
         (tmp_path / "bonfire.toml").write_text(toml)
         result = _resolve_setting_sources(str(tmp_path))
-        assert result == ["project"], (
-            f"Explicit opt-in MUST be honored alongside other keys. Got {result!r}."
-        )
+        assert result == [], f"The key MUST be ignored alongside other keys. Got {result!r}."
 
 
 # ---------------------------------------------------------------------------
@@ -296,15 +298,17 @@ class TestEnvOverridePreserved:
 # ---------------------------------------------------------------------------
 
 
-class TestEmptyCwdUnaffected:
-    """Empty cwd remains the dogfood path → ``["project"]`` (BON-1013 preserved)."""
+class TestEmptyCwdJudgedAsProcessCwd:
+    """Empty cwd is the process cwd, judged like any other: no roots → ``[]``."""
 
-    def test_empty_string_cwd(self) -> None:
+    def test_empty_string_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        assert _resolve_setting_sources("") == ["project"]
+        monkeypatch.chdir(tmp_path)
+        assert _resolve_setting_sources("") == []
 
-    def test_none_cwd(self) -> None:
+    def test_none_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from bonfire.dispatch.sdk_backend import _resolve_setting_sources
 
-        assert _resolve_setting_sources(None) == ["project"]
+        monkeypatch.chdir(tmp_path)
+        assert _resolve_setting_sources(None) == []

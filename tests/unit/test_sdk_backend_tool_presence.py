@@ -29,6 +29,7 @@ Knight-A adversarial tests elevated to mandatory:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -321,8 +322,12 @@ class TestExistingKwargsPreserved:
 
         assert captured.get("max_turns") == 7
 
-    async def test_setting_sources_preserved(self) -> None:
-        """The hardcoded ``setting_sources=["project"]`` MUST remain."""
+    async def test_setting_sources_preserved(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The ``setting_sources`` kwarg MUST still be passed (resolver output)."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("BONFIRE_TRUST_ROOTS", str(tmp_path))
         captured, FakeOptions = _make_capture()
 
         with (

@@ -296,7 +296,7 @@ chat — no browser tab, no WebSocket, no context switch.
 
 ### Audit
 
-A full audit at the post-Wave-11 baseline (three independent scouts:
+A full audit at the post-transfer baseline (three independent scouts:
 security, pipeline, onboard) returned **zero CRITICAL findings across
 all three axes**. The two HIGHs surfaced by the onboard scout
 (stub-command caveat, `ANTHROPIC_API_KEY` in Quick Start) folded into
@@ -335,7 +335,7 @@ and in a fresh release-gate Box.
   `PipelineFailed`. Bus-observed total now equals
   `PipelineResult.total_cost_usd` on success, failure, bounce, and
   parallel-group paths.
-- **`safe_read_capped_text` mirrored to symmetric read sites.** The Wave-9
+- **`safe_read_capped_text` mirrored to symmetric read sites.** The earlier
   safe-write rollout now covers `session/persistence.py::read_events`,
   `xp/tracker.py::XPTracker.events`, and the `bonfire init` gitignore
   append. Symlink, oversize, and TOCTOU shapes are refused with typed
@@ -414,7 +414,7 @@ together form the trust triangle a production deployment composes against.
 The stable `0.1.0` tag remains held until the full release-gate ladder
 (per [`docs/release-policy.md`](docs/release-policy.md)) clears in code,
 in CI, and in a fresh release-gate Box. Follow-ups surfaced in this alpha
-are tracked under BON-610 and ship in subsequent v0.1.0aN or v0.1.x patches.
+are tracked as follow-ups and ship in subsequent v0.1.0aN or v0.1.x patches.
 
 Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
 hardening pass across the dispatch, scanner, persona, git, and Front Door
@@ -574,7 +574,7 @@ passes" mean what it should on the integration branch.
   `python3-yaml` so the in-box gate-verdict script can actually run.
   `claude --version` is asserted at image build time — a broken install
   now fails the build instead of surfacing as a runtime `exit:127`.
-- W4.1 framing reconciled across `dispatch/tool_policy.py`,
+- Tool-policy framing reconciled across `dispatch/tool_policy.py`,
   `docs/release-policy.md`, and `CLAUDE.md`: the `ToolPolicy` extension
   Protocol IS the user-configurable surface; no TOML loader ships in
   v0.1. Users override the default allow-list floor by implementing

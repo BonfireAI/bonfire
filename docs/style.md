@@ -44,7 +44,7 @@ appears in roughly 80% of files; `# ===` appears in roughly 20%). Both are
 visually scannable; the cost of tolerating both is invisible to readers but
 real to tooling — every grep for "section dividers" must double its
 patterns, every ratchet test that wants to enforce structure must check two
-forms. The cluster-350 cleanup picks one and locks it.
+forms. This cleanup picks one and locks it.
 
 ### Why `# ---` won
 
@@ -120,7 +120,7 @@ any merged PR.
 ### Migration path
 
 Existing `# ===` dividers in `src/bonfire/` are tracked as a follow-up
-ticket. The cluster-350 contract does NOT require a sweeping rewrite —
+ticket. This cleanup does NOT require a sweeping rewrite —
 files migrate opportunistically as PRs touch them. New files MUST use
 `# ---`.
 

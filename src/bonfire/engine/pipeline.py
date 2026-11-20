@@ -838,7 +838,7 @@ class PipelineEngine:
             # ``failed_handler`` distinction to make on this branch.
             return None, bounce_cost + retry_cost, None
 
-        # Re-evaluate gates on the retried result (ONCE -- Sage D7).
+        # Re-evaluate gates on the retried result (ONCE).
         passed, _second_failure = await self._evaluate_gates(
             spec, retry_env, completed, total_cost, session_id
         )

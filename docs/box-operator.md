@@ -91,7 +91,7 @@ tested before a cent is spent.
 
 | Position | Name | Default | Meaning |
 |---|---|---|---|
-| 1 | `<wave>` | *(required)* | Wave number the gate is evaluating. **Whole number only** — the verdict types `wave` as an integer. A decimal label such as "Wave 9.1" is passed as its major number (`9`). A missing, empty or non-numeric argument exits 7 immediately, before the wheel build — never 1, which is reserved for a FAIL verdict |
+| 1 | `<wave>` | *(required)* | Wave number the gate is evaluating. **Whole number only** — the verdict types `wave` as an integer. A decimal label such as 9.1 is passed as its major number (`9`). A missing, empty or non-numeric argument exits 7 immediately, before the wheel build — never 1, which is reserved for a FAIL verdict |
 | 2 | `[fixture-ref]` | `main` | Git ref checked out in the fixture clone |
 
 ### Environment knobs

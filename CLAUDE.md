@@ -254,15 +254,15 @@ anything.
 
 A `v0.1.0` tag is BLOCKED until ALL of:
 
-1. Wave 9.1 E2E smoke tests pass in CI on `main`
+1. The end-to-end smoke tests pass in CI on `main`
    ([`docs/release-policy.md`](docs/release-policy.md) line 39).
-2. Wave 9.2 release preparation merged
+2. Release preparation merged
    ([`docs/release-policy.md`](docs/release-policy.md) line 40).
 3. Trust-triangle components on `main`: the four `@runtime_checkable` extension
    protocols (`AgentBackend`, `VaultBackend`, `QualityGate`, `StageHandler`),
-   the default allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+   the default allow-list floor and the `ToolPolicy` extension Protocol (here,
    the Protocol seam IS the user-configurable surface; no TOML loader ships in
-   v0.1), and the default security hook set (W4.2). See
+   v0.1), and the default security hook set. See
    [`docs/release-policy.md`](docs/release-policy.md).
 4. Box E2E PASS verdict on the v0.1.0 tag commit
    ([`docs/release-gates.md`](docs/release-gates.md) line 105).

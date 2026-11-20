@@ -145,12 +145,12 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2905,
+    "src/bonfire/dispatch": 2928,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,
     "tests/integration": 1702,
-    "tests/unit": 75209
+    "tests/unit": 75345
   },
   "package_raises": [
     {
@@ -295,6 +295,22 @@
       "to": 75209,
       "lines": 223,
       "reason": "The 223 lines are tests/unit/test_workflow_action_pins.py, new: every `uses:` value in every workflow file (read from the parsed YAML, so a pin that exists only in a comment does not count) must be pinned to a 40-hex commit SHA recorded with its tag and measured runtime in one table; node20/node16/node12 runtimes and stale records fail; the publish action stays owned by the PUBLISHER_BUNDLES table in test_release_workflow_guard.py. It came with moving the workflow actions off Node 20 to commit-pinned Node 24 releases. Explicitly rejected: a purpose entry, which takes the file out of the ratchet instead of paying for it; folding the checks into test_release_workflow_guard.py, which moves the lines without removing them and mixes two concerns; trimming comments or blank lines to fit. Measured by cf-file-budget on the final tree: 'package tests/unit is 75209 lines (frozen 74986)'. Raised to exactly the measurement, with no headroom.",
+      "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
+    },
+    {
+      "package": "src/bonfire/dispatch",
+      "from": 2905,
+      "to": 2928,
+      "lines": 23,
+      "reason": "The 13 measured lines are in src/bonfire/dispatch/sdk_backend.py: the public constant RATE_LIMIT_EVENT_MALFORMED and a module-level helper that reads a rate-limit event's status and logs one warning with that code when the event carries no rate-limit info (with their comments and blank separators). The helper keeps the read out of ClaudeSDKBackend._do_execute, whose frozen complexity does not grow. The package measured EXACTLY its ceiling (2905/2905) before this change. Measured by cf-file-budget on the final tree: 'package src/bonfire/dispatch is 2918 lines (frozen 2905)'. Raised to the measurement plus 10 lines of named headroom for the next rate-limit and SDK-update fixes in this package, so the next small fix does not have to raise again.",
+      "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
+    },
+    {
+      "package": "tests/unit",
+      "from": 75209,
+      "to": 75345,
+      "lines": 136,
+      "reason": "The 96 measured lines are tests/unit/test_sdk_backend_rate_limit_malformed.py, new: a rate-limit event with no info must not fail the run or stop the stream, must log exactly one warning carrying the stable code, and well-formed allowed and allowed_warning events must not be reported as malformed. It is a new file because tests/unit/test_dispatch_sdk_backend.py is at 475 lines with no budget entry and the new-file limit is 500. The package measured EXACTLY its ceiling (75209/75209) before this change. Measured by cf-file-budget on the final tree: 'package tests/unit is 75305 lines (frozen 75209)'. Raised to the measurement plus 40 lines of named headroom for the next rate-limit and SDK-update tests, so the next small fix does not have to raise again.",
       "approver": "the repository owner gates via PR merge -- raise surfaced in the PR body, not taken silently"
     }
   ]

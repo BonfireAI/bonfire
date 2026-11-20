@@ -31,10 +31,8 @@ also covers the prose tokens that sweep does not check.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
-from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -113,7 +111,7 @@ _MARKER_FAMILIES: dict[str, re.Pattern[str]] = {
     "wave": re.compile(r"\bWave \d+[a-z]?\b"),
     "w-number": re.compile(r"\bW\d+(?:\.\d+)+\b|\bW\d+ Lane\b"),
     "lane-letter": re.compile(r"\bLanes? [A-E](?:/[A-E])*\b"),
-    "design-section": re.compile(r"§\s?D\d+|§D-[A-Z]+|§A Q\d+|Sage §"),
+    "design-section": re.compile(r"§\s?D\d+|§D-[A-Z]+|§A Q\d+|Sage §|\bSage D\d+"),
     "analysis-doc-section": re.compile(r"§12 [A-Z]\d"),
     "plan-doc": re.compile(r"design doc §|public-port plan|Scout-\d+/\d+"),
     "personal-name": re.compile(r"\bA" r"nta\b"),
@@ -123,53 +121,19 @@ _MARKER_FAMILIES: dict[str, re.Pattern[str]] = {
     "ambiguity-ref": re.compile(r"\bAMBIG #\d+"),
     "role-instance": re.compile(r"\bWarrior [A-Z]\b"),
     "follow-up-wave": re.compile(r"\bfollow-up wave\b"),
+    "wave-hyphen": re.compile(r"\bWave-\d+"),
 }
 
 _MarkerHit = tuple[str, int, str, str]  # (rel_path, lineno, family, stripped_line)
 
-_EXEMPT_REASON = (
-    "this file is being edited by a separate open change that rewrites these "
-    "comments; drop the entry once it lands"
-)
-_EXEMPT_PATH = "src/bonfire/engine/gates.py"
-# Exact (repo-relative path, sha256 hex of the exact stripped line text) -> reason.
-# Digests, not text, so this file never repeats the exempt lines. Never line numbers.
-_EXEMPT_ENTRIES: dict[tuple[str, str], str] = {
-    (
-        _EXEMPT_PATH,
-        "01f21b40e19cf89db0334bfe94e38121e51ac0ad6d8259b7a3585c2bacb8fbfc",
-    ): _EXEMPT_REASON,
-    (
-        _EXEMPT_PATH,
-        "903738c17c608d9b1ec669a5d2dd0e597b11b9f401a92aa3ab826f44c61302be",
-    ): _EXEMPT_REASON,
-    (
-        _EXEMPT_PATH,
-        "2d23acbb4f779db2e92b1f6e9384183bf0dfaae41afe48e7c6bf8f03e11d9568",
-    ): _EXEMPT_REASON,
-    (
-        _EXEMPT_PATH,
-        "9ec261573a4c2b59012853d8c932582657f8365a4e9082b8fd8799e918376e99",
-    ): _EXEMPT_REASON,
-}
 
-
-def _digest(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _scan_markers(root: Path, base: Path) -> tuple[list[_MarkerHit], int]:
-    """Scan every non-cache, UTF-8 file under *root* for the marker families.
-
-    Paths in the hits are relative to *base*. Returns ``(hits, files_scanned)``.
-    """
+def _scan_tree(
+    paths: list[Path], base: Path, families: dict[str, re.Pattern[str]]
+) -> tuple[list[_MarkerHit], int]:
+    """Scan each UTF-8 file in *paths* for *families*; skip files that are not UTF-8 text."""
     hits: list[_MarkerHit] = []
     scanned = 0
-    if not root.is_dir():
-        return hits, scanned
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or "__pycache__" in path.parts:
-            continue
+    for path in paths:
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -177,24 +141,43 @@ def _scan_markers(root: Path, base: Path) -> tuple[list[_MarkerHit], int]:
         scanned += 1
         rel = path.relative_to(base).as_posix()
         for i, line in enumerate(text.splitlines(), start=1):
-            stripped = line.strip()
-            for family, pattern in _MARKER_FAMILIES.items():
+            for family, pattern in families.items():
                 if pattern.search(line):
-                    hits.append((rel, i, family, stripped))
+                    hits.append((rel, i, family, line.strip()))
     return hits, scanned
 
 
-def _is_exempt(hit: _MarkerHit, entries: Mapping[tuple[str, str], str] = _EXEMPT_ENTRIES) -> bool:
-    """A hit is exempt only if BOTH its path and the digest of its stripped text match."""
-    return (hit[0], _digest(hit[3])) in entries
+def _scan_markers(root: Path, base: Path) -> tuple[list[_MarkerHit], int]:
+    """Scan every non-cache, UTF-8 file under *root* for the marker families.
+
+    Paths in the hits are relative to *base*. Returns ``(hits, files_scanned)``.
+    """
+    if not root.is_dir():
+        return [], 0
+    paths = [p for p in sorted(root.rglob("*")) if p.is_file() and "__pycache__" not in p.parts]
+    return _scan_tree(paths, base, _MARKER_FAMILIES)
 
 
-def _split_exempt(
-    hits: list[_MarkerHit], entries: Mapping[tuple[str, str], str] = _EXEMPT_ENTRIES
-) -> tuple[list[_MarkerHit], int]:
-    """Return ``(non_exempt_hits, entries_present)``."""
-    present = {(h[0], _digest(h[3])) for h in hits if _is_exempt(h, entries)}
-    return [h for h in hits if not _is_exempt(h, entries)], len(present)
+_DOC_ROOT_FILES = ("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "CLAUDE.md")
+_DOC_FAMILIES: dict[str, re.Pattern[str]] = {
+    **_MARKER_FAMILIES,
+    "ticket-id": re.compile(r"\bbon-\d+", re.IGNORECASE),
+    "memo-citation": re.compile(r"Sage memo\s*(?:`|§|$)"),
+}
+
+
+def _doc_paths(repo: Path) -> list[Path]:
+    """Root documents that exist, plus every file under ``docs/`` (recursive)."""
+    paths = [repo / name for name in _DOC_ROOT_FILES if (repo / name).is_file()]
+    docs = repo / "docs"
+    if docs.is_dir():
+        paths += [p for p in sorted(docs.rglob("*")) if p.is_file()]
+    return paths
+
+
+def _scan_docs(repo: Path) -> tuple[list[_MarkerHit], int]:
+    """Scan the public documents under *repo*; hit paths are relative to *repo*."""
+    return _scan_tree(_doc_paths(repo), repo, _DOC_FAMILIES)
 
 
 def _independent_file_count(root: Path) -> int:
@@ -215,8 +198,7 @@ def test_no_planning_markers_in_shipped_src() -> None:
     """No planning markers, design-doc citations or personal names in ``src/bonfire/``."""
     root = _REPO_ROOT / "src" / "bonfire"
     hits, scanned = _scan_markers(root, _REPO_ROOT)
-    offenders, present = _split_exempt(hits)
-    print(f"allowlisted {present} of {len(_EXEMPT_ENTRIES)} present")
+    offenders = hits
     assert scanned > 100, f"scan looks vacuous: only {scanned} files scanned"
     assert scanned == _independent_file_count(root), "walker disagrees with independent count"
     assert not offenders, (
@@ -224,6 +206,30 @@ def test_no_planning_markers_in_shipped_src() -> None:
         f"files ({scanned} files scanned) in shipped source.\n"
         "Rewrite each as plain English; public readers cannot resolve these citations.\n"
         + "\n".join(f"  {p}:{n}: [{fam}] {text}" for p, n, fam, text in offenders)
+    )
+
+
+def _utf8_readable(path: Path) -> bool:
+    try:
+        path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def test_no_planning_markers_in_public_docs() -> None:
+    """No planning markers, tracker ids or memo citations in the public documents."""
+    hits, scanned = _scan_docs(_REPO_ROOT)
+    roots = [_REPO_ROOT / name for name in _DOC_ROOT_FILES]
+    independent = sum(1 for p in roots if p.is_file() and _utf8_readable(p))
+    independent += _independent_file_count(_REPO_ROOT / "docs")
+    assert scanned >= 15, f"scan looks vacuous: only {scanned} files scanned"
+    assert scanned == independent, "walker disagrees with independent count"
+    assert not hits, (
+        f"Found {len(hits)} planning markers across {len({h[0] for h in hits})} "
+        f"files ({scanned} files scanned) in public docs.\n"
+        "Rewrite each as plain English; public readers cannot resolve these citations.\n"
+        + "\n".join(f"  {p}:{n}: {fam}: {text}" for p, n, fam, text in hits)
     )
 
 
@@ -255,6 +261,8 @@ def _plant(tmp_path: Path, rel: str, line: str) -> list[_MarkerHit]:
         ("ambiguity-ref", "# per AMBIG #5."),
         ("role-instance", "# (Warrior B pure function)"),
         ("follow-up-wave", "# will land in a follow-up wave."),
+        ("design-section", "# locked per Sage D9."),
+        ("wave-hyphen", "# the Wave-9 sweep"),
     ],
 )
 def test_marker_family_is_caught(tmp_path: Path, family: str, line: str) -> None:
@@ -283,39 +291,50 @@ def test_marker_in_non_python_file_is_caught(tmp_path: Path) -> None:
         'f"PR #{number}"',
         "the Warrior agent writes code",
         "a cluster of nodes",
+        "the Sage reviewer",
     ],
 )
 def test_innocent_text_is_not_caught(tmp_path: Path, line: str) -> None:
     assert _plant(tmp_path, "mod.py", f"# {line}") == []
 
 
-_SYNTHETIC_LINE = "# per Sage §D-CL.6 #5 here"
-_SYNTHETIC_ENTRIES: dict[tuple[str, str], str] = {
-    (_EXEMPT_PATH, _digest(_SYNTHETIC_LINE)): _EXEMPT_REASON,
-}
+def _plant_docs(tmp_path: Path, files: dict[str, str]) -> list[_MarkerHit]:
+    for rel, line in files.items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(line + "\n", encoding="utf-8")
+    hits, _ = _scan_docs(tmp_path)
+    return hits
 
 
-def test_real_exemption_mapping_has_exactly_four_entries() -> None:
-    assert len(_EXEMPT_ENTRIES) == 4
-    assert {path for path, _ in _EXEMPT_ENTRIES} == {_EXEMPT_PATH}
+@pytest.mark.parametrize("rel", ["README.md", "docs/sub/x.md"])
+@pytest.mark.parametrize(
+    ("family", "line"),
+    [
+        ("memo-citation", "(Sage memo `x-sage.md` §A Q4)"),
+        ("memo-citation", "See Sage memo"),
+        ("ticket-id", "tracked under " + "BON" + "-610"),
+        ("ticket-id", "`bon-519-sage-x.md`"),
+        ("wave", "Wave 9.2 release preparation"),
+    ],
+)
+def test_docs_marker_is_caught_in_root_and_nested(
+    tmp_path: Path, rel: str, family: str, line: str
+) -> None:
+    hits = _plant_docs(tmp_path, {rel: line})
+    assert {h[0] for h in hits} == {rel}
+    assert family in {h[2] for h in hits}, f"{family!r} missed: {line!r}"
 
 
-def test_exemption_does_not_travel_to_other_files(tmp_path: Path) -> None:
-    other = tmp_path / "src" / "bonfire" / "engine" / "other.py"
-    other.parent.mkdir(parents=True)
-    other.write_text(_SYNTHETIC_LINE + "\n", encoding="utf-8")
-    hits, _ = _scan_markers(tmp_path, tmp_path)
-    offenders, present = _split_exempt(hits, _SYNTHETIC_ENTRIES)
-    assert present == 0
-    assert {h[3] for h in offenders} == {_SYNTHETIC_LINE}
-
-
-def test_exemption_applies_only_to_exact_path_and_text(tmp_path: Path) -> None:
-    extra = "# also per Sage §D-CL.9 here"
-    gates = tmp_path / _EXEMPT_PATH
-    gates.parent.mkdir(parents=True)
-    gates.write_text(_SYNTHETIC_LINE + "\n" + extra + "\n", encoding="utf-8")
-    hits, _ = _scan_markers(tmp_path, tmp_path)
-    offenders, present = _split_exempt(hits, _SYNTHETIC_ENTRIES)
-    assert present == 1
-    assert {h[3] for h in offenders} == {extra}
+@pytest.mark.parametrize(
+    "line",
+    [
+        "- `BON-NNN` in commit subjects",
+        "checks against the binding Sage memo, and either approves",
+        "| 1 | `<wave>` | *(required)* | Wave number the gate is evaluating.",
+        "see § Ratified Exceptions below",
+        "SHA-256 digest",
+    ],
+)
+def test_docs_innocent_text_is_not_caught(tmp_path: Path, line: str) -> None:
+    assert _plant_docs(tmp_path, {"README.md": line, "docs/sub/x.md": line}) == []

@@ -25,10 +25,10 @@ stable tag.
 ## Pre-release Period
 
 > **Historical.** This phase is complete. `bonfire-ai` was in
-> pre-release until Wave 9.2 of the v0.1 plan landed; `0.1.0` shipped
+> pre-release until the release-preparation step of the v0.1 plan landed; `0.1.0` shipped
 > on 2026-04-28.
 
-`bonfire-ai` is in pre-release until Wave 9.2 of the v0.1 plan lands.
+`bonfire-ai` is in pre-release until the release-preparation step of the v0.1 plan lands.
 
 During this period:
 
@@ -46,8 +46,8 @@ During this period:
 > **Historical.** This phase is complete. The release-candidate window
 > closed when `0.1.0` was cut on 2026-04-28.
 
-When Wave 8 (documentation polish) is complete and Wave 9 (smoke tests)
-is in flight:
+When the documentation polish is complete and the smoke tests
+are in flight:
 
 - Versions advance to `0.1.0rc1`, `0.1.0rc2`, ...
 - GitHub release tags begin at `v0.1.0rc1`.
@@ -61,14 +61,14 @@ is in flight:
 
 The first functional release is cut when:
 
-- Wave 9.1 end-to-end smoke tests pass in CI on `main`.
-- Wave 9.2 release preparation is merged.
+- The end-to-end smoke tests pass in CI on `main`.
+- Release preparation is merged.
 - All four trust-triangle components are on `main`: the four
   `@runtime_checkable` extension protocols (`AgentBackend`,
   `VaultBackend`, `QualityGate`, `StageHandler`), the default
-  allow-list floor and the `ToolPolicy` extension Protocol (W4.1 —
+  allow-list floor and the `ToolPolicy` extension Protocol (here,
   the Protocol seam IS the user-configurable surface; no TOML loader
-  ships in v0.1), and the default security hook set (W4.2).
+  ships in v0.1), and the default security hook set.
 
 At that point:
 

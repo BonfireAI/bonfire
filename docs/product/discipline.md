@@ -47,8 +47,8 @@ reference.
    merged into a state that another open PR will break.
 4. Pre-existing failures (failures that also fail on `origin/<base>`) are
    classified as `pre_existing_debt` and surface as a debt annotation;
-   they do **not** block the merge (Sage memo `bon-519-sage-20260428T033101Z.md`
-   §A Q6 ratified ALLOW-WITH-ANNOTATION). The principle: a PR is not
+   they do **not** block the merge (a ratified decision;
+   allowed, with an annotation). The principle: a PR is not
    responsible for failures it inherits.
 
 **What it forecloses.** The S007 absorption trap (the Wizard editing
@@ -65,7 +65,7 @@ that comes with hand-coordinated reverts.
 - Classification metadata: `META_PREFLIGHT_CLASSIFICATION`,
   `META_PREFLIGHT_TEST_DEBT_NOTED` in
   [`src/bonfire/models/envelope.py`](../../src/bonfire/models/envelope.py)
-- Sage decision memo: `bon-519-sage-20260428T033101Z.md` §A Q4-Q7, §D2-D6
+- The merge-preflight design decisions (failure classes, debt handling, handler shell)
 
 ## How to add a discipline
 

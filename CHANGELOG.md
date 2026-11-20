@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.1.0] — 2026-11-20
 
-### Changed
+### Security
 
 - Project settings (`CLAUDE.md`, `.claude/settings.json`) now load only
   from folders the operator lists in `BONFIRE_TRUST_ROOTS` (absolute,

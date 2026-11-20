@@ -163,14 +163,16 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # `standard_build` bullet was corrected against the tree.
         # Patch-release 1.0.3 forward-port: shifted 378/379 -> 380/381 (the
         # upgrade line and a blank went in above). Text unchanged.
+        # Trust-roots forward-port: README shifted 380/381 -> 384/385 (the trust-roots README
+        # section moved them). Text unchanged.
         (
             "README.md",
-            380,
+            384,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            381,
+            385,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -201,24 +203,26 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Unreleased Security note moved out, the [1.0.2] block went in). Text unchanged.
         # Patch-release 1.0.3 forward-port: shifted 713/715/716/733 -> 731/733/734/751
         # (the [1.0.3] block went in). Text unchanged.
+        # Trust-roots forward-port: CHANGELOG shifted 731/733/734/751 -> 742/744/745/762 (the
+        # 1.1.0 entry went in above). Text unchanged.
         (
             "CHANGELOG.md",
-            731,
+            742,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            733,
+            744,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            734,
+            745,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            751,
+            762,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

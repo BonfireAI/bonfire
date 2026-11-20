@@ -274,7 +274,7 @@ model = "claude-sonnet-4-6"         # default model when no role match
 max_turns = 10                      # per-agent turn cap (must be > 0)
 max_budget_usd = 5.0                # per-pipeline budget cap (>= 0)
 persona = "falcor"                  # CLI output persona
-trust_project_settings = false      # opt-in: ingest CLAUDE.md / .claude/ (see Security)
+trust_project_settings = false      # ignored; trust comes from BONFIRE_TRUST_ROOTS (see Security)
 
 [bonfire.profile]                   # written by `bonfire scan`; the onboarding answers
 # companion_mode = "friend"         # free-form string map, absent until you run a scan
@@ -301,21 +301,25 @@ that provider's model identifiers and plug in a matching
 
 ### Trusting Project Settings (security)
 
-Bonfire dispatches agents with the Claude Agent SDK, which can ingest
-the project's `CLAUDE.md` and `.claude/settings.json` into the agent's
-system prompt and hook table. Bonfire defaults to **deny**: a foreign
-repo's project settings are NOT loaded unless one of these holds:
+Bonfire dispatches agents with the Claude Agent SDK, which can load a
+directory's `CLAUDE.md` and `.claude/settings.json` (its hooks run shell
+commands). Bonfire loads them only when the dispatch directory is one of
+YOUR folders:
 
-- `bonfire.toml` contains `[bonfire] trust_project_settings = true`
-  (literal boolean — strings and ints are ignored).
-- The environment variable `BONFIRE_TRUST_PROJECT_SETTINGS=1` is set
-  (operator escape hatch, strict equality on the value `"1"`).
-- The dispatch `cwd` is empty / `None` (in-tree dogfood path).
+- `BONFIRE_TRUST_ROOTS` lists them: absolute paths separated by
+  `os.pathsep` (`:` on Linux/macOS), compared by real path and by path
+  components. Relative entries are ignored with a warning.
+- `BONFIRE_TRUST_PROJECT_SETTINGS=1` trusts every directory.
 
-Why this matters: a malicious clone could otherwise plant instructions
-in its `CLAUDE.md` or wire hostile hooks in `.claude/settings.json`
-that would silently land in any agent you dispatch from inside that
-repo. Opt-in is required.
+Unset means nothing is loaded, including when no directory is given (the
+process directory is judged too). A repository's own `bonfire.toml` cannot
+trust itself: its `trust_project_settings` key is ignored and a
+`trust_toml_ignored` warning is logged. Never list a folder that holds
+other people's clones.
+
+**Upgrading to 1.1.0:** if you committed `trust_project_settings = true`,
+or you call Bonfire as a library or run it in its own checkout without a
+project root, export `BONFIRE_TRUST_ROOTS=/path/to/your/repo`.
 
 ## Per-Role Model Routing
 

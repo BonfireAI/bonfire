@@ -57,11 +57,9 @@ class PipelineConfig(BaseModel):
     # matches ``BonfireSettings.agents`` below: pydantic deep-copies
     # field defaults per instance rather than sharing one object.
     profile: dict[str, str] = {}
-    # Explicit opt-in to ingest the project's ``CLAUDE.md`` /
-    # ``.claude/settings.json`` into the dispatched agent's system prompt.
-    # File presence alone is NOT enough; this key MUST be ``true``.
-    # See ``bonfire.dispatch.sdk_backend._resolve_setting_sources`` for the
-    # canonical gate.
+    # No longer a trust signal: kept so existing ``bonfire.toml`` files still
+    # load. A ``true`` is ignored and logs ``trust_toml_ignored``; trust comes
+    # from ``BONFIRE_TRUST_ROOTS`` (see ``sdk_backend._resolve_setting_sources``).
     trust_project_settings: bool = False
 
     @field_validator("max_budget_usd")

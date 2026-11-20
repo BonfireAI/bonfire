@@ -31,13 +31,9 @@ those defaults land on whoever forgets them in production:
 
 ``project_root``
     Defaults to ``None``, which the engine renders as ``cwd=""``. The SDK
-    backend reads an empty ``cwd`` as "the caller's own directory, trusted",
-    and so passes ``setting_sources=['project']`` — meaning the ``CLAUDE.md``
-    and ``.claude/settings.json`` of *whatever directory the user happened to
-    be standing in* are loaded into the agent's system prompt. Naming a real
-    root moves that decision onto the explicit ``bonfire.toml`` opt-in the
-    backend already implements, so an unfamiliar repository is untrusted by
-    default rather than trusted by omission.
+    backend resolves an empty ``cwd`` to the process directory and judges it
+    like any other against the operator's ``BONFIRE_TRUST_ROOTS``, so
+    ``CLAUDE.md`` and ``.claude/settings.json`` load only from trusted roots.
 
 Which consumers are subscribed, and which are deliberately not
 -------------------------------------------------------------

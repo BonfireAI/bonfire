@@ -16,11 +16,11 @@ COMPLETED "escalated" stage. A programming error reported success.
 
 Subclassing :class:`~bonfire.protocols.DispatchOptions` rather than adding
 the one missing field is deliberate. The other six absent attributes
-included ``cwd`` -- an empty one makes the backend resolve
-``setting_sources=["project"]`` and load the *target* repository's
-``CLAUDE.md`` into the agent's prompt -- and ``security_hooks``. Patching
-``thinking_depth`` alone would have traded a loud crash for a quiet trust
-hole.
+included ``cwd`` -- an empty one is judged by the backend against the
+operator's ``BONFIRE_TRUST_ROOTS`` like any other directory -- and
+``security_hooks``. Patching ``thinking_depth`` alone would have traded a
+loud crash for a quiet trust gap. ``trust_project_settings`` in
+``bonfire.toml`` is no longer a trust signal.
 
 The contract is pinned in ``tests/unit/test_sage_dispatch_options_contract.py``,
 which drives the real backend body rather than asserting on this class, so

@@ -1,6 +1,6 @@
 name: Smoke
 
-# BON-354 — release-artifact smoke gate.
+# Release-artifact smoke gate.
 #
 # Builds the v0.1.0 wheel + sdist, twine-checks both, then installs each
 # into a fresh venv and runs `tests/smoke/smoke_test.py` (stdlib only, no
@@ -10,8 +10,7 @@ name: Smoke
 # Mocked-only: this workflow does NOT use any LLM API key. The real-key
 # leg lives in the local `tests/e2e/scripts/e2e-box.sh` per
 # `docs/release-gates.md` §"E2E box · Local execution only · Never runs
-# in CI." The `bonfire dispatch` CLI verb is deferred to v0.1.1 (BON-633)
-# per BON-354 comment 9503cd7f.
+# in CI." The `bonfire dispatch` CLI verb is deferred to a later release.
 
 on:
   push:
@@ -29,15 +28,14 @@ jobs:
       fail-fast: false
       matrix:
         # Today only 3.12 is declared in `pyproject.toml` classifiers.
-        # Add 3.13 here once the classifier lands (scout report §5
-        # out-of-scope row 3, D-FT BON-354-FT-7).
+        # Add 3.13 here once the classifier lands.
         python-version: ["3.12"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3 (node24)
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0 (node24)
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -78,7 +76,7 @@ jobs:
 
       # ----- Publish dist/ as a downloadable artifact ---------------------
       - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2 (node24)
         with:
           name: dist-${{ matrix.python-version }}
           path: dist/*

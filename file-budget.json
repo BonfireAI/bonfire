@@ -145,7 +145,7 @@
     }
   },
   "packages": {
-    "src/bonfire/dispatch": 2928,
+    "src/bonfire/dispatch": 2930,
     "src/bonfire/engine": 1981,
     "src/bonfire/handlers": 3280,
     "src/bonfire/onboard": 4460,

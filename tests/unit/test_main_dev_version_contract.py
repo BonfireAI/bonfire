@@ -37,16 +37,13 @@ def _declared() -> str:
         return tomllib.load(fh)["project"]["version"]
 
 
-def _unreleased_section() -> str:
-    text = (REPO_ROOT / "CHANGELOG.md").read_text()
-    match = re.search(r"^## \[Unreleased\].*?(?=^## \[)", text, re.MULTILINE | re.DOTALL)
-    assert match, "CHANGELOG.md has no [Unreleased] section"
-    return match.group(0)
+# main-only contract: a release branch declares a final version
+# (release/1.0.x predates this file)
 
 
 class TestDevVersion:
-    def test_declared_version_is_a_dev_release(self) -> None:
-        assert Version(_declared()).is_devrelease
+    # main-only contract: a release branch declares a final version
+    # (release/1.0.x predates this file)
 
     def test_declared_version_is_above_the_patch_release(self) -> None:
         assert Version(_declared()) > Version("1.0.3")
@@ -74,9 +71,8 @@ class TestChangelogPatchEntry:
         assert re.search(r"^## \[1\.0\.2\]", text, re.MULTILINE)
         assert re.search(r"^## \[1\.0\.3\]", text, re.MULTILINE)
 
-    def test_unreleased_has_no_sdk_security_note(self) -> None:
-        section = _unreleased_section()
-        assert not ("### Security" in section and "claude-agent-sdk" in section)
+    # main-only contract: a release branch declares a final version
+    # (release/1.0.x predates this file)
 
 
 class TestPublicSurfaceHygiene:

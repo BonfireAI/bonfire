@@ -27,7 +27,7 @@ bonfire install-skill           # registers ~/.claude/skills/bonfire/SKILL.md
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Upgrading?** Run `pip install -U bonfire-ai` to get 1.0.3, a security fix. A plain `pip install bonfire-ai` does not upgrade an existing install.
+**Upgrading?** Run `pip install -U bonfire-ai` to get 1.1.0, a security fix. A plain `pip install bonfire-ai` does not upgrade an existing install.
 
 Then in Claude Code, in any project:
 

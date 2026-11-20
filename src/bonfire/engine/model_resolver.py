@@ -7,10 +7,10 @@ Pure synchronous primitive that collapses the three-tier ``or`` chain used
 at every dispatch call site (``PipelineEngine``, ``WizardHandler``) into
 a single source-of-truth helper. Replaces the inline precedence chain at
 those call sites without altering its behavior. (Historically also wired
-into ``StageExecutor``; that class was deleted in Wave 11 Lane E.)
+into ``StageExecutor``; that class was removed.)
 
 The inner role-based primitive ``resolve_model_for_role`` continues to
-live at ``bonfire.agent.tiers`` (per the cluster-350 D-CL.1 lock); this
+live at ``bonfire.agent.tiers`` (by design); this
 module is the *dispatch-site* wrapper that adds the explicit-override and
 config-default layers around it.
 """
@@ -34,8 +34,8 @@ def resolve_dispatch_model(
 ) -> str:
     """Return the model string for a dispatch call site.
 
-    Three-tier precedence (locked by Sage cluster-350 D-CL.1 and ratified
-    by cluster-351):
+    Three-tier precedence (checked
+    in this order):
 
         1. ``explicit_override`` -- per-stage / per-envelope escape hatch.
            Empty string falls through to (2).

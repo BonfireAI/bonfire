@@ -28,7 +28,7 @@ class MockGitHubClient:
         self._next_number: int = 1
         self.actions: list[dict] = []
         # Open-PR canned data keyed by base branch (used by ``list_open_prs``).
-        # Sage §D5 line 506: tests pre-populate via ``set_open_prs``.
+        # Tests pre-populate via ``set_open_prs``.
         self._open_prs_by_base: dict[str, list[PRSummary]] = {}
 
     async def create_pr(
@@ -162,7 +162,7 @@ class MockGitHubClient:
     ) -> list[PRSummary]:
         """Return canned open-PR data for *base*.
 
-        Sage §D5 line 506 + §D-CL.2 line 908. Mirrors the real client
+        Mirrors the real client
         signature; returns whatever was configured via :py:meth:`set_open_prs`
         (defaults to an empty list).
         """

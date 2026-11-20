@@ -406,7 +406,7 @@ wall-clock timeout via `asyncio.wait`
 (`src/bonfire/onboard/flow.py:222-230`); when the browser is gone the
 `shutdown_event` arm wins and the flow surfaces
 `BrowserDisconnectedError` to the CLI (`src/bonfire/onboard/flow.py:246-270`).
-W9 Lane B replaced the older "hang until Ctrl-C" behaviour with this
+An earlier change replaced the older "hang until Ctrl-C" behaviour with this
 discriminated three-way race.
 
 ## 5. Asymmetries and gaps

@@ -4,11 +4,11 @@
 """Symlink-refusing text writer for operator-controlled paths.
 
 Companion module to :mod:`bonfire._safe_read`. Centralises the
-arbitrary-write defense W7.M established for ``write_config`` so the
+arbitrary-write defense established for ``write_config`` so the
 same primitive can be reused at every operator-controlled write site
 (``cli/commands/init.py``, ``cli/commands/persona.py``,
 ``engine/checkpoint.py``, plus the existing ``cli/commands/scan.py`` +
-``onboard/config_generator.py`` sites W7.M originally hardened).
+``onboard/config_generator.py`` sites originally hardened).
 
 The defense is a two-layer guard against the
 ``Path.exists()`` + ``Path.write_text()`` arbitrary-write primitive:
@@ -46,7 +46,7 @@ This primitive is reachable today (before this module lands) at:
 * ``bonfire init`` — writes ``[bonfire]\\n`` stub.
 * ``bonfire persona set`` — reads-then-writes ``bonfire.toml``.
 * ``CheckpointManager.save`` — writes ``{session_id}.json.tmp``.
-* ``bonfire scan`` + ``write_config`` — closed by W7.M (PR #93); kept
+* ``bonfire scan`` + ``write_config`` — closed by PR #93; kept
   here behind the same helper for DRY consistency.
 """
 
@@ -70,7 +70,7 @@ _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 # return ELOOP; some BSDs (and historic glibc) return EMLINK. Any other
 # OSError (EPERM, EISDIR, ENOSPC, EROFS, ENAMETOOLONG, EACCES, ...) is a
 # distinct failure mode and MUST NOT be mis-classified as a symlink-refusal
-# — that would break the W7.M log-grep contract for downstream callers
+# — that would break the symlink log-grep contract for downstream callers
 # trying to distinguish "you got attacked" from "disk full".
 _SYMLINK_ERRNOS: frozenset[int] = frozenset(
     {errno.ELOOP} | ({errno.EMLINK} if hasattr(errno, "EMLINK") else set())
@@ -97,7 +97,7 @@ def safe_write_text(
     allow_existing
         When ``False`` (default), refuse any pre-existing file at
         *path* — equivalent to ``O_EXCL`` semantics, mirroring the
-        W7.M overwrite-guard contract. When ``True``, an existing
+        overwrite-guard contract. When ``True``, an existing
         **regular** file at *path* is overwritten (but a symlink is
         still refused). Used by callers that intentionally re-write a
         file in place — e.g. ``checkpoint`` atomic-rename tmp paths,
@@ -133,7 +133,7 @@ def safe_write_text(
       handle both pre-check and race paths identically. Other OSErrors
       (``EPERM``, ``EISDIR``, ``ENOSPC``, ``EROFS``, ``ENAMETOOLONG``,
       ``EACCES``, ...) propagate untranslated — mis-classifying "disk
-      full" as "symlink detected" would corrupt the W7.M log-grep
+      full" as "symlink detected" would corrupt the symlink log-grep
       signal downstream operators rely on.
     * ``O_EXCL`` (set when ``allow_existing=False``) closes the TOCTOU
       race against the ``exists()`` check a caller may have performed
@@ -153,7 +153,7 @@ def safe_write_text(
         )
         raise FileExistsError(msg)
 
-    # When allow_existing=False, the W7.M overwrite-guard semantics
+    # When allow_existing=False, the overwrite-guard semantics
     # apply: the caller pinky-promises no file at this path. We fold
     # that into the open(2) flags via O_EXCL — kernel-atomic refusal
     # closes the TOCTOU window against any separate exists() check
@@ -178,7 +178,7 @@ def safe_write_text(
         raise FileExistsError(msg) from None
     except OSError as exc:
         # Only the O_NOFOLLOW symlink-detection errnos get translated to
-        # the W7.M "symlink"-mentioning FileExistsError. Other OSErrors
+        # the "symlink"-mentioning FileExistsError. Other OSErrors
         # (EPERM, EISDIR, ENOSPC, EROFS, ENAMETOOLONG, EACCES, ...) are
         # genuinely different failure modes and MUST propagate
         # untranslated — mis-classifying "disk full" as "symlink
@@ -225,7 +225,7 @@ def safe_append_text(
 ) -> None:
     """Append *content* to *path*, refusing to follow symlinks.
 
-    Append-mode companion to :func:`safe_write_text`. The W7.M rollout
+    Append-mode companion to :func:`safe_write_text`. The earlier rollout
     closed truncate-mode write sites (``write_text`` / ``open("w")``)
     but missed append-mode sites (``open("a")``) such as
     ``session/persistence.py`` JSONL append and ``xp/tracker.py`` JSONL
@@ -291,7 +291,7 @@ def safe_append_text(
         fd = os.open(path, flags, mode)
     except OSError as exc:
         # Only the O_NOFOLLOW symlink-detection errnos get translated
-        # to the W7.M "symlink"-mentioning FileExistsError; other
+        # to the "symlink"-mentioning FileExistsError; other
         # OSErrors (ENOSPC, EPERM, EISDIR, ...) propagate untranslated
         # so operators don't chase a non-existent attack vector while
         # their disk is full.

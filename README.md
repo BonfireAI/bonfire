@@ -15,7 +15,7 @@ Name your assistant — your cadre wires itself around the name.*
 
 <br>
 
-<img src="docs/media/bonfire-hero.gif" alt="Bonfire CLI demo — the command palette, an opinionated project init, and persona list" width="820">
+<img src="https://raw.githubusercontent.com/BonfireAI/bonfire/main/docs/media/bonfire-hero.gif" alt="Bonfire CLI demo — the command palette, an opinionated project init, and persona list" width="820">
 
 </div>
 
@@ -26,6 +26,8 @@ pip install bonfire-ai          # PyPI distribution; Python 3.12+
 bonfire install-skill           # registers ~/.claude/skills/bonfire/SKILL.md
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+**Upgrading?** Run `pip install -U bonfire-ai` to get 1.0.3, a security fix. A plain `pip install bonfire-ai` does not upgrade an existing install.
 
 Then in Claude Code, in any project:
 
@@ -63,7 +65,7 @@ failing tests cannot edit implementation. The role that writes
 implementation cannot edit tests. The reviewer is read-only. Source
 code is the deliverable.
 
-## What's in v1.0.0
+## What you get
 
 `pip install bonfire-ai` drops a Python runtime plus a Claude Code
 skill. A one-time `bonfire install-skill` registers the skill so your
@@ -350,7 +352,7 @@ Bonfire ships persona-driven CLI output. The persona affects
 quality standards. The cadre is what runs; the persona is what
 speaks.
 
-The default persona for v1.0.0 is **Falcor** — gentle, encouraging,
+The default persona is **Falcor** — gentle, encouraging,
 warm. The friend who tells you not to let it end.[^falcor] Falcor
 narrates pipeline events, greets you on `/bonfire scan`, and names
 lifecycle moments of the Vault.

@@ -7,7 +7,7 @@ Builds a well-formatted TOML string from collected scan events and the
 conversation profile dict. Each config value is annotated with its source
 (scan panel or conversation question).
 
-Operator-local tools split (W8.G)
+Operator-local tools split
 ---------------------------------
 ``cli_toolchain`` scan results carry per-machine state (the operator's
 installed CLI tools + versions) and must NEVER land in the
@@ -97,7 +97,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Operator-local tools sentinel (W8.G)
+# Operator-local tools sentinel
 # ---------------------------------------------------------------------------
 #
 # ``generate_config`` does not know the project_path on disk; the only
@@ -143,7 +143,7 @@ _TOOLS_LOCAL_RELPATH = Path(".bonfire") / "tools.local.toml"
 INIT_STUB_BYTES = b"[bonfire]\n"
 _MAX_STUB_BYTES = 64
 
-# Narrow widening (W8.F): also recognize the exact byte shape that
+# Narrow widening: also recognize the exact byte shape that
 # ``bonfire persona set <name>`` emits when run immediately after
 # ``bonfire init`` — ``[bonfire]\npersona = "<basic-string>"`` — as
 # still-a-stub, so the documented ``init && persona set && scan`` flow
@@ -152,7 +152,7 @@ _MAX_STUB_BYTES = 64
 # permits any byte except an unescaped ``"`` or ``\`` plus ``\X``
 # escapes. The widening is persona-key-SPECIFIC by design: a hand-added
 # ``name = "..."`` key (or any other single key) must still fall into
-# the overwrite refusal per the W7.M / PR #103 defense. See
+# the overwrite refusal per the PR #103 defense. See
 # ``tests/unit/test_init_persona_scan_composability.py`` for the upper
 # bound (4 GREEN canaries pinning narrowness).
 _PERSONA_STUB_RE = re.compile(
@@ -203,7 +203,7 @@ def _is_init_stub(path: Path) -> bool:
     stripped = raw.rstrip(b" \t\r\n")
     if stripped == INIT_STUB_BYTES.rstrip(b" \t\r\n"):
         return True
-    # Narrow widening (W8.F): accept the exact ``persona set`` output
+    # Narrow widening: accept the exact ``persona set`` output
     # shape ``[bonfire]\npersona = "<basic-string>"`` (anchored via
     # ``fullmatch``) as still-a-stub so ``init && persona set && scan``
     # composes. Anything else — a second key, a second section, a
@@ -252,7 +252,7 @@ def generate_config(
 
     # Tools — from cli_toolchain panel
     #
-    # ``_build_tools`` returns None unconditionally (W8.G); the
+    # ``_build_tools`` returns None unconditionally; the
     # operator-local tool inventory is routed via the sentinel comment
     # appended after all real sections below, NOT into the main TOML.
     # The annotation key, when present, is intentionally re-keyed to
@@ -352,7 +352,7 @@ def write_config(config_toml: str, project_path: Path) -> Path:
         so log-grep can distinguish symlink refusal from regular
         collision. No ``--force`` flag in v0.1.
     """
-    # W8.G — split the operator-local tools sentinel out of ``config_toml``
+    # Split the operator-local tools sentinel out of ``config_toml``
     # BEFORE the main-TOML write. The sentinel (a single comment line)
     # is materialised to ``.bonfire/tools.local.toml``; the main TOML
     # is written with the sentinel stripped so the project-portable
@@ -364,7 +364,7 @@ def write_config(config_toml: str, project_path: Path) -> Path:
 
     target = project_path / "bonfire.toml"
     # The symlink + overwrite refusal is delegated to ``safe_write_text``,
-    # which centralises the W7.M two-layer defense (is_symlink() pre-check
+    # which centralises the two-layer defense (is_symlink() pre-check
     # + O_NOFOLLOW + O_EXCL) across all of v0.1's operator-controlled
     # write sites. See :mod:`bonfire._safe_write` for the full contract.
     #
@@ -379,7 +379,7 @@ def write_config(config_toml: str, project_path: Path) -> Path:
     # path passed in always contains the ``bonfire.toml`` segment.
     if target.is_symlink():
         # Stay on the dedicated symlink branch so the message text and
-        # log-grep contract from W7.M (``bonfire.toml at {target} is a
+        # log-grep contract (``bonfire.toml at {target} is a
         # symlink. Refusing to follow or overwrite...``) is preserved
         # verbatim — downstream operators may grep on this exact prefix.
         msg = (
@@ -401,7 +401,7 @@ def write_config(config_toml: str, project_path: Path) -> Path:
             raise FileExistsError(msg)
     # ``safe_write_text`` defaults to ``allow_existing=False`` (O_EXCL)
     # + always-O_NOFOLLOW + half-written-file cleanup, matching the
-    # W7.M inline implementation. The helper raises FileExistsError on
+    # earlier inline implementation. The helper raises FileExistsError on
     # TOCTOU symlink/regular-file races between the pre-checks above
     # and the open(2); its message includes the literal "symlink" for
     # the symlink-race branch.
@@ -507,7 +507,7 @@ def load_tools_config(project_path: Path) -> dict:
     """
     local_path = project_path / _TOOLS_LOCAL_RELPATH
     # Refuse to follow symlinks on READ too — same defect class as the
-    # W7.M write-side guards. ``Path.is_file`` and ``Path.open`` both
+    # Write-side guards. ``Path.is_file`` and ``Path.open`` both
     # follow symlinks, which means a planted symlink at
     # ``.bonfire/tools.local.toml -> /etc/passwd`` (or any
     # operator-readable file the attacker wants Bonfire to slurp) would
@@ -522,7 +522,7 @@ def load_tools_config(project_path: Path) -> dict:
     if not local_path.is_file():
         return {}
     try:
-        # W11 M1: route through ``safe_read_capped_text`` so the read uses
+        # Route through ``safe_read_capped_text`` so the read uses
         # ``O_NOFOLLOW`` defense-in-depth. The prior ``open("rb")`` would
         # dereference a race-planted symlink between the ``is_symlink``
         # pre-check and the open, slurping attacker-controlled bytes into

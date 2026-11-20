@@ -63,7 +63,7 @@ so Steward (or a future debt-annotation feature) can post a notice on the
 PR.
 
 **Failure classification.** Six deterministic verdicts; first-match-wins
-ordering (Sage memo `bon-519-sage-20260428T033101Z.md` §A Q4):
+ordering (the verdict order is fixed):
 
 | Verdict                    | Meaning                                                  | Pipeline action               |
 |----------------------------|----------------------------------------------------------|-------------------------------|
@@ -76,7 +76,7 @@ ordering (Sage memo `bon-519-sage-20260428T033101Z.md` §A Q4):
 
 `merge_conflict` is produced by the handler shell when `git apply --3way`
 fails; the other five are produced by the pure
-`classify_pytest_run` function (see Sage §D4).
+`classify_pytest_run` function (see the classifier below).
 
 **Sibling-batch behavior.** When 2+ PRs target the same base, the handler
 applies *all* open PR diffs to the same scratch worktree in PR-number-
@@ -98,7 +98,7 @@ in the same session amortise the baseline run.
 **Reserved follow-ups.** Auto-dispatch to a Sage reconciliation lane on
 `cross_wave_interaction`, baseline caching across sessions, and
 pytest-xdist parallelization are filed as out-of-scope D-FTs in the
-merge-preflight PR body (Sage memo §B lines 184-192).
+merge-preflight PR body (see the PR body).
 
 ### `steward` (closer)
 
@@ -125,8 +125,8 @@ dataclass round-trips:
 - `pytest_returncode` / `pytest_duration_seconds` / `pytest_stdout_tail`
 
 The classifier is a pure function (no I/O); the handler shell handles
-git, gh, and subprocess invocation. See Sage memo
-`bon-519-sage-20260428T033101Z.md` §D4 for the full algorithm.
+git, gh, and subprocess invocation. The full algorithm is
+[`classify_pytest_run`](../src/bonfire/handlers/preflight_pytest.py).
 
 ## Pipeline composition
 
@@ -153,5 +153,5 @@ status:
 - `COMPLETED` otherwise -> passes with severity `info`
 
 The handler is NOT registered in `HANDLER_ROLE_MAP` (deterministic
-handlers bypass the gamified-display map per Sage §A Q1 Path β).
+handlers bypass the gamified-display map).
 `MergePreflightHandler` is exported from `bonfire.handlers` directly.

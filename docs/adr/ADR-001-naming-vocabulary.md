@@ -63,7 +63,7 @@ Display is a presentation concern, not a data concern.
 
 ## Consequences
 
-- All code uses generic names, with two ratified exceptions (see § Ratified Exceptions below): the W1.5.3 default tool floor keys on gamified names to match the workflow-factory wire format, and `ROLE_DISPLAY` carries a `"prover"` alias entry mirroring the verifier display strings so that lookups against raw factory-emitted role strings resolve cleanly. No new gamified-keyed surfaces without amending this ADR.
+- All code uses generic names, with two ratified exceptions (see § Ratified Exceptions below): the default tool floor keys on gamified names to match the workflow-factory wire format, and `ROLE_DISPLAY` carries a `"prover"` alias entry mirroring the verifier display strings so that lookups against raw factory-emitted role strings resolve cleanly. No new gamified-keyed surfaces without amending this ADR.
 - Serialized formats (JSONL, TOML) use StrEnum values directly.
 - Display names are resolved at render time by the persona module.
 - Adding a new role requires: StrEnum value + naming.py entry + persona TOML.
@@ -77,10 +77,10 @@ precedent.
 
 ### `DefaultToolPolicy._FLOOR` keys (`bonfire.dispatch.tool_policy`)
 
-The W1.5.3 default tool allow-list shipped in `DefaultToolPolicy._FLOOR` keys
+The default tool allow-list shipped in `DefaultToolPolicy._FLOOR` keys
 on the **gamified** role names (`scout`, `knight`, `warrior`, `prover`,
 `sage`, `bard`, `wizard`, `steward`) rather than the generic `AgentRole`
-StrEnum values. This is a deliberate exception, accepted as part of the W4.1
+StrEnum values. This is a deliberate exception, accepted as part of the tool-policy
 trust-triangle surface.
 
 **Why:**
@@ -88,14 +88,14 @@ trust-triangle surface.
 1. Workflow factories in `bonfire.workflow.standard` and `bonfire.workflow.research`
    emit gamified role strings into `StageSpec.role`; the wire format at the
    dispatch boundary is gamified.
-2. The W1.5.3 floor is the shipped contract that 1352 LOC of test coverage
+2. The default floor is the shipped contract that 1352 LOC of test coverage
    (`tests/unit/test_tool_policy.py`) locks in place; this contract is one
    of the trust-triangle gates blocking the v0.1.0 tag.
 3. A normalization seam already exists at `bonfire.agent.tiers.GAMIFIED_TO_GENERIC`
    and is consumed by `resolve_model_for_role`. `DefaultToolPolicy.tools_for`
    accepts either gamified or generic input via the same mapping; the floor's
    internal key vocabulary is invisible to callers, while the table's
-   internal keys stay gamified to preserve the W4.1 contract and its test
+   internal keys stay gamified to preserve the tool-policy contract and its test
    suite.
 
 ### `ROLE_DISPLAY["prover"]` alias entry (`bonfire.naming`)

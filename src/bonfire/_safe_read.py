@@ -208,7 +208,7 @@ def safe_read_capped_text(
     1. **Pre-check** — :meth:`pathlib.Path.is_symlink` (does NOT follow
        symlinks). Any symlink at *path* is refused with a
        ``FileExistsError`` whose message contains the literal substring
-       ``"symlink"`` (W7.M log-grep contract carried forward).
+       ``"symlink"`` (symlink log-grep contract carried forward).
     2. **Defense-in-depth** — :func:`os.open` with ``O_NOFOLLOW`` closes
        the TOCTOU window between the pre-check and the read. On Linux,
        a race-planted symlink causes ``open(2)`` to fail with ``ELOOP``;
@@ -259,7 +259,7 @@ def safe_read_capped_text(
         fd = os.open(path, flags)
     except OSError as exc:
         # Only the O_NOFOLLOW symlink-detection errnos get translated to
-        # the W7.M "symlink"-mentioning FileExistsError. Other OSErrors
+        # the "symlink"-mentioning FileExistsError. Other OSErrors
         # (ENOENT, EPERM, EISDIR, EACCES, ...) propagate untranslated.
         if exc.errno in _SYMLINK_ERRNOS:
             msg = (

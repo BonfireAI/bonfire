@@ -7,7 +7,7 @@ Thin factory that builds a ``BonfireSettings`` instance for a pipeline
 run. Replaces the silent ``BonfireSettings()`` fallback at the engine
 constructor sites (``PipelineEngine``, ``WizardHandler``) with a
 warn-on-failure path. (Historically also wired into ``StageExecutor``;
-that class was deleted in Wave 11 Lane E -- see
+that class was removed -- see
 ``bonfire.engine.__init__`` for context.)
 
 The factory is the single composition root for engine settings: callers

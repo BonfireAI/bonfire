@@ -8,6 +8,6 @@ commands shipping in v0.1 are: ``init``, ``scan``, ``status``,
 ``resume``, ``handoff``, ``persona``, and ``cost``.
 
 Three additional command modules (``pipeline``, ``project``, ``memory``)
-are intentionally deferred per the public-port plan §D-FT A/B/C and
-will land in a follow-up wave.
+are intentionally deferred and
+will land in a later release.
 """

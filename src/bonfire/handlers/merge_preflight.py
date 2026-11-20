@@ -99,7 +99,7 @@ _META_PREFLIGHT_PR_NUMBER: str = "preflight_pr_number"
 _SKIP_RESULT_TEMPLATE: str = "preflight: skipped (wizard verdict not approve)"
 
 # Maximum number of failing-test entries retained in the classification
-# result before truncation (Sage §D-CL.7 #6 envelope-size discipline). On
+# result before truncation (envelope-size discipline). On
 # overflow the live body appends a sentinel ``FailingTest`` whose
 # ``file_path`` carries an overflow marker.
 _FAILING_TESTS_LIMIT: int = 100
@@ -107,12 +107,12 @@ _FAILING_TESTS_OVERFLOW_PATH: str = "<overflow>"
 
 # Filename of the JUnit XML emitted into the scratch worktree by pytest.
 # Passed explicitly via ``--junit-xml=<path>`` to override any project
-# pyproject.toml junit config (Sage §D-CL.7 #3 path-traversal safety).
+# pyproject.toml junit config (path-traversal safety).
 _JUNIT_XML_FILENAME: str = "preflight-junit.xml"
 
 
 # ---------------------------------------------------------------------------
-# Sibling-batch detection (Sage §D5 lines 510-522)
+# Sibling-batch detection
 # ---------------------------------------------------------------------------
 
 
@@ -126,10 +126,9 @@ async def detect_sibling_prs(
     """Detect open sibling PRs targeting ``base``, excluding ``current``.
 
     Calls ``client.list_open_prs(base, exclude=current_pr_number)`` and
-    folds the response into ``{pr_number: frozenset(file_paths)}``. Sage
-    §A Q5 lines 128-136 + §D5 lines 510-522.
+    folds the response into ``{pr_number: frozenset(file_paths)}``.
 
-    Status semantics (Sage §A Q4 line 105):
+    Status semantics:
         - ``"skipped"`` -- caller passed ``sibling_detection=False`` at
           handler init (no API call made)
         - ``"ok"``      -- API returned a list (possibly empty)
@@ -153,7 +152,7 @@ async def detect_sibling_prs(
 
 
 # ---------------------------------------------------------------------------
-# Handler (Sage §D2)
+# Handler
 # ---------------------------------------------------------------------------
 
 
@@ -240,8 +239,8 @@ class MergePreflightHandler:
                     },
                 )
 
-            # Step 3: Sibling-batch detection (Sage §D2 line 272 + §D5
-            # lines 510-522). Performed BEFORE scratch acquire so the
+            # Step 3: Sibling-batch detection.
+            # Performed BEFORE scratch acquire so the
             # sibling file-set is in hand when diffs are applied.
             sibling_files, sibling_status = await detect_sibling_prs(
                 self._github_client,
@@ -251,14 +250,14 @@ class MergePreflightHandler:
             )
 
             # Step 4: Acquire scratch worktree (try/finally guarantee
-            # via async-with). Sage §D2 line 273.
+            # via async-with).
             ctx = self._scratch_factory.acquire(
                 self._base_branch,
                 pr_number=pr_number,
             )
             async with ctx as info:
                 # Steps 5-10: Apply current PR diff, apply sibling diffs,
-                # run pytest, parse, classify. Sage §D2 lines 273-291.
+                # run pytest, parse, classify.
                 classification = await self._classify_preflight_run(
                     info=info,
                     pr_number=pr_number,
@@ -300,27 +299,27 @@ class MergePreflightHandler:
         diff -> sibling diffs -> pytest -> JUnit parse -> baseline cache
         -> deterministic classifier).
 
-        Step ordering mirrors the §D2 pseudocode exactly:
+        Step ordering:
             5. Apply current PR diff in scratch (``git apply --3way``).
             6. Apply sibling-batch diffs in ascending PR-number order
-               (Sage §D-CL.7 #4: later PR's diff takes precedence on
+               (later PR's diff takes precedence on
                conflict via ``--3way``).
-            7. Run pytest with ``--junit-xml=<known-path>`` (§D-CL.7 #3).
+            7. Run pytest with ``--junit-xml=<known-path>``.
             8. Parse failures from JUnit XML; fall back to stdout regex
                if XML is empty AND returncode != 0.
             9. Compute / cache baseline failures on ``origin/<base>``.
-           10. Call :py:func:`classify_pytest_run` (Warrior B's pure fn).
+           10. Call :py:func:`classify_pytest_run` (the pure classifier function).
 
-        Envelope-size discipline (§D-CL.7 #6):
+        Envelope-size discipline:
             - ``pytest_stdout_tail`` is truncated to 2KB.
             - ``failing_tests`` is truncated to 100 entries; on overflow
               a sentinel ``FailingTest`` with ``file_path='<overflow>'``
               is appended so downstream forensics can detect truncation.
 
-        Path-guard discipline (§D-CL.7 #7): error messages name PRs by
+        Path-guard discipline: error messages name PRs by
         number and never embed the absolute scratch worktree path.
 
-        Subprocess discipline (§D-CL.7 #8): all invocations use
+        Subprocess discipline: all invocations use
         ``asyncio.create_subprocess_exec`` with ``tuple[str, ...]`` args;
         no shell interpolation anywhere in the chain.
         """
@@ -344,7 +343,7 @@ class MergePreflightHandler:
             )
 
         # Step 6: apply each sibling's diff in ascending PR-number order
-        # (Sage §D-CL.7 #4: deterministic ordering, later PR wins on
+        # (deterministic ordering, later PR wins on
         # conflict via ``--3way``). Sibling-fetch errors are logged + skipped
         # (graceful degradation -- a transient gh failure should NOT block
         # the whole preflight). Sibling-apply failures DO produce a
@@ -385,7 +384,7 @@ class MergePreflightHandler:
         if not failing and result.returncode != 0:
             failing = parse_pytest_stdout_fallback(result.stdout_tail)
 
-        # Envelope-size bound (Sage §D-CL.7 #6): truncate failing_tests
+        # Envelope-size bound: truncate failing_tests
         # to 100 entries; append an overflow sentinel so forensics see it.
         if len(failing) > _FAILING_TESTS_LIMIT:
             failing = (
@@ -396,8 +395,8 @@ class MergePreflightHandler:
         # Step 9: baseline failures on origin/<base> (cached).
         baseline = await self._get_baseline_failures(info.base_sha)
 
-        # Step 10: deterministic classification (Warrior B pure function).
-        # Sage §A Q4 lines 79-122. ``pytest_stdout`` is already 2KB-tail
+        # Step 10: deterministic classification (the pure classifier function).
+        # ``pytest_stdout`` is already 2KB-tail
         # bounded inside _run_pytest_in_worktree.
         return classify_pytest_run(
             failing_tests=failing,
@@ -416,14 +415,14 @@ class MergePreflightHandler:
     ) -> None:
         """Apply *diff_text* to *worktree_path* via ``git apply --3way``.
 
-        Sage §D2 line 275 + §D-CL.7 #8 (no shell, args as tuple) +
-        §D-CL.7 #4 (``--3way`` lets later PRs win on textual conflict).
+        No shell (args as tuple) and
+        ``--3way`` lets later PRs win on textual conflict.
         Diff content is piped via stdin; we never write a temporary file
         on disk. Empty diff is a no-op (git apply with empty stdin returns
         zero).
 
         Raises ``RuntimeError`` on non-zero git exit. Error message names
-        only the worktree's basename to honour §D-CL.7 #7 (no absolute
+        only the worktree's basename to keep messages path-safe (no absolute
         paths in error messages).
         """
         proc = await asyncio.create_subprocess_exec(
@@ -443,8 +442,8 @@ class MergePreflightHandler:
         if proc.returncode != 0:
             stderr_text = stderr.decode("utf-8", errors="replace").strip()
             # Truncate stderr so a verbose 3-way conflict message does not
-            # blow the envelope budget (§D-CL.7 #6). Path-guard (§D-CL.7
-            # #7): we name only the basename of the worktree.
+            # blow the envelope budget. Path-guard:
+            # we name only the basename of the worktree.
             tail = stderr_text[:512]
             raise RuntimeError(
                 f"git apply --3way failed (exit {proc.returncode}) "
@@ -457,17 +456,16 @@ class MergePreflightHandler:
     ) -> _PytestResult:
         """Run pytest inside *worktree_path*; return a :class:`_PytestResult`.
 
-        Sage §D2 lines 279-280 + §D-CL.7 #2/#3/#8.
+        Subprocess safeguards:
 
         Subprocess discipline:
-            - Args built as a ``tuple[str, ...]``; never a shell string
-              (§D-CL.7 #8).
+            - Args built as a ``tuple[str, ...]``; never a shell string.
             - Explicit ``--junit-xml=<known-path>`` overrides any project
-              pyproject.toml junit setting (§D-CL.7 #3).
+              pyproject.toml junit setting.
             - On ``asyncio.TimeoutError`` we call ``proc.kill()`` AND
               ``await proc.wait()`` before returning so the kernel
               releases the pid before the worktree is torn down
-              (§D-CL.7 #2 resource-leak discipline).
+              (resource-leak discipline).
 
         On timeout the result is shaped to drive the classifier into
         ``PYTEST_COLLECTION_ERROR`` (returncode=-1, no failing_tests).
@@ -476,8 +474,8 @@ class MergePreflightHandler:
 
         # ``self._pytest_command`` already begins with "pytest" by default
         # (see __init__). We append the junit + quiet flags as additional
-        # args; tuple concatenation keeps argv as ``tuple[str, ...]`` per
-        # §D-CL.7 #8 ("never as a single shell string").
+        # args; tuple concatenation keeps argv as ``tuple[str, ...]``,
+        # "never as a single shell string".
         pytest_args: tuple[str, ...] = (
             *self._pytest_command,
             f"--junit-xml={junit_xml_path}",
@@ -503,7 +501,7 @@ class MergePreflightHandler:
             else:
                 stdout_b, _ = await proc.communicate()
         except TimeoutError:
-            # §D-CL.7 #2: actively kill + reap before the worktree is
+            # Actively kill + reap before the worktree is
             # torn down so the process holds no FDs into the scratch.
             proc.kill()
             with contextlib.suppress(Exception):
@@ -518,7 +516,7 @@ class MergePreflightHandler:
 
         elapsed = time.monotonic() - start
         stdout_text = stdout_b.decode("utf-8", errors="replace")
-        # Tail-truncate to envelope-size budget (§D-CL.7 #6).
+        # Tail-truncate to envelope-size budget.
         stdout_tail = stdout_text[-_PYTEST_STDOUT_TAIL_BYTES:]
         return _PytestResult(
             returncode=proc.returncode if proc.returncode is not None else -1,
@@ -533,7 +531,7 @@ class MergePreflightHandler:
     ) -> frozenset[str]:
         """Return cached baseline failures on ``origin/<base>``; compute on miss.
 
-        Sage §D2 line 281 + §A Q7 line 165 ("one-time amortization").
+        The cost is a one-time amortization.
         On miss we acquire a SECOND scratch worktree at the base ref (NO
         PR diff applied), run pytest there, and intersect the failing
         test file paths into a frozenset. The result is cached on
@@ -581,8 +579,8 @@ class MergePreflightHandler:
     ) -> Envelope:
         """Convert a :class:`PreflightClassification` into a result envelope.
 
-        Routes all six verdicts per Sage §D2 lines 285-291 + §A Q6
-        ALLOW-WITH-ANNOTATION (line 156, ratified):
+        Routes all six verdicts, including the
+        allow-with-annotation case:
 
             - GREEN
                 -> COMPLETED, ``result="preflight: PASSED ..."``,
@@ -590,7 +588,7 @@ class MergePreflightHandler:
             - PRE_EXISTING_DEBT
                 -> COMPLETED with ``META_PREFLIGHT_TEST_DEBT_NOTED=True``
                    + ``META_PREFLIGHT_CLASSIFICATION``; pipeline proceeds
-                   to Steward (Q6 ALLOW-WITH-ANNOTATION)
+                   to Steward (allow-with-annotation)
             - CROSS_WAVE_INTERACTION
                 -> FAILED, ErrorDetail(error_type="cross_wave_interaction")
             - PURE_WARRIOR_BUG
@@ -635,7 +633,7 @@ class MergePreflightHandler:
             )
 
         # All four blocking verdicts share the same FAILED envelope shape;
-        # the error_type literal differs per Sage §D2 lines 287-289.
+        # the error_type literal differs per verdict.
         message_map: dict[PreflightVerdict, str] = {
             PreflightVerdict.CROSS_WAVE_INTERACTION: (
                 "Cross-wave interaction detected with "
@@ -669,7 +667,7 @@ class MergePreflightHandler:
 
 
 # ---------------------------------------------------------------------------
-# Public exports (Sage §D1 lines 200-208)
+# Public exports
 # ---------------------------------------------------------------------------
 
 

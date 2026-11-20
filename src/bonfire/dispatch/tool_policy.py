@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Per-role tool allow-list policy — W1.5.3 default floor + W4.1 user seam.
+"""Per-role tool allow-list policy — default floor + user-configurable seam.
 
 The :class:`ToolPolicy` Protocol lets the dispatch layer ask "for this role,
 which tools are permitted?" without any particular implementation. The bundled
-:class:`DefaultToolPolicy` ships the W1.5.3 floor — eight canonical roles
+:class:`DefaultToolPolicy` ships the default floor — eight canonical roles
 mapped to tool lists lifted from the Bonfire v0.1 axiom tables.
 
-The :class:`ToolPolicy` Protocol IS the W4.1 user-configurable surface. Users
+The :class:`ToolPolicy` Protocol IS the user-configurable surface. Users
 who wish to override the floor implement :class:`ToolPolicy` and pass their
 implementation into ``PipelineEngine`` via the ``tool_policy=`` constructor
 kwarg. No TOML loader ships in v0.1; the Protocol seam is the public
@@ -53,7 +53,7 @@ class ToolPolicy(Protocol):
 # present in ``DefaultToolPolicy._FLOOR``. ``GAMIFIED_TO_GENERIC`` is
 # many-to-one (``cleric`` and ``prover`` both alias ``VERIFIER``); when more
 # than one gamified alias resolves to the same generic, we prefer the alias
-# that is actually a key in the floor table — that's the one the W4.1 test
+# that is actually a key in the floor table — that's the one the test
 # contract pins. Aliases that resolve to generics with no floor entry
 # (``architect`` → ``analyst``) are simply not in this inverse map; callers
 # passing those generics receive ``[]`` (the floor's natural default).
@@ -78,7 +78,7 @@ _GENERIC_TO_GAMIFIED: Mapping[str, str] = _build_generic_to_gamified()
 
 
 class DefaultToolPolicy:
-    """Built-in W1.5.3 floor allow-list.
+    """Built-in default floor allow-list.
 
     Role strings match the gamified names emitted by Bonfire workflow
     factories (``workflows/standard.py``, ``workflows/research.py``).
@@ -100,17 +100,17 @@ class DefaultToolPolicy:
     }
 
     def tools_for(self, role: str) -> list[str]:
-        # Direct lookup: preserves the W4.1 byte-for-byte contract on
+        # Direct lookup: preserves the byte-for-byte contract on
         # gamified inputs. ``dict.get`` raises ``TypeError`` for
         # unhashable inputs (list/dict) — that's the documented
-        # AMBIG #5 behavior and we preserve it.
+        # behavior and we preserve it.
         floor_hit = self._FLOOR.get(role)
         if floor_hit is not None:
             return list(floor_hit)
 
         # Generic-input path: normalize and look up the gamified key.
         # Only str inputs are normalized; non-str hashable inputs (None,
-        # int, tuple) just fall through to ``[]`` per AMBIG #5.
+        # int, tuple) just fall through to ``[]``.
         if isinstance(role, str):
             normalized = role.strip().lower()
             gamified = _GENERIC_TO_GAMIFIED.get(normalized)

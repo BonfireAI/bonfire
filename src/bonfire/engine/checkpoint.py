@@ -196,7 +196,7 @@ class CheckpointManager:
         # payload — same defect-family as the tmp-path primitive, missed
         # at the final rename step. Reject any symlink at ``final_path``
         # before the rename. The ``"symlink"`` substring preserves the
-        # W7.M log-grep contract so callers and log scrapers handle
+        # symlink log-grep contract so callers and log scrapers handle
         # tmp-path and final-path symlink refusals identically.
         if final_path.is_symlink():
             # Best-effort cleanup of our freshly-written tmp file so we

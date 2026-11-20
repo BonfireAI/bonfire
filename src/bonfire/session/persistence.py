@@ -28,7 +28,7 @@ def _validate_session_id_at_boundary(session_id: str) -> str:
     transits a ``BonfireEvent`` model. Without this check, a value like
     ``"../../etc/passwd"`` interpolates into ``{session_id}.jsonl`` and
     becomes a path-traversal write/read primitive at the filesystem
-    boundary (W11 H2 defense-in-depth gap).
+    boundary (defense-in-depth gap).
 
     The empty-string sentinel is REJECTED at the persistence boundary
     even though the model accepts it: an empty ``session_id`` produces
@@ -64,12 +64,12 @@ class SessionPersistence:
 
         Uses ``safe_append_text`` to refuse symlinks at the target path
         (via ``is_symlink()`` pre-check + ``O_NOFOLLOW`` defense-in-
-        depth). The W7.M ``safe_write_text`` rollout closed truncate-
+        depth). The ``safe_write_text`` rollout closed truncate-
         mode write sites but missed this append-mode site; a planted
         symlink at ``{session_id}.jsonl`` would otherwise redirect
         every JSONL event line to an attacker-controlled target.
 
-        W11 H2: ``_validate_session_id_at_boundary`` rejects path-
+        ``_validate_session_id_at_boundary`` rejects path-
         traversal shapes (``..``, ``/``, ``\\``, null, control chars,
         oversized, empty) at this class boundary so external callers
         passing user-controlled ``session_id`` cannot smuggle a write
@@ -87,12 +87,12 @@ class SessionPersistence:
     def read_events(self, session_id: str) -> list[dict]:
         """Read all events for a session. Raises FileNotFoundError if missing.
 
-        Uses ``safe_read_capped_text`` (W7.M read-side helper) to refuse
+        Uses ``safe_read_capped_text`` (read-side helper) to refuse
         symlinks at the JSONL path via ``is_symlink()`` pre-check +
         ``O_NOFOLLOW`` defense-in-depth, and to cap reads at
         ``MAX_CHECKPOINT_BYTES`` (10 MiB). Symmetric mirror of the
         ``safe_append_text`` write-side hardening on ``append_event``:
-        Wave 9 closed the write half of the operator-controlled JSONL
+        Earlier work closed the write half of the operator-controlled JSONL
         attack surface; this closes the read half.
 
         Distinguish missing-file (legitimate "session never ran") from
@@ -102,10 +102,10 @@ class SessionPersistence:
         would otherwise be reported as "no session file" — masking the
         attack. Use ``Path.is_symlink()`` first to route any symlink
         (live, dangling, looping) into the safe-read helper, which
-        raises ``FileExistsError`` with the W7.M ``"symlink"`` log-grep
+        raises ``FileExistsError`` with the ``"symlink"`` log-grep
         substring.
 
-        W11 H2: ``_validate_session_id_at_boundary`` rejects path-
+        ``_validate_session_id_at_boundary`` rejects path-
         traversal shapes at this class boundary BEFORE the path is
         constructed so a hostile ``session_id`` like ``"../../etc/passwd"``
         never reaches ``Path.is_symlink`` against an attacker-chosen
@@ -129,7 +129,7 @@ class SessionPersistence:
     def session_exists(self, session_id: str) -> bool:
         """Check whether a session file exists.
 
-        W11 H2: ``_validate_session_id_at_boundary`` rejects path-traversal
+        ``_validate_session_id_at_boundary`` rejects path-traversal
         shapes BEFORE any filesystem call so a hostile ``session_id`` like
         ``"../../etc/passwd"`` never produces a positive ``exists()``
         return for an attacker-controlled path.

@@ -5,7 +5,7 @@
 
 Six gate classes implementing the QualityGate protocol, plus GateChain for
 sequential evaluation with short-circuit on error severity. Gate-name strings
-are locked per Sage D9.
+are locked, public names.
 
 **Every gate here grades state, never narration.** A gate reads the
 envelope's status, its metadata, the pipeline context, or -- for the three
@@ -17,7 +17,7 @@ an approval -- one mechanism, both directions, so a longer word list would
 have fixed neither. A gate that cannot reach its state raises
 :class:`~bonfire.engine.gate_state.GateStateUnavailableError` instead.
 
-Sage D5: GateChain does NOT wrap individual gate exceptions. A raising gate --
+GateChain does NOT wrap individual gate exceptions. A raising gate --
 including :class:`UnknownGateError` for a gate a stage names but the registry
 does not hold -- propagates out to PipelineEngine.run()'s outer try/except,
 which returns ``PipelineResult(success=False)``: the loud path an unevaluatable
@@ -47,10 +47,10 @@ if TYPE_CHECKING:
 # The only reviewer verdict that clears the gate; WizardHandler writes it.
 _APPROVED_VERDICT: str = "approve"
 
-# Gate name string -- locked per Sage §D-CL.6 #5 (line 1071) for the merge-preflight gate.
+# Gate name string -- a locked, public name for the merge-preflight gate.
 _MERGE_PREFLIGHT_GATE_NAME: str = "merge_preflight_passed"
 
-# Gate name string -- locked per Sage §D-CL.6 #5 + §A Q3 line 124 for the
+# Gate name string -- a locked, public name for the
 # sage-correction-bounce stage.
 _SAGE_CORRECTION_GATE_NAME: str = "sage_correction_resolved"
 
@@ -215,8 +215,8 @@ class SageCorrectionResolvedGate:
     """Gate adapter for :class:`SageCorrectionBounceHandler` envelopes.
 
     Translates the handler's correction-cycle envelope into a
-    :class:`GateResult`. Verdict-routing matrix (Sage §D-CL.1 lines 93-97
-    + Anta-ratified §A Q9a):
+    :class:`GateResult`. Verdict-routing matrix (envelope shape to gate
+    result):
 
         | envelope shape                                      | passed | severity |
         |-----------------------------------------------------|--------|----------|

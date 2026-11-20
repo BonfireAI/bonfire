@@ -6,13 +6,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Security
-
-- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
-  are affected by an argument-injection advisory in the `resume` option
-  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Installs that resolved an older SDK
-  now resolve a patched one.
-
 ### Fixed
 
 - A pipeline stage naming a gate the engine does not hold in its
@@ -144,6 +137,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   prints, the `__version__` import fallback and the newest CHANGELOG
   release heading must all agree, checked on every run of the suite.
 
+## [1.0.3] — 2026-11-19
+
+Release fix on top of 1.0.2. No feature changes. 1.0.2 was tagged but
+never reached PyPI, so 1.0.3 is the first published release with the
+patched `claude-agent-sdk` floor.
+
+### Security
+
+- The PyPI publish step is pinned to `pypa/gh-action-pypi-publish`
+  v1.14.3, which fixes GHSA-5xjx-3w67-w9x9 (CRITICAL). The minimum
+  `claude-agent-sdk` stays at 0.2.121 (GHSA-h4mw-j7qp-8mwm).
+
+### Fixed
+
+- 1.0.2 was tagged but never published: the publish step rejected
+  Metadata-Version 2.5. The build job now checks the wheel with the
+  same twine and packaging versions the publish step uploads with.
+
+## [1.0.2] — 2026-11-18 (tagged, never published; see 1.0.3)
+
+Security patch on top of 1.0.1. No feature changes.
+
+### Security
+
+- The minimum `claude-agent-sdk` is raised to 0.2.121. Earlier versions
+  are affected by an argument-injection advisory in the `resume` option
+  (GHSA-h4mw-j7qp-8mwm, CRITICAL). Bonfire never passes `resume` itself;
+  the exposure was an environment that already held an older SDK.
+  Installs of 1.0.2 resolve a patched one.
+
+### Changed
+
+- The release workflow refuses to publish when the pushed tag does not
+  equal `v` plus the version declared in `pyproject.toml`. The check runs
+  before anything is built or uploaded.
+- CI and smoke checks also run for pull requests into `release/**`
+  maintenance branches.
+- A docstring in `bonfire.engine.gates` no longer cites internal
+  planning notes.
+
 ## [1.0.1] — 2026-05-17
 
 Docs-only release. README repositioned for marketing impact on the
@@ -263,7 +296,7 @@ chat — no browser tab, no WebSocket, no context switch.
 
 ### Audit
 
-A full audit at the post-Wave-11 baseline (three independent scouts:
+A full audit at the post-transfer baseline (three independent scouts:
 security, pipeline, onboard) returned **zero CRITICAL findings across
 all three axes**. The two HIGHs surfaced by the onboard scout
 (stub-command caveat, `ANTHROPIC_API_KEY` in Quick Start) folded into
@@ -302,7 +335,7 @@ and in a fresh release-gate Box.
   `PipelineFailed`. Bus-observed total now equals
   `PipelineResult.total_cost_usd` on success, failure, bounce, and
   parallel-group paths.
-- **`safe_read_capped_text` mirrored to symmetric read sites.** The Wave-9
+- **`safe_read_capped_text` mirrored to symmetric read sites.** The earlier
   safe-write rollout now covers `session/persistence.py::read_events`,
   `xp/tracker.py::XPTracker.events`, and the `bonfire init` gitignore
   append. Symlink, oversize, and TOCTOU shapes are refused with typed
@@ -381,7 +414,7 @@ together form the trust triangle a production deployment composes against.
 The stable `0.1.0` tag remains held until the full release-gate ladder
 (per [`docs/release-policy.md`](docs/release-policy.md)) clears in code,
 in CI, and in a fresh release-gate Box. Follow-ups surfaced in this alpha
-are tracked under BON-610 and ship in subsequent v0.1.0aN or v0.1.x patches.
+are tracked as follow-ups and ship in subsequent v0.1.0aN or v0.1.x patches.
 
 Two patches on top of [0.1.0a2] dominate the surface delta: a coordinated
 hardening pass across the dispatch, scanner, persona, git, and Front Door
@@ -541,7 +574,7 @@ passes" mean what it should on the integration branch.
   `python3-yaml` so the in-box gate-verdict script can actually run.
   `claude --version` is asserted at image build time — a broken install
   now fails the build instead of surfacing as a runtime `exit:127`.
-- W4.1 framing reconciled across `dispatch/tool_policy.py`,
+- Tool-policy framing reconciled across `dispatch/tool_policy.py`,
   `docs/release-policy.md`, and `CLAUDE.md`: the `ToolPolicy` extension
   Protocol IS the user-configurable surface; no TOML loader ships in
   v0.1. Users override the default allow-list floor by implementing

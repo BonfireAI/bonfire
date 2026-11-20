@@ -13,10 +13,9 @@ Invariants locked
   FAILED envelope with ``ErrorDetail.error_type`` = exception class name.
 * **Traceback captured.** ``ErrorDetail.traceback`` is populated on
   exception (crash-recovery triage depends on it).
-* **Rate-limit rejection.** ``RateLimitEvent(status='rejected')`` →
+* **Rate-limit rejection.** ``rate_limit_info.status == 'rejected'`` →
   ``error_type='RateLimitError'`` (triggers terminal-no-retry in runner).
-* **Rate-limit warning.** ``allowed_warning`` status is log-only — must
-  NOT fail the dispatch.
+* **Rate-limit warning.** ``allowed_warning`` is logged, never fails the dispatch.
 * **``is_error=True`` on ResultMessage** → ``error_type='AgentError'``.
 * **Text accumulation.** Multiple ``AssistantMessage`` text blocks
   concatenate in order; falls back to ``ResultMessage.result`` when no
@@ -118,10 +117,10 @@ def _mock_result_message(
     return msg
 
 
-def _mock_rate_limit(status: str = "rejected") -> MagicMock:
-    msg = MagicMock(spec=_RateLimitEvent) if _HAS_SDK_TYPES else MagicMock()
-    msg.status = status
-    return msg
+def _mock_rate_limit(status: str = "rejected") -> _RateLimitEvent:
+    from claude_agent_sdk.types import RateLimitInfo  # type: ignore[import-untyped]
+
+    return _RateLimitEvent(RateLimitInfo(status=status), "uuid-1", "session-1")
 
 
 def _envelope(task: str = "run something") -> Envelope:
@@ -311,7 +310,7 @@ class TestSuccessPath:
 
 
 class TestRateLimit:
-    """RateLimitEvent(status='rejected') → RateLimitError FAILED envelope."""
+    """``rate_limit_info.status == 'rejected'`` → RateLimitError FAILED envelope."""
 
     async def test_rate_limit_rejected_becomes_failed(self):
         async def mock_query(*, prompt="", options=None):
@@ -326,11 +325,12 @@ class TestRateLimit:
         assert out.error.error_type == "RateLimitError"
         assert "Rate limit" in out.error.message
 
-    async def test_rate_limit_warning_does_not_fail(self):
-        """``allowed_warning`` status is a log-only event — must NOT fail."""
+    @pytest.mark.parametrize(("status", "warned"), [("allowed_warning", True), ("allowed", False)])
+    async def test_rate_limit_warning_does_not_fail(self, caplog, status, warned):
+        """Neither status fails; only ``allowed_warning`` logs a warning."""
 
         async def mock_query(*, prompt="", options=None):
-            yield _mock_rate_limit(status="allowed_warning")
+            yield _mock_rate_limit(status=status)
             yield _mock_assistant_message("ok")
             yield _mock_result_message(total_cost_usd=0.01)
 
@@ -339,6 +339,7 @@ class TestRateLimit:
             out = await backend.execute(_envelope(), options=_options())
 
         assert out.status == TaskStatus.COMPLETED
+        assert ("Rate limit warning" in caplog.text) is warned
 
 
 # ---------------------------------------------------------------------------

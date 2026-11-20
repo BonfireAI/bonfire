@@ -294,7 +294,7 @@ class ClaudeSDKBackend:
                     errors = getattr(msg, "errors", None)
 
                 elif RateLimitEvent is not None and isinstance(msg, RateLimitEvent):
-                    status = getattr(msg, "status", "")
+                    status = getattr(msg.rate_limit_info, "status", "")
                     if status == "rejected":
                         return envelope.with_error(
                             ErrorDetail(

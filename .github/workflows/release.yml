@@ -6,6 +6,8 @@ name: Release
 # `vX.Y.ZbN` / `vX.Y.ZrcN` for pre-releases). The `build` job assembles
 # the wheel + sdist and twine-checks both; the `publish` job uploads them
 # to PyPI via the `pypa/gh-action-pypi-publish` action.
+# A guard step fails the build (and so the publish) when the tag differs from
+# 'v' + project.version.
 #
 # Auth path: PyPI Trusted Publisher (OIDC). No API token is referenced —
 # the `id-token: write` permission plus the `pypi` GitHub Environment let
@@ -65,10 +67,18 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Release version-truth guard (tag must equal declared version)
+        # Tripwire: this workflow publishes on ANY v*.*.* tag push, so a tag
+        # that disagrees with pyproject.toml would ship a wrong public
+        # release. Fail closed, with a typed error, before anything builds.
+        run: python scripts/check_tag_version.py "${GITHUB_REF_NAME}"
+
       - name: Install build frontend
+        # These pins equal the publisher's bundled twine and packaging, so
+        # `twine check` measures with the same instrument that uploads.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build twine
+          python -m pip install build twine==7.0.0 packaging==26.2
 
       - name: Build wheel + sdist
         run: python -m build
@@ -101,12 +111,16 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        # Pinned to a commit SHA (v1.14.0) rather than the floating
-        # `release/v1` ref for supply-chain hardening. v1.14.0 bundles
-        # a twine release (>= 6.x) that supports Metadata-Version 2.4
-        # — needed because hatchling emits 2.4 wheels for `pyproject.toml`
-        # that uses the SPDX license expression (`license = "Apache-2.0"`).
-        # v1.12.2 (the previous pin) bundled a twine that rejected those
-        # wheels with `InvalidDistribution: Metadata is missing required
-        # fields: Name, Version` during upload.
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        # Pinned to the v1.14.3 commit SHA rather than the floating
+        # `release/v1` ref for supply-chain hardening. v1.14.3 bundles
+        # twine 7.0.0 + packaging 26.2, which accept Metadata-Version 2.5
+        # (hatchling emits 2.5). v1.14.0 (the previous pin) rejected 2.5
+        # wheels with `InvalidDistribution: '2.5' is not a valid metadata
+        # version`, and is inside GHSA-5xjx-3w67-w9x9 (fixed in 1.14.3).
+        # History: v1.12.2 (the pin before that) bundled a twine that
+        # rejected Metadata-Version 2.4 wheels with `InvalidDistribution:
+        # Metadata is missing required fields: Name, Version` during upload.
+        # When bumping this SHA, update the build-job twine/packaging pins
+        # from the action's `requirements/runtime.txt` at the new SHA.
+        # The recorded pairs live in PUBLISHER_BUNDLES in tests/unit/test_release_workflow_guard.py.
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086

@@ -161,14 +161,16 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # "What's Not There Yet" list was rewritten against the tree.
         # Doc-truth pass: shifted 376/377 -> 377/378 when the stale
         # `standard_build` bullet was corrected against the tree.
+        # Patch-release 1.0.3 forward-port: shifted 378/379 -> 380/381 (the
+        # upgrade line and a blank went in above). Text unchanged.
         (
             "README.md",
-            378,
+            380,
             "predecessor named Passelewe. History is sacred — see",
         ),
         (
             "README.md",
-            379,
+            381,
             "`docs/_lore/passelewe.md` if you want the lineage.",
         ),
         # --- CHANGELOG.md — predecessor-persona historical entries -----
@@ -195,24 +197,28 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Presence-list fix entry: shifted 684/686/687/704 -> 698/700/701/718
         # when a Fixed entry was added under [Unreleased] (11 lines, then 3 more
         # for the connector switch). Anchors only; expected text is unchanged.
+        # Patch-release forward-port: shifted 698/700/701/718 -> 713/715/716/733 (the
+        # Unreleased Security note moved out, the [1.0.2] block went in). Text unchanged.
+        # Patch-release 1.0.3 forward-port: shifted 713/715/716/733 -> 731/733/734/751
+        # (the [1.0.3] block went in). Text unchanged.
         (
             "CHANGELOG.md",
-            698,
+            731,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            700,
+            733,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            701,
+            734,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            718,
+            751,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

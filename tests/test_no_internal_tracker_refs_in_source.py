@@ -313,7 +313,7 @@ def _plant_docs(tmp_path: Path, files: dict[str, str]) -> list[_MarkerHit]:
     [
         ("memo-citation", "(Sage memo `x-sage.md` §A Q4)"),
         ("memo-citation", "See Sage memo"),
-        ("ticket-id", "tracked under BON-610"),
+        ("ticket-id", "tracked under " + "BON" + "-610"),
         ("ticket-id", "`bon-519-sage-x.md`"),
         ("wave", "Wave 9.2 release preparation"),
     ],

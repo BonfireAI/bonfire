@@ -512,10 +512,10 @@ class SageCorrectionBounceHandler:
             )
 
         del prior_results  # not yet consumed in cycle body; reserved for future
-        # An empty ``cwd`` makes the backend trust the target repo's own
-        # CLAUDE.md and .claude/settings.json; naming the root keeps an
-        # unfamiliar checkout untrusted, as the composition root already
-        # does for the dispatched stages.
+        # Naming the repository root makes the backend judge that directory
+        # against the operator's BONFIRE_TRUST_ROOTS, as the composition
+        # root does for the dispatched stages; an empty ``cwd`` would be
+        # judged as the process directory instead.
         dispatch_options = SageCorrectionDispatchOptions(
             allowed_tools=SAGE_CORRECTION_ALLOWED_TOOLS,
             role=AgentRole.SYNTHESIZER.value,

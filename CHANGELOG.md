@@ -4,6 +4,8 @@ All notable changes to `bonfire-ai` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [1.1.0] — 2026-11-20
 
 ### Security
@@ -16,6 +18,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   empty or omitted directory is no longer trusted by default: the process
   directory is judged like any other. To upgrade, export
   `BONFIRE_TRUST_ROOTS=/path/to/your/repo`.
+  Advisory: [GHSA-6whq-w6f8-fqxv](https://github.com/BonfireAI/bonfire/security/advisories/GHSA-6whq-w6f8-fqxv).
 
 ### Fixed
 

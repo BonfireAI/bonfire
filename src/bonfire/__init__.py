@@ -39,4 +39,4 @@ try:
     __version__ = _pkg_version("bonfire-ai")
 except PackageNotFoundError:
     # Editable / unbuilt fallback — keep in lockstep with pyproject.toml
-    __version__ = "1.1.0"
+    __version__ = "1.2.0.dev0"

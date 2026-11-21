@@ -204,25 +204,25 @@ _ALLOWLIST: frozenset[tuple[str, int, str]] = frozenset(
         # Patch-release 1.0.3 forward-port: shifted 713/715/716/733 -> 731/733/734/751
         # (the [1.0.3] block went in). Text unchanged.
         # Trust-roots forward-port: CHANGELOG shifted 731/733/734/751 -> 742/744/745/762 (the
-        # 1.1.0 entry went in above). Text unchanged.
+        # 1.1.0 entry went in above); 1.2.0 dev line -> 745/747/748/765. Text unchanged.
         (
             "CHANGELOG.md",
-            742,
+            745,
             "predecessor persona (Passelewe, the Chamberlain) was retired; the",
         ),
         (
             "CHANGELOG.md",
-            744,
+            747,
             "`docs/_lore/passelewe.md`. The persona builtins directory",
         ),
         (
             "CHANGELOG.md",
-            745,
+            748,
             "`src/bonfire/persona/builtins/passelewe/` was deleted; a new",
         ),
         (
             "CHANGELOG.md",
-            762,
+            765,
             'to ban `"passelewe"` in src/ (the predecessor persona is gone, so',
         ),
         # --- CLAUDE.md — constellation-pointer breadcrumbs --------------

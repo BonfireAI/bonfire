@@ -107,13 +107,10 @@ def _format_error_traceback(exc: BaseException) -> str | None:
 
 
 def _bonfire_toml_opts_in(cwd_path: Path) -> bool:
-    """Return ``True`` iff ``cwd_path/bonfire.toml`` explicitly opts in.
+    """Return ``True`` iff ``cwd_path/bonfire.toml`` carries the old opt-in key.
 
-    The required opt-in is a literal boolean ``true`` at
-    ``[bonfire].trust_project_settings``. File presence alone is NOT
-    sufficient — a malicious clone shipping an empty ``[bonfire]`` table
-    must not silently trust the repo's ``CLAUDE.md`` /
-    ``.claude/settings.json``.
+    Read only to report an ignored key: the literal boolean ``true`` at
+    ``[bonfire].trust_project_settings`` is detected so it can be logged.
 
     Strict-bool: string ``"true"`` / int ``1`` are NOT honored. Malformed
     TOML and missing-table cases return ``False`` (fail-safe deny).
@@ -135,28 +132,43 @@ def _bonfire_toml_opts_in(cwd_path: Path) -> bool:
     return type(value) is bool and value is True
 
 
+TRUST_ROOT_NOT_ABSOLUTE = "trust_root_not_absolute"
+TRUST_TOML_IGNORED = "trust_toml_ignored"
+
+
+def _trust_roots() -> list[Path]:
+    """Resolve the operator's ``BONFIRE_TRUST_ROOTS`` (absolute entries only)."""
+    roots: list[Path] = []
+    for part in os.environ.get("BONFIRE_TRUST_ROOTS", "").split(os.pathsep):
+        if not part:
+            continue
+        if not os.path.isabs(part):
+            logger.warning("%s: ignoring non-absolute trust root %r", TRUST_ROOT_NOT_ABSOLUTE, part)
+            continue
+        roots.append(Path(part).resolve())
+    return roots
+
+
 def _resolve_setting_sources(cwd: str | None) -> list[str]:
-    """Return ``['project']`` iff the cwd opts into Bonfire, else ``[]``.
+    """Return ``['project']`` iff the operator trusts the directory, else ``[]``.
 
-    Gate behind (any one is sufficient):
-      * empty cwd (``None`` or ``""``) — the caller's own cwd, trusted by
-        default (the bonfire-public-tree dogfood path).
-      * ``BONFIRE_TRUST_PROJECT_SETTINGS`` env var set to exactly ``"1"``
-        (strict equality — no normalization). The operator escape hatch.
-      * a co-located ``bonfire.toml`` containing
-        ``[bonfire].trust_project_settings = true`` (literal boolean).
-        File presence ALONE is NOT enough.
-
-    Foreign repos (and repos with a non-opted-in ``bonfire.toml``) return
-    ``[]`` — their ``CLAUDE.md`` and ``.claude/`` contents are NOT ingested
-    into the dispatched agent's system prompt.
+    Only the operator decides: ``BONFIRE_TRUST_PROJECT_SETTINGS=1`` trusts every
+    directory; otherwise the resolved cwd (the process cwd when empty) must sit
+    inside a folder listed in ``BONFIRE_TRUST_ROOTS``. Unset roots trust nothing.
+    A directory's own ``bonfire.toml`` is never a trust signal; a ``true`` there
+    is logged as ``trust_toml_ignored``.
     """
-    if cwd is None or cwd == "":
-        return ["project"]
     if os.environ.get("BONFIRE_TRUST_PROJECT_SETTINGS") == "1":
         return ["project"]
-    if _bonfire_toml_opts_in(Path(cwd)):
+    resolved = Path(cwd or os.getcwd()).resolve()
+    if any(resolved.is_relative_to(root) for root in _trust_roots()):
         return ["project"]
+    if _bonfire_toml_opts_in(resolved):
+        logger.warning(
+            "%s: bonfire.toml in %s cannot grant trust; list the folder in BONFIRE_TRUST_ROOTS",
+            TRUST_TOML_IGNORED,
+            resolved,
+        )
     return []
 
 

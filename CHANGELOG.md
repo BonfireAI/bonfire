@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-20
+
+### Security
+
+- Project settings (`CLAUDE.md`, `.claude/settings.json`) now load only
+  from folders the operator lists in `BONFIRE_TRUST_ROOTS` (absolute,
+  `os.pathsep`-separated), or everywhere with
+  `BONFIRE_TRUST_PROJECT_SETTINGS=1`. The `trust_project_settings` key in
+  `bonfire.toml` is ignored and logs a `trust_toml_ignored` warning, and an
+  empty or omitted directory is no longer trusted by default: the process
+  directory is judged like any other. To upgrade, export
+  `BONFIRE_TRUST_ROOTS=/path/to/your/repo`.
+  Advisory: [GHSA-6whq-w6f8-fqxv](https://github.com/BonfireAI/bonfire/security/advisories/GHSA-6whq-w6f8-fqxv).
+
 ### Fixed
 
 - A pipeline stage naming a gate the engine does not hold in its

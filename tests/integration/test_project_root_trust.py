@@ -7,16 +7,16 @@
 ``.claude/settings.json`` into the dispatched agent's system prompt, and it
 decides it from one value: the ``cwd`` the engine handed it.
 
-``_resolve_setting_sources`` treats an empty ``cwd`` as "the caller's own
-directory, trusted" and returns ``['project']``. A non-empty ``cwd`` is
-trusted only on an explicit opt-in -- ``bonfire.toml`` carrying
-``[bonfire].trust_project_settings = true``, or ``BONFIRE_TRUST_PROJECT_
-SETTINGS=1``.
+``_resolve_setting_sources`` judges a directory by the operator's trust roots
+alone: ``BONFIRE_TRUST_ROOTS`` (absolute paths), or the strict
+``BONFIRE_TRUST_PROJECT_SETTINGS=1`` hatch. An empty ``cwd`` means the
+process directory and is judged like any other; a repository's own
+``bonfire.toml`` is never a trust signal.
 
 The engine sends ``cwd=str(project_root) if project_root else ""``. So
-omitting ``project_root`` -- which the CLI's engine factory did -- does not
-merely lose a path. It selects the trusted branch, unconditionally, for every
-production run, in whatever directory the user was standing in.
+omitting ``project_root`` -- which the CLI's engine factory did -- must not
+select a trusted branch: the ambient directory is trusted only if the
+operator listed it.
 
 These tests drive the real composition root against a repository that carries
 hostile instructions, and assert on the options the real backend built.
@@ -75,6 +75,7 @@ async def test_hostile_project_settings_are_not_ingested(
     hostile = _hostile_repo(tmp_path / "hostile", git_repo)
     monkeypatch.chdir(hostile)
     monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.delenv("BONFIRE_TRUST_ROOTS", raising=False)
 
     engine = build_default_engine(one_stage_plan())
     await engine.run(one_stage_plan())
@@ -90,27 +91,8 @@ async def test_hostile_project_settings_are_not_ingested(
         )
 
 
-@pytest.mark.asyncio
-async def test_without_a_project_root_the_same_fixture_is_ingested(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    transport: RecordingTransport,
-    git_repo: object,
-) -> None:
-    """The counterfactual, and the reason the test above is not decoration.
-
-    Without this, the previous test shows only that some code path yields
-    ``[]`` -- it does not show that the wiring is what changed the answer.
-    Here the single difference is the omitted ``project_root``, exactly as
-    the CLI shipped it, and the hostile fixture is trusted.
-
-    If this test ever starts failing, the security fix above has stopped
-    being load-bearing and should be re-justified rather than kept.
-    """
-    hostile = _hostile_repo(tmp_path / "hostile", git_repo)
-    monkeypatch.chdir(hostile)
-    monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
-
+async def _run_unwired(transport: RecordingTransport) -> None:
+    """Run an engine built without ``project_root`` -- as the CLI once shipped it."""
     from bonfire.dispatch.tool_policy import DefaultToolPolicy
     from bonfire.engine.factory import load_settings_or_default
     from bonfire.events.bus import EventBus
@@ -127,38 +109,80 @@ async def test_without_a_project_root_the_same_fixture_is_ingested(
         # project_root deliberately omitted -- the shipped behaviour.
     )
     await unwired.run(one_stage_plan())
-
     assert transport.calls, "no dispatch reached the transport; nothing was proven"
     assert transport.calls[0].cwd is None
-    assert transport.calls[0].setting_sources == ["project"], (
-        "expected the un-wired engine to trust the ambient directory"
-    )
 
 
 @pytest.mark.asyncio
-async def test_an_explicit_opt_in_is_still_honoured(
+async def test_without_a_project_root_the_ambient_dir_is_not_trusted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     transport: RecordingTransport,
     git_repo: object,
 ) -> None:
-    """Naming a project root must not quietly disable the documented opt-in.
+    """An omitted ``project_root`` no longer trusts the ambient directory.
 
-    Without this, the fix could be "correct" by never trusting anything,
-    which would break the dogfood path the backend's own docstring describes
-    and would make the first test unfalsifiable.
+    The single difference from the first test is the omitted ``project_root``.
+    The hostile fixture is the process cwd and the operator listed no roots,
+    so it must not be ingested.
+    """
+    hostile = _hostile_repo(tmp_path / "hostile", git_repo)
+    monkeypatch.chdir(hostile)
+    monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.delenv("BONFIRE_TRUST_ROOTS", raising=False)
+
+    await _run_unwired(transport)
+
+    assert transport.calls[0].setting_sources == [], (
+        "the un-wired engine trusted the ambient directory without an operator root"
+    )
+
+
+@pytest.mark.asyncio
+async def test_without_a_project_root_an_operator_root_still_trusts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    transport: RecordingTransport,
+    git_repo: object,
+) -> None:
+    """The same hostile dir, listed in ``BONFIRE_TRUST_ROOTS``, is trusted.
+
+    Keeps the test above falsifiable: only the operator's root changes the answer.
+    """
+    hostile = _hostile_repo(tmp_path / "hostile", git_repo)
+    monkeypatch.chdir(hostile)
+    monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.setenv("BONFIRE_TRUST_ROOTS", str(hostile))
+
+    await _run_unwired(transport)
+
+    assert transport.calls[0].setting_sources == ["project"]
+
+
+@pytest.mark.asyncio
+async def test_a_repo_cannot_opt_itself_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    transport: RecordingTransport,
+    git_repo: object,
+) -> None:
+    """A repository's own ``trust_project_settings = true`` is not an opt-in.
+
+    Only the operator's roots trust a directory; a toml shipped inside the
+    repository is attacker-controlled input like the rest of it.
     """
     trusted = _hostile_repo(tmp_path / "trusted", git_repo)
     (trusted / "bonfire.toml").write_text("[bonfire]\ntrust_project_settings = true\n")
     monkeypatch.chdir(trusted)
     monkeypatch.delenv("BONFIRE_TRUST_PROJECT_SETTINGS", raising=False)
+    monkeypatch.delenv("BONFIRE_TRUST_ROOTS", raising=False)
 
     engine = build_default_engine(one_stage_plan())
     await engine.run(one_stage_plan())
 
     assert transport.calls
-    assert transport.calls[0].setting_sources == ["project"], (
-        "an explicit opt-in must still be honoured"
+    assert transport.calls[0].setting_sources == [], (
+        "a repository's own opt-in must not be honoured"
     )
 
 

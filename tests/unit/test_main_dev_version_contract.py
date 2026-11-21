@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 BonfireAI
 
-"""Contract for the development line: a patch tag on main can never publish main.
+"""Contract for the development line: a release tag on main can never publish main.
 
-Main declares a dev version above the latest patch release, so the release
-guard rejects a patch tag pushed on a main commit. Also pins the public-surface
+Main declares a dev version above the latest release, so the release
+guard rejects a release tag pushed on a main commit. Also pins the public-surface
 hygiene that rides along with the patch release.
 """
 
@@ -37,26 +37,19 @@ def _declared() -> str:
         return tomllib.load(fh)["project"]["version"]
 
 
-def _unreleased_section() -> str:
-    text = (REPO_ROOT / "CHANGELOG.md").read_text()
-    match = re.search(r"^## \[Unreleased\].*?(?=^## \[)", text, re.MULTILINE | re.DOTALL)
-    assert match, "CHANGELOG.md has no [Unreleased] section"
-    return match.group(0)
-
-
 class TestDevVersion:
     def test_declared_version_is_a_dev_release(self) -> None:
         assert Version(_declared()).is_devrelease
 
-    def test_declared_version_is_above_the_patch_release(self) -> None:
-        assert Version(_declared()) > Version("1.0.3")
+    def test_declared_version_is_above_the_latest_release(self) -> None:
+        assert Version(_declared()) > Version("1.1.0")  # was 1.0.3 before the 1.1.0 release
 
     def test_patch_tag_on_main_fails_the_guard(self) -> None:
         proc = subprocess.run(
             [
                 sys.executable,
                 str(GUARD),
-                "v1.0.3",
+                "v1.1.0",
                 "--pyproject",
                 str(REPO_ROOT / "pyproject.toml"),
             ],
@@ -75,8 +68,10 @@ class TestChangelogPatchEntry:
         assert re.search(r"^## \[1\.0\.3\]", text, re.MULTILINE)
 
     def test_unreleased_has_no_sdk_security_note(self) -> None:
-        section = _unreleased_section()
-        assert not ("### Security" in section and "claude-agent-sdk" in section)
+        text = (REPO_ROOT / "CHANGELOG.md").read_text()
+        match = re.search(r"^## \[Unreleased\].*?(?=^## \[)", text, re.MULTILINE | re.DOTALL)
+        assert match, "CHANGELOG.md has no [Unreleased] section"
+        assert not ("### Security" in match.group(0) and "claude-agent-sdk" in match.group(0))
 
 
 class TestPublicSurfaceHygiene:
